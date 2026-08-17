@@ -1,0 +1,43 @@
+{
+  "name": "baddies-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Baddies — verified adult creator marketplace (Sprint 0 foundation)",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "postinstall": "prisma generate",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "next": "14.2.35",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "@prisma/client": "5.20.0",
+    "bcryptjs": "2.4.3",
+    "jose": "5.9.3",
+    "zod": "3.23.8",
+    "nanoid": "5.0.7"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "@types/node": "20.16.10",
+    "@types/react": "18.3.11",
+    "@types/react-dom": "18.3.0",
+    "@types/bcryptjs": "2.4.6",
+    "prisma": "5.20.0",
+    "tsx": "4.19.1",
+    "vitest": "2.1.2",
+    "eslint": "8.57.1",
+    "eslint-config-next": "14.2.35"
+  }
+}
