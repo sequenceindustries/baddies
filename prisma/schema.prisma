@@ -54,10 +54,24 @@ enum VerificationStatus {
   MANUAL_REVIEW
 }
 
+// Tier model (renamed from PUBLIC_PREVIEW/ENTRY/VIP — see
+// prisma/migrations/*_rename_tier_model for the rename mapping):
+//   FREE  — visible to everyone, no login required
+//   VIP   — unlocked by the platform-wide VIP pass (UnlimitedSubscription;
+//           model name kept to avoid a bigger rename) from ANY
+//           participating creator, or by that creator's own VVIP
+//           subscribers
+//   VVIP  — unlocked only by that specific creator's own subscribers
+//           (Subscription model — single tier now, see SubscriptionTier's
+//           removal below)
+// PPV (pay-per-view single-item purchase) was retired from the product.
+// The enum value is deliberately left in place rather than dropped —
+// Postgres has no safe way to remove one value from an enum type without
+// recreating it, and no code path can create PPV content anymore.
 enum ContentAccessLevel {
-  PUBLIC_PREVIEW
-  ENTRY
+  FREE
   VIP
+  VVIP
   PPV
 }
 
@@ -75,11 +89,6 @@ enum MediaType {
   IMAGE
   VIDEO
   AUDIO
-}
-
-enum SubscriptionTier {
-  ENTRY
-  VIP
 }
 
 enum SubscriptionStatus {
@@ -176,6 +185,7 @@ model User {
   subscriptions   Subscription[]   @relation("FanSubscriptions")
   unlimitedSubs   UnlimitedSubscription[]
   follows         Follow[]         @relation("FanFollows")
+  contentLikes    ContentLike[]    @relation("ContentLikes")
 
   @@index([role])
   @@map("users")
@@ -229,9 +239,8 @@ model CreatorProfile {
   legalNameEncrypted String? // encrypted at rest; never returned to clients directly
 
   coverImageUrl      String?
-  entryPriceOverride Decimal? @db.Decimal(10, 2) // null = use PlatformSetting default
-  vipPriceOverride   Decimal? @db.Decimal(10, 2)
-  unlimitedOptedIn   Boolean  @default(false)
+  vvipPriceOverride  Decimal? @db.Decimal(10, 2) // this creator's own subscription price; null = use PlatformSetting default
+  unlimitedOptedIn   Boolean  @default(false) // opts this creator's VIP-tier content into the platform-wide VIP pass
 
   subscriberCountVisible Boolean @default(false)
   locationVisible         Boolean @default(false)
@@ -340,6 +349,21 @@ model Follow {
   @@map("follows")
 }
 
+// A fan liking a piece of content — social-proof signal only, grants no
+// access (see ContentAccessLevel for what actually gates viewing).
+model ContentLike {
+  id        String   @id @default(cuid())
+  fanId     String
+  fan       User     @relation("ContentLikes", fields: [fanId], references: [id], onDelete: Cascade)
+  contentId String
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([fanId, contentId])
+  @@index([contentId])
+  @@map("content_likes")
+}
+
 // Flat, admin-managed category list (§11: "Categories"). Deliberately not
 // a hierarchy/taxonomy system — build brief §31 excludes "general creator
 // categories" complexity and §35 says push out anything that doesn't
@@ -408,6 +432,7 @@ model Content {
   reports      Report[]
   moderationCases ModerationCase[]
   consumptionEvents QualifiedConsumptionEvent[]
+  likes ContentLike[]
 
   @@index([creatorProfileId, status])
   @@index([accessLevel])
@@ -448,12 +473,14 @@ model MediaAsset {
 // ENTITLEMENTS & SUBSCRIPTIONS
 // =========================================================================
 
+// A fan's VVIP subscription to one specific creator — single tier, no
+// tier field: previously ENTRY/VIP, collapsed to one creator-level tier
+// (see ContentAccessLevel's comment for the full tier model).
 model Subscription {
   id               String             @id @default(cuid())
   fanId            String
   fan              User               @relation("FanSubscriptions", fields: [fanId], references: [id], onDelete: Cascade)
   creatorProfileId String
-  tier             SubscriptionTier
   status           SubscriptionStatus @default(ACTIVE)
 
   priceUsdAtPurchase Decimal @db.Decimal(10, 2)

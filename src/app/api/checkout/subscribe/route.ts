@@ -11,7 +11,11 @@ import { postRevenueEvent, recomputeWalletBalances } from "@/lib/ledger/service"
 export const dynamic = "force-dynamic";
 
 /**
- * Dummy checkout — subscribe to a creator's Entry or VIP tier.
+ * Dummy checkout — subscribe to a creator's VVIP tier (their own price,
+ * set via PATCH /api/creator/settings, or the platform default). There's
+ * only one creator-level subscription tier now — see prisma/schema.prisma's
+ * ContentAccessLevel comment for the full Free/VIP/VVIP model. For the
+ * separate platform-wide VIP pass, see POST /api/checkout/vip-pass.
  *
  * No real payment vendor is selected yet (build brief §21), so this route
  * only ever runs against PAYMENT_PROVIDER=stub. Per the architecture, real
@@ -29,7 +33,6 @@ export const dynamic = "force-dynamic";
  */
 const SubscribeSchema = z.object({
   creatorProfileId: z.string().min(1),
-  tier: z.enum(["ENTRY", "VIP"]),
 });
 
 export async function POST(req: NextRequest) {
@@ -43,7 +46,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { creatorProfileId, tier } = parsed.data;
+  const { creatorProfileId } = parsed.data;
 
   const creator = await db.creatorProfile.findUnique({ where: { id: creatorProfileId } });
   if (!creator || creator.status !== "VERIFIED") {
@@ -61,7 +64,7 @@ export async function POST(req: NextRequest) {
   }
 
   const pricing = await resolveCreatorPricing(creator);
-  const priceUsd = tier === "VIP" ? pricing.vipPriceUsd : pricing.entryPriceUsd;
+  const priceUsd = pricing.vvipPriceUsd;
 
   const creatorWallet = await db.wallet.upsert({
     where: { userId: creator.userId },
@@ -80,8 +83,8 @@ export async function POST(req: NextRequest) {
   const providerCustomer = await provider.createCustomer({ userId: user.id, email: user.email });
   const providerSub = await provider.createSubscription({
     providerCustomerId: providerCustomer.providerCustomerId,
-    providerPriceId: `stub_price_${tier.toLowerCase()}`,
-    metadata: { subscriptionType: tier, creatorProfileId },
+    providerPriceId: `stub_price_vvip_${creatorProfileId}`,
+    metadata: { subscriptionType: "VVIP", creatorProfileId },
   });
 
   const currentPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -90,7 +93,6 @@ export async function POST(req: NextRequest) {
     data: {
       fanId: user.id,
       creatorProfileId,
-      tier,
       status: "ACTIVE",
       priceUsdAtPurchase: priceUsd,
       currentPeriodEnd,
@@ -105,14 +107,13 @@ export async function POST(req: NextRequest) {
     grossAmountUsd: priceUsd,
     referenceType: "subscription",
     referenceId: subscription.id,
-    description: `${tier} subscription (stub checkout)`,
+    description: "VVIP subscription (stub checkout)",
   });
   await recomputeWalletBalances(creatorWallet.id);
 
   return NextResponse.json(
     {
       subscriptionId: subscription.id,
-      tier: subscription.tier,
       status: subscription.status,
       currentPeriodEnd: subscription.currentPeriodEnd,
       priceUsd,

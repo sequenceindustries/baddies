@@ -11,7 +11,8 @@ export const dynamic = "force-dynamic";
  * — anything else 404s rather than leaking existence/status of a pending
  * or rejected application to the public. Privacy toggles
  * (subscriberCountVisible, locationVisible) are respected here, not left
- * to the frontend to hide.
+ * to the frontend to hide. followerCount is always shown (Fansly-style
+ * social proof, lower-stakes than the paid subscriber count).
  */
 export async function GET(
   _req: NextRequest,
@@ -28,12 +29,12 @@ export async function GET(
 
   const pricing = await resolveCreatorPricing(creator);
 
-  let subscriberCount: number | undefined;
-  if (creator.subscriberCountVisible) {
-    subscriberCount = await db.subscription.count({
-      where: { creatorProfileId: creator.id, status: "ACTIVE" },
-    });
-  }
+  const [followerCount, subscriberCount] = await Promise.all([
+    db.follow.count({ where: { creatorProfileId: creator.id } }),
+    creator.subscriberCountVisible
+      ? db.subscription.count({ where: { creatorProfileId: creator.id, status: "ACTIVE" } })
+      : Promise.resolve(undefined),
+  ]);
 
   return NextResponse.json({
     creatorProfileId: creator.id,
@@ -44,9 +45,9 @@ export async function GET(
     coverImageUrl: creator.coverImageUrl,
     country: creator.locationVisible ? creator.user.profile?.country : undefined,
     verifiedBadge: true, // this route only ever returns VERIFIED creators
-    entryPriceUsd: pricing.entryPriceUsd,
-    vipPriceUsd: pricing.vipPriceUsd,
+    vvipPriceUsd: pricing.vvipPriceUsd,
     unlimitedParticipant: creator.unlimitedOptedIn,
+    followerCount,
     subscriberCount,
   });
 }

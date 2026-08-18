@@ -11,10 +11,15 @@
  * without a code deploy, per the build brief (§32, §36).
  */
 
+// Tier model (see prisma/schema.prisma's ContentAccessLevel comment):
+//   VVIP_DEFAULT_PRICE_USD — fallback per-creator subscription price when
+//     a creator hasn't set CreatorProfile.vvipPriceOverride
+//   VIP_PASS_PRICE_USD — the single platform-wide VIP pass price (backed
+//     by the UnlimitedSubscription model; renamed at the business-config
+//     level only, to avoid a larger model-rename blast radius)
 export const BUSINESS_CONFIG_KEYS = {
-  ENTRY_PRICE_USD: "pricing.entry_usd",
-  VIP_PRICE_USD: "pricing.vip_usd",
-  UNLIMITED_PRICE_USD: "pricing.unlimited_usd",
+  VVIP_DEFAULT_PRICE_USD: "pricing.vvip_usd",
+  VIP_PASS_PRICE_USD: "pricing.vip_pass_usd",
   CREATOR_SHARE: "revenue.creator_share",
   PLATFORM_SHARE: "revenue.platform_share",
   UNLIMITED_ALLOCATION_MODEL: "unlimited.allocation_model",
@@ -25,9 +30,8 @@ export type BusinessConfigKey =
 
 /** Default values used only to seed `platform_settings` (see prisma/seed.ts). */
 export const DEFAULT_BUSINESS_CONFIG: Record<BusinessConfigKey, string> = {
-  [BUSINESS_CONFIG_KEYS.ENTRY_PRICE_USD]: "2.99",
-  [BUSINESS_CONFIG_KEYS.VIP_PRICE_USD]: "9.99",
-  [BUSINESS_CONFIG_KEYS.UNLIMITED_PRICE_USD]: "19.99",
+  [BUSINESS_CONFIG_KEYS.VVIP_DEFAULT_PRICE_USD]: "9.99",
+  [BUSINESS_CONFIG_KEYS.VIP_PASS_PRICE_USD]: "19.99",
   // Locked MVP assumption per build brief §3 — still stored as config, not
   // a literal scattered through pricing/ledger code, so it can be revisited
   // per-creator or platform-wide without a redeploy.

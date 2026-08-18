@@ -4,11 +4,18 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession, displayHeadingStyle } from "@/components/ui";
 
+interface VipPass {
+  subscriptionId: string;
+  status: string;
+  priceUsdAtPurchase: number;
+  currentPeriodEnd: string;
+  cancelledAt: string | null;
+}
+
 interface SubscriptionItem {
   subscriptionId: string;
   creatorProfileId: string;
   creatorDisplayName: string | null;
-  tier: "ENTRY" | "VIP";
   status: string;
   priceUsdAtPurchase: number;
   currentPeriodEnd: string;
@@ -27,6 +34,7 @@ interface PurchaseItem {
 
 export default function SubscriptionsPage() {
   const { user, loading: sessionLoading } = useSession();
+  const [vipPass, setVipPass] = useState<VipPass | null>(null);
   const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>([]);
   const [purchases, setPurchases] = useState<PurchaseItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,8 +43,9 @@ export default function SubscriptionsPage() {
   function reload() {
     setLoading(true);
     fetch("/api/fan/subscriptions")
-      .then((r) => (r.ok ? r.json() : { subscriptions: [], purchases: [] }))
+      .then((r) => (r.ok ? r.json() : { vipPass: null, subscriptions: [], purchases: [] }))
       .then((body) => {
+        setVipPass(body.vipPass ?? null);
         setSubscriptions(body.subscriptions ?? []);
         setPurchases(body.purchases ?? []);
       })
@@ -47,10 +56,18 @@ export default function SubscriptionsPage() {
     if (user) reload();
   }, [user]);
 
-  async function cancel(id: string) {
+  async function cancelSubscription(id: string) {
     if (!window.confirm("Cancel this subscription? Access ends immediately.")) return;
     setBusyId(id);
     const res = await fetch(`/api/fan/subscriptions/${id}/cancel`, { method: "POST" });
+    setBusyId(null);
+    if (res.ok) reload();
+  }
+
+  async function cancelVipPass() {
+    if (!window.confirm("Cancel your VIP Pass? Access ends immediately.")) return;
+    setBusyId("vip-pass");
+    const res = await fetch("/api/fan/vip-pass/cancel", { method: "POST" });
     setBusyId(null);
     if (res.ok) reload();
   }
@@ -72,9 +89,30 @@ export default function SubscriptionsPage() {
         <p style={{ color: "var(--text-muted)" }}>Loading...</p>
       ) : (
         <>
-          <h2 style={sectionHeadingStyle}>Subscriptions</h2>
+          <h2 style={sectionHeadingStyle}>Platform VIP Pass</h2>
+          {vipPass && vipPass.status === "ACTIVE" ? (
+            <div style={{ ...rowCardStyle, marginBottom: "2rem" }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>Active</div>
+                <div style={mutedSmallStyle}>
+                  ${vipPass.priceUsdAtPurchase.toFixed(2)}/mo · renews{" "}
+                  {new Date(vipPass.currentPeriodEnd).toLocaleDateString()}
+                </div>
+              </div>
+              <button onClick={cancelVipPass} disabled={busyId === "vip-pass"} style={cancelButtonStyle}>
+                {busyId === "vip-pass" ? "..." : "Cancel"}
+              </button>
+            </div>
+          ) : (
+            <p style={{ color: "var(--text-muted)", marginBottom: "2rem" }}>
+              No active VIP Pass — get one from any creator&apos;s profile to unlock VIP-tier content across every
+              participating creator.
+            </p>
+          )}
+
+          <h2 style={sectionHeadingStyle}>Creator (VVIP) subscriptions</h2>
           {subscriptions.length === 0 ? (
-            <p style={{ color: "var(--text-muted)" }}>No subscriptions yet.</p>
+            <p style={{ color: "var(--text-muted)" }}>No creator subscriptions yet.</p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "2rem" }}>
               {subscriptions.map((s) => (
@@ -84,14 +122,14 @@ export default function SubscriptionsPage() {
                       {s.creatorDisplayName ?? "Unnamed creator"}
                     </Link>
                     <div style={mutedSmallStyle}>
-                      {s.tier} · ${s.priceUsdAtPurchase.toFixed(2)}/mo · {s.status}
+                      ${s.priceUsdAtPurchase.toFixed(2)}/mo · {s.status}
                       {s.status === "ACTIVE" &&
                         ` · renews ${new Date(s.currentPeriodEnd).toLocaleDateString()}`}
                     </div>
                   </div>
                   {s.status === "ACTIVE" && (
                     <button
-                      onClick={() => cancel(s.subscriptionId)}
+                      onClick={() => cancelSubscription(s.subscriptionId)}
                       disabled={busyId === s.subscriptionId}
                       style={cancelButtonStyle}
                     >
@@ -103,26 +141,29 @@ export default function SubscriptionsPage() {
             </div>
           )}
 
-          <h2 style={sectionHeadingStyle}>Pay-per-view purchases</h2>
-          {purchases.length === 0 ? (
-            <p style={{ color: "var(--text-muted)" }}>No purchases yet.</p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-              {purchases.map((p) => (
-                <div key={p.purchaseId} style={rowCardStyle}>
-                  <div>
-                    <div style={{ fontWeight: 600 }}>{p.caption || "(no caption)"}</div>
-                    <div style={mutedSmallStyle}>
-                      ${p.priceUsd.toFixed(2)} · {new Date(p.createdAt).toLocaleDateString()}
-                      {p.refunded ? " · refunded" : ""}
+          {purchases.length > 0 && (
+            <>
+              <h2 style={sectionHeadingStyle}>Pay-per-view purchases (legacy)</h2>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                {purchases.map((p) => (
+                  <div key={p.purchaseId} style={rowCardStyle}>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{p.caption || "(no caption)"}</div>
+                      <div style={mutedSmallStyle}>
+                        ${p.priceUsd.toFixed(2)} · {new Date(p.createdAt).toLocaleDateString()}
+                        {p.refunded ? " · refunded" : ""}
+                      </div>
                     </div>
+                    <Link
+                      href={`/creators/${p.creatorProfileId}`}
+                      style={{ color: "var(--accent-gold)", fontSize: "0.85rem" }}
+                    >
+                      View creator
+                    </Link>
                   </div>
-                  <Link href={`/creators/${p.creatorProfileId}`} style={{ color: "var(--accent-gold)", fontSize: "0.85rem" }}>
-                    View creator
-                  </Link>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           )}
         </>
       )}

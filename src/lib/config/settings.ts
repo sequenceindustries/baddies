@@ -35,9 +35,8 @@ export async function setPlatformSetting(
 }
 
 export interface BusinessConfigSnapshot {
-  entryPriceUsd: number;
-  vipPriceUsd: number;
-  unlimitedPriceUsd: number;
+  vvipDefaultPriceUsd: number;
+  vipPassPriceUsd: number;
   creatorShare: number;
   platformShare: number;
   unlimitedAllocationModel: string;
@@ -45,20 +44,18 @@ export interface BusinessConfigSnapshot {
 
 /** Convenience accessor for pricing/ledger code that needs several values at once. */
 export async function getBusinessConfig(): Promise<BusinessConfigSnapshot> {
-  const [entry, vip, unlimited, creatorShare, platformShare, allocationModel] =
+  const [vvipDefault, vipPass, creatorShare, platformShare, allocationModel] =
     await Promise.all([
-      getPlatformSetting(BUSINESS_CONFIG_KEYS.ENTRY_PRICE_USD),
-      getPlatformSetting(BUSINESS_CONFIG_KEYS.VIP_PRICE_USD),
-      getPlatformSetting(BUSINESS_CONFIG_KEYS.UNLIMITED_PRICE_USD),
+      getPlatformSetting(BUSINESS_CONFIG_KEYS.VVIP_DEFAULT_PRICE_USD),
+      getPlatformSetting(BUSINESS_CONFIG_KEYS.VIP_PASS_PRICE_USD),
       getPlatformSetting(BUSINESS_CONFIG_KEYS.CREATOR_SHARE),
       getPlatformSetting(BUSINESS_CONFIG_KEYS.PLATFORM_SHARE),
       getPlatformSetting(BUSINESS_CONFIG_KEYS.UNLIMITED_ALLOCATION_MODEL),
     ]);
 
   const config: BusinessConfigSnapshot = {
-    entryPriceUsd: Number(entry),
-    vipPriceUsd: Number(vip),
-    unlimitedPriceUsd: Number(unlimited),
+    vvipDefaultPriceUsd: Number(vvipDefault),
+    vipPassPriceUsd: Number(vipPass),
     creatorShare: Number(creatorShare),
     platformShare: Number(platformShare),
     unlimitedAllocationModel: allocationModel,

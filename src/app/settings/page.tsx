@@ -133,10 +133,8 @@ function ProfileSettings() {
 }
 
 interface CreatorSettingsData {
-  entryPriceOverride: number | null;
-  vipPriceOverride: number | null;
-  effectiveEntryPriceUsd: number;
-  effectiveVipPriceUsd: number;
+  vvipPriceOverride: number | null;
+  effectiveVvipPriceUsd: number;
   unlimitedOptedIn: boolean;
   subscriberCountVisible: boolean;
   locationVisible: boolean;
@@ -170,8 +168,7 @@ function CreatorSettings() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        entryPriceOverride: data.entryPriceOverride,
-        vipPriceOverride: data.vipPriceOverride,
+        vvipPriceOverride: data.vvipPriceOverride,
         unlimitedOptedIn: data.unlimitedOptedIn,
         subscriberCountVisible: data.subscriberCountVisible,
         locationVisible: data.locationVisible,
@@ -194,32 +191,17 @@ function CreatorSettings() {
       <form onSubmit={handleSubmit}>
         {error && <div style={errorBannerStyle}>{error}</div>}
         <Field
-          label="Entry price override (USD)"
-          hint={`Leave blank to use the platform default ($${data.effectiveEntryPriceUsd.toFixed(2)}).`}
+          label="VVIP subscription price (USD)"
+          hint={`Your own subscribers pay this monthly. Leave blank to use the platform default ($${data.effectiveVvipPriceUsd.toFixed(2)}).`}
         >
           <input
             style={inputStyle}
             type="number"
             min="0.01"
             step="0.01"
-            value={data.entryPriceOverride ?? ""}
+            value={data.vvipPriceOverride ?? ""}
             onChange={(e) =>
-              setData({ ...data, entryPriceOverride: e.target.value ? Number(e.target.value) : null })
-            }
-          />
-        </Field>
-        <Field
-          label="VIP price override (USD)"
-          hint={`Leave blank to use the platform default ($${data.effectiveVipPriceUsd.toFixed(2)}).`}
-        >
-          <input
-            style={inputStyle}
-            type="number"
-            min="0.01"
-            step="0.01"
-            value={data.vipPriceOverride ?? ""}
-            onChange={(e) =>
-              setData({ ...data, vipPriceOverride: e.target.value ? Number(e.target.value) : null })
+              setData({ ...data, vvipPriceOverride: e.target.value ? Number(e.target.value) : null })
             }
           />
         </Field>
@@ -229,7 +211,7 @@ function CreatorSettings() {
             checked={data.unlimitedOptedIn}
             onChange={(e) => setData({ ...data, unlimitedOptedIn: e.target.checked })}
           />
-          Participate in Unlimited pool
+          Include my VIP-tier content in the platform-wide VIP Pass
         </label>
         <label style={checkboxRowStyle}>
           <input

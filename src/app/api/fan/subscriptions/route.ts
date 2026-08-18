@@ -7,9 +7,10 @@ import { db } from "@/lib/db/client";
 export const dynamic = "force-dynamic";
 
 /**
- * The current fan's own subscriptions and PPV purchases — the "My
- * Subscriptions" view. Only ever returns the caller's own records; no
- * other fan's purchase history is ever exposed here.
+ * The current fan's own VVIP subscriptions and (legacy — PPV is retired
+ * from the product, see prisma/schema.prisma) pay-per-view purchases —
+ * the "My Subscriptions" view. Only ever returns the caller's own
+ * records; no other fan's purchase history is ever exposed here.
  */
 export async function GET() {
   const user = await getCurrentUser();
@@ -17,7 +18,7 @@ export async function GET() {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
 
-  const [subscriptions, purchases] = await Promise.all([
+  const [subscriptions, purchases, vipPass] = await Promise.all([
     db.subscription.findMany({
       where: { fanId: user.id },
       orderBy: { startedAt: "desc" },
@@ -26,6 +27,10 @@ export async function GET() {
       where: { fanId: user.id },
       orderBy: { createdAt: "desc" },
       include: { content: { select: { id: true, caption: true, creatorProfileId: true } } },
+    }),
+    db.unlimitedSubscription.findFirst({
+      where: { fanId: user.id },
+      orderBy: { startedAt: "desc" },
     }),
   ]);
 
@@ -40,11 +45,17 @@ export async function GET() {
   const nameById = new Map(creators.map((c: (typeof creators)[number]) => [c.id, c.user.profile?.displayName ?? null]));
 
   return NextResponse.json({
+    vipPass: vipPass && {
+      subscriptionId: vipPass.id,
+      status: vipPass.status,
+      priceUsdAtPurchase: Number(vipPass.priceUsdAtPurchase),
+      currentPeriodEnd: vipPass.currentPeriodEnd,
+      cancelledAt: vipPass.cancelledAt,
+    },
     subscriptions: subscriptions.map((s: (typeof subscriptions)[number]) => ({
       subscriptionId: s.id,
       creatorProfileId: s.creatorProfileId,
       creatorDisplayName: nameById.get(s.creatorProfileId) ?? null,
-      tier: s.tier,
       status: s.status,
       priceUsdAtPurchase: Number(s.priceUsdAtPurchase),
       currentPeriodEnd: s.currentPeriodEnd,

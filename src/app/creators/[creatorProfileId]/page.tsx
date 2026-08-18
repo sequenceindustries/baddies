@@ -14,9 +14,9 @@ interface CreatorProfileResponse {
   coverImageUrl: string | null;
   country: string | null;
   verifiedBadge: true;
-  entryPriceUsd: number;
-  vipPriceUsd: number;
+  vvipPriceUsd: number;
   unlimitedParticipant: boolean;
+  followerCount: number;
   subscriberCount?: number;
 }
 
@@ -27,6 +27,8 @@ interface RawContentItem {
   priceUsd: number | string | null;
   caption: string | null;
   publishedAt: string | null;
+  likeCount?: number;
+  viewerHasLiked?: boolean;
 }
 
 export default function CreatorProfilePage() {
@@ -72,7 +74,10 @@ export default function CreatorProfilePage() {
       method: following ? "DELETE" : "POST",
     });
     setFollowBusy(false);
-    if (res.ok) setFollowing((f) => !f);
+    if (res.ok) {
+      setFollowing((f) => !f);
+      setCreator((c) => (c ? { ...c, followerCount: c.followerCount + (following ? -1 : 1) } : c));
+    }
   }
 
   if (notFound) {
@@ -114,9 +119,10 @@ export default function CreatorProfilePage() {
           {creator.country && <p style={mutedStyle}>{creator.country}</p>}
           {creator.bio && <p style={{ marginTop: "0.6rem" }}>{creator.bio}</p>}
           <div style={priceRowStyle}>
-            <span>Entry ${creator.entryPriceUsd.toFixed(2)}/mo</span>
-            <span>VIP ${creator.vipPriceUsd.toFixed(2)}/mo</span>
+            <span>{creator.followerCount} followers</span>
+            <span>VVIP ${creator.vvipPriceUsd.toFixed(2)}/mo</span>
             {typeof creator.subscriberCount === "number" && <span>{creator.subscriberCount} subscribers</span>}
+            {creator.unlimitedParticipant && <span>Included with VIP Pass</span>}
           </div>
         </div>
         {!isOwnProfile && user && (
@@ -130,11 +136,7 @@ export default function CreatorProfilePage() {
       </div>
 
       {!isOwnProfile && user && (
-        <SubscribeAndTip
-          creatorProfileId={creatorProfileId}
-          entryPriceUsd={creator.entryPriceUsd}
-          vipPriceUsd={creator.vipPriceUsd}
-        />
+        <SubscribeAndTip creatorProfileId={creatorProfileId} vvipPriceUsd={creator.vvipPriceUsd} />
       )}
 
       <h2 style={sectionHeadingStyle}>Content</h2>
@@ -149,16 +151,9 @@ export default function CreatorProfilePage() {
  * instead of waiting on a payment webhook). No real money moves; this is
  * the flow real vendor integration would slot into once one is selected.
  */
-function SubscribeAndTip({
-  creatorProfileId,
-  entryPriceUsd,
-  vipPriceUsd,
-}: {
-  creatorProfileId: string;
-  entryPriceUsd: number;
-  vipPriceUsd: number;
-}) {
-  const [subscribedTier, setSubscribedTier] = useState<"ENTRY" | "VIP" | null>(null);
+function SubscribeAndTip({ creatorProfileId, vvipPriceUsd }: { creatorProfileId: string; vvipPriceUsd: number }) {
+  const [subscribed, setSubscribed] = useState(false);
+  const [vipPassActive, setVipPassActive] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showTip, setShowTip] = useState(false);
@@ -166,13 +161,13 @@ function SubscribeAndTip({
   const [tipMessage, setTipMessage] = useState("");
   const [tipSent, setTipSent] = useState(false);
 
-  async function subscribe(tier: "ENTRY" | "VIP") {
-    setBusy(tier);
+  async function subscribeVvip() {
+    setBusy("vvip");
     setError(null);
     const res = await fetch("/api/checkout/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ creatorProfileId, tier }),
+      body: JSON.stringify({ creatorProfileId }),
     });
     setBusy(null);
     if (!res.ok) {
@@ -180,7 +175,20 @@ function SubscribeAndTip({
       setError(body?.error ?? "Subscription failed.");
       return;
     }
-    setSubscribedTier(tier);
+    setSubscribed(true);
+  }
+
+  async function getVipPass() {
+    setBusy("vip-pass");
+    setError(null);
+    const res = await fetch("/api/checkout/vip-pass", { method: "POST" });
+    setBusy(null);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(body?.error ?? "Couldn't get VIP pass.");
+      return;
+    }
+    setVipPassActive(true);
   }
 
   async function sendTip(e: React.FormEvent) {
@@ -211,31 +219,27 @@ function SubscribeAndTip({
     <div style={checkoutCardStyle}>
       <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
         <button
-          onClick={() => subscribe("ENTRY")}
-          disabled={busy !== null || subscribedTier !== null}
-          style={checkoutButtonStyle(subscribedTier === "ENTRY")}
+          onClick={subscribeVvip}
+          disabled={busy !== null || subscribed}
+          style={checkoutButtonStyle(subscribed)}
         >
-          {subscribedTier === "ENTRY"
-            ? "✓ Subscribed (Entry)"
-            : busy === "ENTRY"
+          {subscribed
+            ? "✓ Subscribed (VVIP)"
+            : busy === "vvip"
               ? "..."
-              : `Subscribe Entry $${entryPriceUsd.toFixed(2)}/mo`}
+              : `Subscribe VVIP $${vvipPriceUsd.toFixed(2)}/mo`}
         </button>
-        <button
-          onClick={() => subscribe("VIP")}
-          disabled={busy !== null || subscribedTier !== null}
-          style={checkoutButtonStyle(subscribedTier === "VIP")}
-        >
-          {subscribedTier === "VIP"
-            ? "✓ Subscribed (VIP)"
-            : busy === "VIP"
-              ? "..."
-              : `Subscribe VIP $${vipPriceUsd.toFixed(2)}/mo`}
+        <button onClick={getVipPass} disabled={busy !== null || vipPassActive} style={checkoutButtonStyle(vipPassActive)}>
+          {vipPassActive ? "✓ VIP Pass active" : busy === "vip-pass" ? "..." : "Get platform VIP Pass"}
         </button>
         <button onClick={() => setShowTip((v) => !v)} style={ghostCheckoutButtonStyle}>
           {tipSent ? "✓ Tip sent — send another?" : "Send a tip"}
         </button>
       </div>
+      <p style={{ ...mutedNoteStyle }}>
+        VVIP is this creator&apos;s own subscription. The VIP Pass is one platform-wide price that unlocks VIP-tier
+        content from every participating creator.
+      </p>
 
       {showTip && (
         <form onSubmit={sendTip} style={tipFormStyle}>
@@ -272,6 +276,13 @@ const checkoutCardStyle: React.CSSProperties = {
   borderRadius: "12px",
   padding: "1rem 1.25rem",
   marginBottom: "2.5rem",
+};
+
+const mutedNoteStyle: React.CSSProperties = {
+  fontSize: "0.78rem",
+  color: "var(--text-muted)",
+  marginTop: "0.75rem",
+  marginBottom: 0,
 };
 
 const tipFormStyle: React.CSSProperties = {

@@ -1,8 +1,10 @@
 import { resolveCreatorPricing } from "@/lib/creator/pricing";
 
 /**
- * Matches build brief §11's creator card spec:
- *   Creator Name / ✓ VERIFIED BADDIE / 🇿🇦 South Africa / Entry $2.99 / VIP $9.99
+ * Matches build brief §11's creator card spec (updated for the Free/VIP/
+ * VVIP tier model — see prisma/schema.prisma's ContentAccessLevel
+ * comment):
+ *   Creator Name / ✓ VERIFIED BADDIE / 🇿🇦 South Africa / VVIP $9.99
  * Every discovery endpoint (search, trending, categories, new-creators,
  * home) should shape its results through this function instead of
  * hand-rolling the same fields slightly differently each time.
@@ -10,8 +12,7 @@ import { resolveCreatorPricing } from "@/lib/creator/pricing";
 export interface CreatorCardSource {
   id: string;
   locationVisible: boolean;
-  entryPriceOverride: unknown;
-  vipPriceOverride: unknown;
+  vvipPriceOverride: unknown;
   user: { profile: { displayName: string | null; avatarUrl: string | null; country: string | null } | null };
 }
 
@@ -21,8 +22,7 @@ export interface CreatorCard {
   avatarUrl: string | null;
   country: string | null;
   verifiedBadge: true;
-  entryPriceUsd: number;
-  vipPriceUsd: number;
+  vvipPriceUsd: number;
 }
 
 export async function toCreatorCard(creator: CreatorCardSource): Promise<CreatorCard> {
@@ -33,15 +33,13 @@ export async function toCreatorCard(creator: CreatorCardSource): Promise<Creator
     avatarUrl: creator.user.profile?.avatarUrl ?? null,
     country: creator.locationVisible ? (creator.user.profile?.country ?? null) : null,
     verifiedBadge: true,
-    entryPriceUsd: pricing.entryPriceUsd,
-    vipPriceUsd: pricing.vipPriceUsd,
+    vvipPriceUsd: pricing.vvipPriceUsd,
   };
 }
 
 export const CREATOR_CARD_SELECT = {
   id: true,
   locationVisible: true,
-  entryPriceOverride: true,
-  vipPriceOverride: true,
+  vvipPriceOverride: true,
   user: { select: { profile: { select: { displayName: true, avatarUrl: true, country: true } } } },
 } as const;

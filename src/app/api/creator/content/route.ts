@@ -41,6 +41,7 @@ export async function GET() {
       moderationStatus: true,
       publishedAt: true,
       createdAt: true,
+      _count: { select: { likes: true } },
     },
   });
 
@@ -55,6 +56,7 @@ export async function GET() {
       moderationStatus: item.moderationStatus,
       publishedAt: item.publishedAt,
       createdAt: item.createdAt,
+      likeCount: item._count.likes,
     })),
   });
 }
@@ -73,15 +75,17 @@ const UploadSchema = z.object({
   mediaType: z.enum(["IMAGE", "VIDEO", "AUDIO"]),
   mimeType: z.string().min(1),
   base64Data: z.string().min(1),
-  accessLevel: z.enum(["PUBLIC_PREVIEW", "ENTRY", "VIP", "PPV"]),
-  priceUsd: z.number().positive().optional(),
+  // FREE/VIP/VVIP — see prisma/schema.prisma's ContentAccessLevel comment.
+  // PPV is retired from the product and deliberately not accepted here,
+  // even though the enum value still exists in the database.
+  accessLevel: z.enum(["FREE", "VIP", "VVIP"]),
   caption: z.string().max(2000).optional(),
 });
 
 /**
  * Only VERIFIED creators can monetise (§6), but any creator profile can
  * still draft content — the monetise check is enforced specifically for
- * PPV/paid access levels, not for uploading in general, so a
+ * VIP/VVIP access levels, not for uploading in general, so a
  * newly-applying creator isn't blocked from preparing content while
  * awaiting approval.
  */
@@ -110,17 +114,13 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { mediaType, mimeType, base64Data, accessLevel, priceUsd, caption } = parsed.data;
+  const { mediaType, mimeType, base64Data, accessLevel, caption } = parsed.data;
 
-  if (accessLevel !== "PUBLIC_PREVIEW" && !canMonetise(creatorProfile.status)) {
+  if (accessLevel !== "FREE" && !canMonetise(creatorProfile.status)) {
     return NextResponse.json(
-      { error: "Only verified creators can publish monetised (Entry/VIP/PPV) content." },
+      { error: "Only verified creators can publish monetised (VIP/VVIP) content." },
       { status: 403 }
     );
-  }
-
-  if (accessLevel === "PPV" && !priceUsd) {
-    return NextResponse.json({ error: "priceUsd is required for PPV content." }, { status: 400 });
   }
 
   const storage = getMediaStorageProvider();
@@ -136,7 +136,10 @@ export async function POST(req: NextRequest) {
         creatorProfileId: creatorProfile.id,
         mediaType,
         accessLevel,
-        priceUsd: priceUsd ?? null,
+        // No per-item pricing now that PPV is retired — VIP/VVIP content
+        // is unlocked by subscription (see the entitlement engine), not
+        // an individual price.
+        priceUsd: null,
         caption,
         status: "DRAFT",
         moderationStatus: "DRAFT",

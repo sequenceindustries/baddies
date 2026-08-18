@@ -10,8 +10,7 @@ export interface CreatorCardData {
   avatarUrl: string | null;
   country: string | null;
   verifiedBadge: true;
-  entryPriceUsd: number;
-  vipPriceUsd: number;
+  vvipPriceUsd: number;
 }
 
 export function CreatorCard({ creator }: { creator: CreatorCardData }) {
@@ -31,8 +30,7 @@ export function CreatorCard({ creator }: { creator: CreatorCardData }) {
         <VerifiedBadge />
         {creator.country && <div style={mutedSmallStyle}>{creator.country}</div>}
         <div style={priceRowStyle}>
-          <span>Entry ${creator.entryPriceUsd.toFixed(2)}</span>
-          <span>VIP ${creator.vipPriceUsd.toFixed(2)}</span>
+          <span>VVIP ${creator.vvipPriceUsd.toFixed(2)}/mo</span>
         </div>
       </div>
     </Link>
@@ -55,37 +53,45 @@ export function CreatorCardRow({ title, creators }: { title?: string; creators: 
 
 export interface ContentCardData {
   contentId: string;
-  accessLevel: "PUBLIC_PREVIEW" | "ENTRY" | "VIP" | "PPV";
+  // FREE/VIP/VVIP — see prisma/schema.prisma's ContentAccessLevel comment.
+  // PPV kept in the type only for any stray legacy row; nothing can
+  // create it anymore and the UI never offers it.
+  accessLevel: "FREE" | "VIP" | "VVIP" | "PPV";
   priceUsd?: number | string | null;
   caption?: string | null;
   publishedAt?: string | null;
   mediaType?: "IMAGE" | "VIDEO" | "AUDIO" | null;
+  likeCount?: number;
+  viewerHasLiked?: boolean;
 }
 
 const ACCESS_LABEL: Record<ContentCardData["accessLevel"], string> = {
-  PUBLIC_PREVIEW: "Free preview",
-  ENTRY: "Entry",
+  FREE: "Free",
   VIP: "VIP",
+  VVIP: "VVIP / Exclusive",
   PPV: "Pay per view",
 };
 
 /**
- * Renders a content item. PUBLIC_PREVIEW content can actually be viewed
- * inline (fetches its signed media URL on click, since /api/content/:id/media
- * allows anyone for public-preview, live content). PPV content has a real
- * "Unlock" button wired to the dummy /api/checkout/ppv route (stub payment
- * provider — see that route's doc comment). ENTRY/VIP content points fans
- * at the creator's Subscribe buttons instead of duplicating a subscribe
- * flow on every card.
+ * Renders a content item. FREE content can actually be viewed inline
+ * (fetches its signed media URL on click, since /api/content/:id/media
+ * allows anyone for free, live content). VIP content has a real "Get VIP
+ * Pass" unlock button — one flat platform-wide price via the dummy
+ * /api/checkout/vip-pass route (stub payment provider). VVIP content
+ * points fans at the creator's own Subscribe button instead of
+ * duplicating a subscribe flow on every card, since it needs that
+ * specific creator's price.
  */
 export function ContentCard({ item }: { item: ContentCardData }) {
   const [media, setMedia] = useState<{ mimeType: string; signedUrl: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
-  const isPreview = item.accessLevel === "PUBLIC_PREVIEW";
-  const isPpv = item.accessLevel === "PPV";
-  const price = item.priceUsd != null ? Number(item.priceUsd) : null;
+  const [liked, setLiked] = useState(item.viewerHasLiked ?? false);
+  const [likeCount, setLikeCount] = useState(item.likeCount ?? 0);
+  const [likeBusy, setLikeBusy] = useState(false);
+  const isFree = item.accessLevel === "FREE";
+  const isVip = item.accessLevel === "VIP";
 
   async function handleView() {
     setLoading(true);
@@ -100,22 +106,29 @@ export function ContentCard({ item }: { item: ContentCardData }) {
     if (body.media?.[0]) setMedia(body.media[0]);
   }
 
-  async function handleUnlock() {
+  async function handleGetVipPass() {
     setLoading(true);
     setError(null);
-    const res = await fetch("/api/checkout/ppv", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contentId: item.contentId }),
-    });
+    const res = await fetch("/api/checkout/vip-pass", { method: "POST" });
     if (!res.ok) {
       setLoading(false);
       const body = await res.json().catch(() => null);
-      setError(body?.error ?? "Unlock failed.");
+      setError(body?.error ?? "Couldn't get VIP pass.");
       return;
     }
     setUnlocked(true);
     await handleView();
+  }
+
+  async function toggleLike() {
+    setLikeBusy(true);
+    const res = await fetch(`/api/content/${item.contentId}/like`, { method: liked ? "DELETE" : "POST" });
+    setLikeBusy(false);
+    if (res.ok) {
+      const body = await res.json();
+      setLiked(body.liked);
+      setLikeCount(body.likeCount);
+    }
   }
 
   return (
@@ -124,13 +137,13 @@ export function ContentCard({ item }: { item: ContentCardData }) {
         <MediaPreview mimeType={media.mimeType} url={media.signedUrl} />
       ) : (
         <div style={contentThumbStyle}>
-          {isPreview ? (
+          {isFree ? (
             <button onClick={handleView} disabled={loading} style={ghostSmallButtonStyle}>
               {loading ? "Loading..." : "▶ View"}
             </button>
-          ) : isPpv && !unlocked ? (
-            <button onClick={handleUnlock} disabled={loading} style={ghostSmallButtonStyle}>
-              {loading ? "..." : `🔒 Unlock $${(price ?? 0).toFixed(2)}`}
+          ) : isVip && !unlocked ? (
+            <button onClick={handleGetVipPass} disabled={loading} style={ghostSmallButtonStyle}>
+              {loading ? "..." : "🔒 Get VIP Pass to unlock"}
             </button>
           ) : (
             <span style={{ fontSize: "1.4rem" }}>🔒</span>
@@ -138,15 +151,17 @@ export function ContentCard({ item }: { item: ContentCardData }) {
         </div>
       )}
       {item.caption && <p style={captionStyle}>{item.caption}</p>}
-      <div style={mutedSmallStyle}>
-        {ACCESS_LABEL[item.accessLevel]}
-        {price != null ? ` · $${price.toFixed(2)}` : ""}
-      </div>
-      {!isPreview && !isPpv && (
+      <div style={mutedSmallStyle}>{ACCESS_LABEL[item.accessLevel]}</div>
+      {item.accessLevel === "VVIP" && (
         <div style={mutedSmallStyle}>Subscribe on this creator&apos;s profile to unlock.</div>
       )}
       {error && <div style={{ ...mutedSmallStyle, color: "var(--danger)" }}>{error}</div>}
-      <ReportButton contentId={item.contentId} />
+      <div style={cardFooterStyle}>
+        <button onClick={toggleLike} disabled={likeBusy} style={likeButtonStyle(liked)}>
+          {liked ? "♥" : "♡"} {likeCount}
+        </button>
+        <ReportButton contentId={item.contentId} />
+      </div>
     </div>
   );
 }
@@ -385,3 +400,22 @@ const ghostSmallButtonStyle: React.CSSProperties = {
   fontSize: "0.8rem",
   cursor: "pointer",
 };
+
+const cardFooterStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "0.5rem",
+};
+
+function likeButtonStyle(liked: boolean): React.CSSProperties {
+  return {
+    background: "none",
+    border: "none",
+    color: liked ? "var(--accent-wine)" : "var(--text-muted)",
+    fontSize: "0.8rem",
+    cursor: "pointer",
+    padding: 0,
+    fontWeight: liked ? 600 : 400,
+  };
+}

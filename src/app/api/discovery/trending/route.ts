@@ -18,7 +18,7 @@ export async function GET() {
       id: { in: contentIds },
       status: "APPROVED",
       publishedAt: { not: null },
-      accessLevel: { in: ["PUBLIC_PREVIEW", "ENTRY"] }, // don't surface VIP/PPV previews unpurchased
+      accessLevel: { in: ["FREE", "VIP"] }, // don't surface VVIP previews without a subscription
     },
     select: {
       id: true,

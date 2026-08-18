@@ -14,8 +14,7 @@ describe("business config defaults", () => {
   });
 
   it("default prices match the locked MVP pricing", () => {
-    expect(DEFAULT_BUSINESS_CONFIG[BUSINESS_CONFIG_KEYS.ENTRY_PRICE_USD]).toBe("2.99");
-    expect(DEFAULT_BUSINESS_CONFIG[BUSINESS_CONFIG_KEYS.VIP_PRICE_USD]).toBe("9.99");
-    expect(DEFAULT_BUSINESS_CONFIG[BUSINESS_CONFIG_KEYS.UNLIMITED_PRICE_USD]).toBe("19.99");
+    expect(DEFAULT_BUSINESS_CONFIG[BUSINESS_CONFIG_KEYS.VVIP_DEFAULT_PRICE_USD]).toBe("9.99");
+    expect(DEFAULT_BUSINESS_CONFIG[BUSINESS_CONFIG_KEYS.VIP_PASS_PRICE_USD]).toBe("19.99");
   });
 });

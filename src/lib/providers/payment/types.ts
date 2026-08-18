@@ -25,8 +25,8 @@ export interface AttachPaymentMethodInput {
 
 export interface CreateSubscriptionInput {
   providerCustomerId: string;
-  providerPriceId: string; // maps to ENTRY/VIP/UNLIMITED price objects on the processor side
-  metadata: Record<string, string>; // e.g. { subscriptionType: "ENTRY", creatorProfileId: "..." }
+  providerPriceId: string; // maps to VVIP/VIP-pass price objects on the processor side
+  metadata: Record<string, string>; // e.g. { subscriptionType: "VVIP", creatorProfileId: "..." }
 }
 
 export interface CreateSubscriptionResult {

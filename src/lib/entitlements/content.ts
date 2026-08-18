@@ -8,16 +8,22 @@ import type { Content, User } from "@prisma/client";
  *
  * Every code path that serves media (API routes, server components,
  * signed-URL issuance) must call this instead of re-deriving access rules.
+ *
+ * Tier model (see prisma/schema.prisma's ContentAccessLevel comment):
+ *   FREE — anyone, once live
+ *   VIP  — that creator's own VVIP subscribers, OR any fan holding the
+ *          platform-wide VIP pass (UnlimitedSubscription) IF this creator
+ *          has opted their VIP content into it (unlimitedOptedIn)
+ *   VVIP — only that creator's own active subscribers
  */
 
 export type EntitlementReason =
-  | "public_preview"
+  | "free_preview"
   | "own_content"
   | "admin_override"
-  | "active_entry_subscription"
-  | "active_vip_subscription"
-  | "ppv_purchase"
-  | "unlimited_subscription"
+  | "active_vvip_subscription"
+  | "vip_pass"
+  | "ppv_purchase" // legacy — no code path can create PPV content anymore, kept defensively
   | "denied";
 
 export interface EntitlementResult {
@@ -37,8 +43,8 @@ export async function canAccessContent(
   // publish.
   const isLive = content.status === "APPROVED" && content.publishedAt != null;
 
-  if (content.accessLevel === "PUBLIC_PREVIEW" && isLive) {
-    return { allowed: true, reason: "public_preview" };
+  if (content.accessLevel === "FREE" && isLive) {
+    return { allowed: true, reason: "free_preview" };
   }
 
   if (!user) {
@@ -64,32 +70,33 @@ export async function canAccessContent(
 
   const now = new Date();
 
-  if (content.accessLevel === "ENTRY" || content.accessLevel === "VIP") {
-    const requiredTiers = content.accessLevel === "ENTRY" ? ["ENTRY", "VIP"] : ["VIP"];
+  if (content.accessLevel === "VVIP" || content.accessLevel === "VIP") {
+    // A VVIP subscriber to this specific creator sees everything of
+    // theirs, VIP-tier included — same "higher tier includes lower tier"
+    // relationship the old ENTRY/VIP split had.
     const activeSub = await db.subscription.findFirst({
       where: {
         fanId: user.id,
         creatorProfileId: content.creatorProfileId,
-        tier: { in: requiredTiers as ("ENTRY" | "VIP")[] },
         status: "ACTIVE",
         currentPeriodEnd: { gte: now },
       },
-      select: { tier: true },
+      select: { id: true },
     });
     if (activeSub) {
-      return {
-        allowed: true,
-        reason: activeSub.tier === "VIP" ? "active_vip_subscription" : "active_entry_subscription",
-      };
+      return { allowed: true, reason: "active_vvip_subscription" };
     }
 
-    // Entry-level content also qualifies under an active Unlimited
-    // subscription, if this creator participates. VIP/PPV are excluded
-    // per build brief §2 — Unlimited never auto-includes them.
-    if (content.accessLevel === "ENTRY") {
-      const unlimitedResult = await checkUnlimitedAccess(user.id, content.creatorProfileId);
-      if (unlimitedResult.allowed) return unlimitedResult;
+    if (content.accessLevel === "VVIP") {
+      // No fallback — VVIP is exclusive to this creator's own subscribers.
+      return { allowed: false, reason: "denied" };
     }
+
+    // VIP-tier content also qualifies under the platform-wide VIP pass,
+    // if this creator has opted in. VVIP is never included, matching the
+    // old "Unlimited never auto-includes VIP/PPV" rule.
+    const vipPassResult = await checkVipPassAccess(user.id, content.creatorProfileId);
+    if (vipPassResult.allowed) return vipPassResult;
 
     return { allowed: false, reason: "denied" };
   }
@@ -108,7 +115,12 @@ export async function canAccessContent(
   return { allowed: false, reason: "denied" };
 }
 
-async function checkUnlimitedAccess(
+/**
+ * Checks the platform-wide VIP pass (UnlimitedSubscription — model name
+ * kept to limit the rename's blast radius, see src/lib/config/business.ts
+ * for where the user-facing "VIP pass" naming lives instead).
+ */
+async function checkVipPassAccess(
   fanId: string,
   creatorProfileId: string
 ): Promise<EntitlementResult> {
@@ -120,7 +132,7 @@ async function checkUnlimitedAccess(
     return { allowed: false, reason: "denied" };
   }
 
-  const activeUnlimited = await db.unlimitedSubscription.findFirst({
+  const activeVipPass = await db.unlimitedSubscription.findFirst({
     where: {
       fanId,
       status: "ACTIVE",
@@ -129,7 +141,5 @@ async function checkUnlimitedAccess(
     select: { id: true },
   });
 
-  return activeUnlimited
-    ? { allowed: true, reason: "unlimited_subscription" }
-    : { allowed: false, reason: "denied" };
+  return activeVipPass ? { allowed: true, reason: "vip_pass" } : { allowed: false, reason: "denied" };
 }

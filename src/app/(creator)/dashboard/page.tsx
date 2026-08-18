@@ -20,7 +20,8 @@ type CreatorStatus =
   | "REJECTED"
   | "BANNED";
 
-type AccessLevel = "PUBLIC_PREVIEW" | "ENTRY" | "VIP" | "PPV";
+// FREE/VIP/VVIP — see prisma/schema.prisma's ContentAccessLevel comment.
+type AccessLevel = "FREE" | "VIP" | "VVIP";
 
 interface OwnContentItem {
   contentId: string;
@@ -32,6 +33,7 @@ interface OwnContentItem {
   moderationStatus: string;
   publishedAt: string | null;
   createdAt: string;
+  likeCount: number;
 }
 
 const VERIFICATION_STEPS: { type: "IDENTITY" | "AGE" | "LIVENESS"; label: string }[] = [
@@ -132,7 +134,7 @@ function WalletPanel() {
       </div>
       {payoutMessage && <p style={{ ...mutedSmallStyle, marginTop: "0.75rem", marginBottom: 0 }}>{payoutMessage}</p>}
       <p style={{ ...mutedSmallStyle, marginTop: "0.85rem", marginBottom: 0 }}>
-        Derived from ledger events (subscriptions, PPV unlocks, tips, payouts).
+        Derived from ledger events (VVIP subscriptions, tips, payouts).
       </p>
     </div>
   );
@@ -242,9 +244,8 @@ function ContentPanel({ canMonetise }: { canMonetise: boolean }) {
               <div>
                 <div style={{ fontSize: "0.9rem" }}>{item.caption || "(no caption)"}</div>
                 <div style={mutedSmallStyle}>
-                  {item.mediaType} · {item.accessLevel}
-                  {item.priceUsd != null ? ` · $${Number(item.priceUsd).toFixed(2)}` : ""} · {item.status}
-                  {item.publishedAt ? " · published" : ""}
+                  {item.mediaType} · {item.accessLevel} · {item.status}
+                  {item.publishedAt ? " · published" : ""} · ♥ {item.likeCount}
                 </div>
               </div>
               {item.status === "APPROVED" && !item.publishedAt && (
@@ -262,8 +263,7 @@ function ContentPanel({ canMonetise }: { canMonetise: boolean }) {
 
 function UploadForm({ canMonetise, onUploaded }: { canMonetise: boolean; onUploaded: () => void }) {
   const [caption, setCaption] = useState("");
-  const [accessLevel, setAccessLevel] = useState<AccessLevel>("PUBLIC_PREVIEW");
-  const [priceUsd, setPriceUsd] = useState("");
+  const [accessLevel, setAccessLevel] = useState<AccessLevel>("FREE");
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -293,7 +293,6 @@ function UploadForm({ canMonetise, onUploaded }: { canMonetise: boolean; onUploa
         mimeType: file.type,
         base64Data,
         accessLevel,
-        priceUsd: accessLevel === "PPV" ? Number(priceUsd) : undefined,
         caption: caption || undefined,
       }),
     });
@@ -305,7 +304,6 @@ function UploadForm({ canMonetise, onUploaded }: { canMonetise: boolean; onUploa
       return;
     }
     setCaption("");
-    setPriceUsd("");
     setFile(null);
     onUploaded();
   }
@@ -329,38 +327,24 @@ function UploadForm({ canMonetise, onUploaded }: { canMonetise: boolean; onUploa
           <input style={inputStyle} value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={2000} />
         </Field>
 
-        <Field label="Access level">
+        <Field
+          label="Access level"
+          hint="Free: anyone. VIP: unlocked by the platform-wide VIP pass. VVIP: only your own subscribers."
+        >
           <select
             style={inputStyle}
             value={accessLevel}
             onChange={(e) => setAccessLevel(e.target.value as AccessLevel)}
           >
-            <option value="PUBLIC_PREVIEW">Free preview</option>
-            <option value="ENTRY" disabled={!canMonetise}>
-              Entry {canMonetise ? "" : "(verified creators only)"}
-            </option>
+            <option value="FREE">Free</option>
             <option value="VIP" disabled={!canMonetise}>
               VIP {canMonetise ? "" : "(verified creators only)"}
             </option>
-            <option value="PPV" disabled={!canMonetise}>
-              Pay per view {canMonetise ? "" : "(verified creators only)"}
+            <option value="VVIP" disabled={!canMonetise}>
+              VVIP / Exclusive {canMonetise ? "" : "(verified creators only)"}
             </option>
           </select>
         </Field>
-
-        {accessLevel === "PPV" && (
-          <Field label="Price (USD)">
-            <input
-              style={inputStyle}
-              type="number"
-              min="0.01"
-              step="0.01"
-              value={priceUsd}
-              onChange={(e) => setPriceUsd(e.target.value)}
-              required
-            />
-          </Field>
-        )}
 
         <button type="submit" style={primaryButtonStyle} disabled={submitting}>
           {submitting ? "Uploading..." : "Upload"}

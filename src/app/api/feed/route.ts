@@ -9,9 +9,10 @@ const PAGE_SIZE = 20;
 
 /**
  * Sprint 2 feed: a simple reverse-chronological stream of published,
- * approved PUBLIC_PREVIEW/ENTRY content from VERIFIED creators. This is
- * intentionally basic — per build brief §13 ("Avoid turning the MVP into
- * an overly complicated social network") and §35 ("Do not overbuild").
+ * approved FREE/VIP content (i.e. everything except creator-exclusive
+ * VVIP content) from VERIFIED creators. This is intentionally basic —
+ * per build brief §13 ("Avoid turning the MVP into an overly complicated
+ * social network") and §35 ("Do not overbuild").
  *
  * Personalized sections (Following, Recommended, Trending, category
  * filters — §11, §13) are Sprint 3 (Discovery) work and depend on models
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
     where: {
       status: "APPROVED",
       publishedAt: { not: null },
-      accessLevel: { in: ["PUBLIC_PREVIEW", "ENTRY"] },
+      accessLevel: { in: ["FREE", "VIP"] },
       creatorProfile: { status: "VERIFIED" },
     },
     orderBy: { publishedAt: "desc" },
