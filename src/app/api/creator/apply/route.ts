@@ -69,6 +69,16 @@ export async function POST(req: NextRequest) {
                                                            data: { displayName, bio },
                                                    });
 
+                                                   // RBAC's content:create/content:publish permissions are gated on
+                                                   // User.role, not CreatorProfile.status — promote to CREATOR here
+                                                   // (not only on final admin approval) so a newly-applying creator
+                                                   // can draft content while awaiting verification, per the upload
+                                                   // route's own design (see its comment on this).
+                                                   await tx.user.update({
+                                                           where: { id: user.id },
+                                                           data: { role: "CREATOR" },
+                                                   });
+
                                                    await tx.auditLog.create({
                                                            data: {
                                                                      actorId: user.id,

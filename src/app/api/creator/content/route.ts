@@ -11,6 +11,55 @@ import { getMediaStorageProvider } from "@/lib/providers/storage";
 export const dynamic = "force-dynamic";
 
 /**
+ * Lists the current user's own content across every status (draft through
+ * published), for the creator dashboard. Unlike the public
+ * /api/creators/:id/content route, this deliberately includes everything —
+ * a creator needs to see their DRAFT/PENDING_REVIEW/REJECTED items too, not
+ * just what's live.
+ */
+export async function GET() {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+  }
+
+  const creatorProfile = await db.creatorProfile.findUnique({ where: { userId: user.id } });
+  if (!creatorProfile) {
+    return NextResponse.json({ error: "No creator profile found." }, { status: 404 });
+  }
+
+  const items = await db.content.findMany({
+    where: { creatorProfileId: creatorProfile.id },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      mediaType: true,
+      accessLevel: true,
+      priceUsd: true,
+      caption: true,
+      status: true,
+      moderationStatus: true,
+      publishedAt: true,
+      createdAt: true,
+    },
+  });
+
+  return NextResponse.json({
+    items: items.map((item: (typeof items)[number]) => ({
+      contentId: item.id,
+      mediaType: item.mediaType,
+      accessLevel: item.accessLevel,
+      priceUsd: item.priceUsd,
+      caption: item.caption,
+      status: item.status,
+      moderationStatus: item.moderationStatus,
+      publishedAt: item.publishedAt,
+      createdAt: item.createdAt,
+    })),
+  });
+}
+
+/**
  * Sprint 0/1/2 note on the upload transport: this route accepts base64-
  * encoded bytes in a JSON body for simplicity. A production upload flow
  * should switch to direct-to-storage signed PUT URLs (client uploads

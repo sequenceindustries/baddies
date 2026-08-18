@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
 import { getVerificationProvider } from "@/lib/providers/verification";
+import { applyVerificationOutcome } from "@/lib/creator/verification-workflow";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -67,9 +68,26 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // The stub provider has no real hosted flow and no webhook secret
+  // configured, so there is no actual async callback coming. It always
+  // passes deterministically (see StubVerificationProvider), so apply that
+  // outcome immediately instead of leaving the session stuck PENDING
+  // forever. Any real provider still only advances via its signed webhook
+  // — this branch never fires once VERIFICATION_PROVIDER is a real vendor.
+  if (provider.name === "stub") {
+    const outcome = await provider.getVerificationStatus(handle.providerSessionId);
+    await applyVerificationOutcome({
+      providerSessionId: handle.providerSessionId,
+      status: outcome.status,
+      providerReference: outcome.providerReference,
+      failureReason: outcome.failureReason,
+    });
+  }
+
   return NextResponse.json({
     verificationSessionId: session.id,
     hostedUrl: handle.hostedUrl ?? null,
     expiresAt: handle.expiresAt ?? null,
+    status: provider.name === "stub" ? "PASSED" : "PENDING",
   });
 }
