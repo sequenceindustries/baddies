@@ -4,6 +4,10 @@ import { db } from "@/lib/db/client";
 import { canAccessContent } from "@/lib/entitlements/content";
 import { getMediaStorageProvider } from "@/lib/providers/storage";
 
+// Always dynamic: this route reads/writes live data (DB, auth, or both)
+// and must never be statically prerendered or cached at build time.
+export const dynamic = "force-dynamic";
+
 /**
  * The ONLY route that hands out a usable media URL. Enforces:
  *   User → Authorization → Content entitlement → Signed media access

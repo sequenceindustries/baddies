@@ -6,6 +6,10 @@ import { db } from "@/lib/db/client";
 import type { Prisma } from "@prisma/client";
 import { assertTransition, InvalidTransitionError } from "@/lib/creator/status";
 
+// Always dynamic: this route reads/writes live data (DB, auth, or both)
+// and must never be statically prerendered or cached at build time.
+export const dynamic = "force-dynamic";
+
 const RejectSchema = z.object({
   reason: z.string().min(1).max(2000),
 });

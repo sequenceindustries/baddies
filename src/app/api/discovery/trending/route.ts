@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { computeTrendingContent } from "@/lib/discovery/trending";
 
+// Always dynamic: this route reads/writes live data (DB, auth, or both)
+// and must never be statically prerendered or cached at build time.
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const ranked = await computeTrendingContent();
   if (ranked.length === 0) {

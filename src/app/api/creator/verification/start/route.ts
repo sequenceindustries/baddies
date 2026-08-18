@@ -4,6 +4,10 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
 import { getVerificationProvider } from "@/lib/providers/verification";
 
+// Always dynamic: this route reads/writes live data (DB, auth, or both)
+// and must never be statically prerendered or cached at build time.
+export const dynamic = "force-dynamic";
+
 const StartVerificationSchema = z.object({
   verificationType: z.enum(["IDENTITY", "AGE", "LIVENESS"]),
 });

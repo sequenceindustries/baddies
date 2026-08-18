@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
 
+// Always dynamic: this route reads/writes live data (DB, auth, or both)
+// and must never be statically prerendered or cached at build time.
+export const dynamic = "force-dynamic";
+
 /**
  * Follow a creator (§4: "FAN can... Follow" is implied by the Fan Home /
  * discovery sections in §11 and §13). No RBAC permission needed beyond

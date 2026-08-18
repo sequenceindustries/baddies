@@ -3,6 +3,10 @@ import { z } from "zod";
 import crypto from "crypto";
 import { applyVerificationOutcome } from "@/lib/creator/verification-workflow";
 
+// Always dynamic: this route reads/writes live data (DB, auth, or both)
+// and must never be statically prerendered or cached at build time.
+export const dynamic = "force-dynamic";
+
 /**
  * Verification provider webhook. Same "provider is authoritative" contract
  * as the payment webhook — a verification session's PASSED/FAILED outcome

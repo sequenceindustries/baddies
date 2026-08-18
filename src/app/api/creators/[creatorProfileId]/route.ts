@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { resolveCreatorPricing } from "@/lib/creator/pricing";
 
+// Always dynamic: this route reads/writes live data (DB, auth, or both)
+// and must never be statically prerendered or cached at build time.
+export const dynamic = "force-dynamic";
+
 /**
  * Public creator profile (§12). Only exposes a VERIFIED creator's profile
  * — anything else 404s rather than leaking existence/status of a pending

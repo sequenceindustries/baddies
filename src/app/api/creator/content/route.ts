@@ -6,6 +6,10 @@ import { db } from "@/lib/db/client";
 import { canMonetise } from "@/lib/creator/status";
 import { getMediaStorageProvider } from "@/lib/providers/storage";
 
+// Always dynamic: this route reads/writes live data (DB, auth, or both)
+// and must never be statically prerendered or cached at build time.
+export const dynamic = "force-dynamic";
+
 /**
  * Sprint 0/1/2 note on the upload transport: this route accepts base64-
  * encoded bytes in a JSON body for simplicity. A production upload flow

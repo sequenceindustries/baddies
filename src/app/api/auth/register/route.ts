@@ -4,6 +4,10 @@ import { db } from "@/lib/db/client";
 import type { Prisma } from "@prisma/client";
 import { hashPassword, createSession } from "@/lib/auth/session";
 
+// Always dynamic: this route reads/writes live data (DB, auth, or both)
+// and must never be statically prerendered or cached at build time.
+export const dynamic = "force-dynamic";
+
 const RegisterSchema = z.object({
   email: z.string().email(),
   password: z.string().min(10, "Password must be at least 10 characters"),

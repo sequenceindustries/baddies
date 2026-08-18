@@ -4,6 +4,10 @@ import { db } from "@/lib/db/client";
 import { toCreatorCard, CREATOR_CARD_SELECT } from "@/lib/discovery/creator-card";
 import { computeTrendingContent } from "@/lib/discovery/trending";
 
+// Always dynamic: this route reads/writes live data (DB, auth, or both)
+// and must never be statically prerendered or cached at build time.
+export const dynamic = "force-dynamic";
+
 const SECTION_LIMIT = 10;
 
 /**

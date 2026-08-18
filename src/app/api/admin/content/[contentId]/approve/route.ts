@@ -4,6 +4,10 @@ import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
 import { assertContentTransition, InvalidContentTransitionError } from "@/lib/content/status";
 
+// Always dynamic: this route reads/writes live data (DB, auth, or both)
+// and must never be statically prerendered or cached at build time.
+export const dynamic = "force-dynamic";
+
 /**
  * Approves content out of PENDING_REVIEW. Per build brief §7, a creator
  * uploading a collaborator does not by itself establish consent — so if

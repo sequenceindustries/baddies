@@ -3,6 +3,10 @@ import { getPaymentProvider } from "@/lib/providers/payment";
 import { db } from "@/lib/db/client";
 import { postRevenueEvent, postReversalEvent, recomputeWalletBalances } from "@/lib/ledger/service";
 
+// Always dynamic: this route reads/writes live data (DB, auth, or both)
+// and must never be statically prerendered or cached at build time.
+export const dynamic = "force-dynamic";
+
 /**
  * Payment webhook endpoint. Per build brief §21: "Never trust the browser
  * to tell the backend 'payment succeeded.' The processor webhook is

@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { toCreatorCard, CREATOR_CARD_SELECT } from "@/lib/discovery/creator-card";
 
+// Always dynamic: this route reads/writes live data (DB, auth, or both)
+// and must never be statically prerendered or cached at build time.
+export const dynamic = "force-dynamic";
+
 const RESULT_LIMIT = 20;
 
 /**
