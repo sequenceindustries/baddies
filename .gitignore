@@ -7,3 +7,4 @@ out/
 .DS_Store
 coverage/
 *.tsbuildinfo
+next-env.d.ts
