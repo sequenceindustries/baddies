@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { VerifiedBadge, displayHeadingStyle, useSession } from "@/components/ui";
+import { VerifiedBadge, displayHeadingStyle, useSession, inputStyle, errorBannerStyle } from "@/components/ui";
 import { ContentGrid, type ContentCardData } from "@/components/cards";
 
 interface CreatorProfileResponse {
@@ -125,11 +125,181 @@ export default function CreatorProfilePage() {
         )}
       </div>
 
+      {!isOwnProfile && user && (
+        <SubscribeAndTip
+          creatorProfileId={creatorProfileId}
+          entryPriceUsd={creator.entryPriceUsd}
+          vipPriceUsd={creator.vipPriceUsd}
+        />
+      )}
+
       <h2 style={sectionHeadingStyle}>Content</h2>
       <ContentGrid items={items} />
     </main>
   );
 }
+
+/**
+ * Dummy checkout UI — calls the stub-backed /api/checkout/* routes (see
+ * their doc comments for why the stub path completes synchronously
+ * instead of waiting on a payment webhook). No real money moves; this is
+ * the flow real vendor integration would slot into once one is selected.
+ */
+function SubscribeAndTip({
+  creatorProfileId,
+  entryPriceUsd,
+  vipPriceUsd,
+}: {
+  creatorProfileId: string;
+  entryPriceUsd: number;
+  vipPriceUsd: number;
+}) {
+  const [subscribedTier, setSubscribedTier] = useState<"ENTRY" | "VIP" | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [showTip, setShowTip] = useState(false);
+  const [tipAmount, setTipAmount] = useState("5.00");
+  const [tipMessage, setTipMessage] = useState("");
+  const [tipSent, setTipSent] = useState(false);
+
+  async function subscribe(tier: "ENTRY" | "VIP") {
+    setBusy(tier);
+    setError(null);
+    const res = await fetch("/api/checkout/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ creatorProfileId, tier }),
+    });
+    setBusy(null);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(body?.error ?? "Subscription failed.");
+      return;
+    }
+    setSubscribedTier(tier);
+  }
+
+  async function sendTip(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy("tip");
+    setError(null);
+    const res = await fetch("/api/checkout/tip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        creatorProfileId,
+        amountUsd: Number(tipAmount),
+        message: tipMessage || undefined,
+      }),
+    });
+    setBusy(null);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(body?.error ?? "Tip failed.");
+      return;
+    }
+    setTipSent(true);
+    setTipMessage("");
+    setShowTip(false);
+  }
+
+  return (
+    <div style={checkoutCardStyle}>
+      <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
+        <button
+          onClick={() => subscribe("ENTRY")}
+          disabled={busy !== null || subscribedTier !== null}
+          style={checkoutButtonStyle(subscribedTier === "ENTRY")}
+        >
+          {subscribedTier === "ENTRY"
+            ? "✓ Subscribed (Entry)"
+            : busy === "ENTRY"
+              ? "..."
+              : `Subscribe Entry $${entryPriceUsd.toFixed(2)}/mo`}
+        </button>
+        <button
+          onClick={() => subscribe("VIP")}
+          disabled={busy !== null || subscribedTier !== null}
+          style={checkoutButtonStyle(subscribedTier === "VIP")}
+        >
+          {subscribedTier === "VIP"
+            ? "✓ Subscribed (VIP)"
+            : busy === "VIP"
+              ? "..."
+              : `Subscribe VIP $${vipPriceUsd.toFixed(2)}/mo`}
+        </button>
+        <button onClick={() => setShowTip((v) => !v)} style={ghostCheckoutButtonStyle}>
+          {tipSent ? "✓ Tip sent — send another?" : "Send a tip"}
+        </button>
+      </div>
+
+      {showTip && (
+        <form onSubmit={sendTip} style={tipFormStyle}>
+          <input
+            style={{ ...inputStyle, width: "110px", marginTop: 0 }}
+            type="number"
+            min="1"
+            step="0.5"
+            value={tipAmount}
+            onChange={(e) => setTipAmount(e.target.value)}
+            aria-label="Tip amount (USD)"
+          />
+          <input
+            style={{ ...inputStyle, flex: 1, marginTop: 0 }}
+            placeholder="Optional message"
+            value={tipMessage}
+            onChange={(e) => setTipMessage(e.target.value)}
+            maxLength={500}
+          />
+          <button type="submit" disabled={busy === "tip"} style={checkoutButtonStyle(false)}>
+            {busy === "tip" ? "..." : "Send"}
+          </button>
+        </form>
+      )}
+
+      {error && <div style={{ ...errorBannerStyle, marginTop: "0.75rem", marginBottom: 0 }}>{error}</div>}
+    </div>
+  );
+}
+
+const checkoutCardStyle: React.CSSProperties = {
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: "12px",
+  padding: "1rem 1.25rem",
+  marginBottom: "2.5rem",
+};
+
+const tipFormStyle: React.CSSProperties = {
+  display: "flex",
+  gap: "0.6rem",
+  marginTop: "0.85rem",
+  alignItems: "center",
+};
+
+function checkoutButtonStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: "0.55rem 1rem",
+    borderRadius: "var(--radius)",
+    fontWeight: 600,
+    fontSize: "0.85rem",
+    cursor: active ? "default" : "pointer",
+    background: active ? "var(--surface-raised)" : "var(--accent-gold)",
+    color: active ? "var(--text-muted)" : "var(--bg)",
+    border: active ? "1px solid var(--border)" : "none",
+  };
+}
+
+const ghostCheckoutButtonStyle: React.CSSProperties = {
+  padding: "0.55rem 1rem",
+  borderRadius: "var(--radius)",
+  fontWeight: 600,
+  fontSize: "0.85rem",
+  cursor: "pointer",
+  background: "transparent",
+  color: "var(--text)",
+  border: "1px solid var(--border)",
+};
 
 const mainStyle: React.CSSProperties = { padding: "2.5rem 1.75rem", maxWidth: "1100px", margin: "0 auto" };
 

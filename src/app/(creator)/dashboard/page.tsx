@@ -66,10 +66,65 @@ export default function CreatorDashboardPage() {
     <main style={mainStyle}>
       <h1 style={displayHeadingStyle}>Creator Dashboard</h1>
       <StatusPanel status={user.creatorProfile.status as CreatorStatus} onAdvance={refresh} />
+      <WalletPanel />
       {user.creatorProfile.status !== "REJECTED" && user.creatorProfile.status !== "BANNED" && (
         <ContentPanel canMonetise={user.creatorProfile.status === "VERIFIED"} />
       )}
     </main>
+  );
+}
+
+interface WalletBalances {
+  pendingBalanceUsd: number;
+  availableBalanceUsd: number;
+  paidBalanceUsd: number;
+}
+
+/**
+ * Read-model display only — balances are derived from LedgerEntry history
+ * by src/lib/ledger/service.ts#recomputeWalletBalances, recomputed on every
+ * dummy checkout (see src/app/api/checkout/*). No payout flow exists yet.
+ */
+function WalletPanel() {
+  const [wallet, setWallet] = useState<WalletBalances | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/creator/wallet")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (!cancelled && body) setWallet(body);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!wallet) return null;
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: "2rem" }}>
+      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Wallet</h2>
+      <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
+        <WalletStat label="Available" value={wallet.availableBalanceUsd} />
+        <WalletStat label="Pending" value={wallet.pendingBalanceUsd} />
+        <WalletStat label="Paid out" value={wallet.paidBalanceUsd} />
+      </div>
+      <p style={{ ...mutedSmallStyle, marginTop: "0.85rem", marginBottom: 0 }}>
+        Derived from ledger events (subscriptions, PPV unlocks, tips) — no payout flow yet.
+      </p>
+    </div>
+  );
+}
+
+function WalletStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <div style={{ fontSize: "1.4rem", fontWeight: 600, fontFamily: "var(--font-display)" }}>
+        ${value.toFixed(2)}
+      </div>
+      <div style={mutedSmallStyle}>{label}</div>
+    </div>
   );
 }
 

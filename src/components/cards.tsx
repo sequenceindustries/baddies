@@ -72,16 +72,19 @@ const ACCESS_LABEL: Record<ContentCardData["accessLevel"], string> = {
 /**
  * Renders a content item. PUBLIC_PREVIEW content can actually be viewed
  * inline (fetches its signed media URL on click, since /api/content/:id/media
- * allows anyone for public-preview, live content). Anything else shows a
- * locked state with pricing — actually purchasing/subscribing is a separate,
- * not-yet-built payment flow (providers are still stubs), so this
- * intentionally stops at "here's what it costs," not a working checkout.
+ * allows anyone for public-preview, live content). PPV content has a real
+ * "Unlock" button wired to the dummy /api/checkout/ppv route (stub payment
+ * provider — see that route's doc comment). ENTRY/VIP content points fans
+ * at the creator's Subscribe buttons instead of duplicating a subscribe
+ * flow on every card.
  */
 export function ContentCard({ item }: { item: ContentCardData }) {
   const [media, setMedia] = useState<{ mimeType: string; signedUrl: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [unlocked, setUnlocked] = useState(false);
   const isPreview = item.accessLevel === "PUBLIC_PREVIEW";
+  const isPpv = item.accessLevel === "PPV";
   const price = item.priceUsd != null ? Number(item.priceUsd) : null;
 
   async function handleView() {
@@ -97,6 +100,24 @@ export function ContentCard({ item }: { item: ContentCardData }) {
     if (body.media?.[0]) setMedia(body.media[0]);
   }
 
+  async function handleUnlock() {
+    setLoading(true);
+    setError(null);
+    const res = await fetch("/api/checkout/ppv", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contentId: item.contentId }),
+    });
+    if (!res.ok) {
+      setLoading(false);
+      const body = await res.json().catch(() => null);
+      setError(body?.error ?? "Unlock failed.");
+      return;
+    }
+    setUnlocked(true);
+    await handleView();
+  }
+
   return (
     <div style={contentCardStyle}>
       {media ? (
@@ -106,6 +127,10 @@ export function ContentCard({ item }: { item: ContentCardData }) {
           {isPreview ? (
             <button onClick={handleView} disabled={loading} style={ghostSmallButtonStyle}>
               {loading ? "Loading..." : "▶ View"}
+            </button>
+          ) : isPpv && !unlocked ? (
+            <button onClick={handleUnlock} disabled={loading} style={ghostSmallButtonStyle}>
+              {loading ? "..." : `🔒 Unlock $${(price ?? 0).toFixed(2)}`}
             </button>
           ) : (
             <span style={{ fontSize: "1.4rem" }}>🔒</span>
@@ -117,6 +142,9 @@ export function ContentCard({ item }: { item: ContentCardData }) {
         {ACCESS_LABEL[item.accessLevel]}
         {price != null ? ` · $${price.toFixed(2)}` : ""}
       </div>
+      {!isPreview && !isPpv && (
+        <div style={mutedSmallStyle}>Subscribe on this creator&apos;s profile to unlock.</div>
+      )}
       {error && <div style={{ ...mutedSmallStyle, color: "var(--danger)" }}>{error}</div>}
     </div>
   );
