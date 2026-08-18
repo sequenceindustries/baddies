@@ -55,11 +55,41 @@ export function Nav() {
             <Link href="/home" style={linkStyle}>
               Home
             </Link>
+            <Link href="/search" style={linkStyle}>
+              Search
+            </Link>
+            <Link href="/discovery" style={linkStyle}>
+              Discover
+            </Link>
             {user.role !== "ADMIN" && (
-              <Link href="/apply" style={linkStyle}>
-                {user.creatorProfile ? "Creator status" : "Become a creator"}
+              <>
+                <Link href="/subscriptions" style={linkStyle}>
+                  My subscriptions
+                </Link>
+                {user.creatorProfile ? (
+                  <>
+                    <Link href="/dashboard" style={linkStyle}>
+                      Dashboard
+                    </Link>
+                    <Link href="/apply" style={linkStyle}>
+                      Creator status
+                    </Link>
+                  </>
+                ) : (
+                  <Link href="/apply" style={linkStyle}>
+                    Become a creator
+                  </Link>
+                )}
+              </>
+            )}
+            {user.role === "ADMIN" && (
+              <Link href="/admin" style={linkStyle}>
+                Admin
               </Link>
             )}
+            <Link href="/settings" style={linkStyle}>
+              Settings
+            </Link>
             <span style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
               {user.displayName ?? user.email}
             </span>
@@ -69,6 +99,9 @@ export function Nav() {
           </>
         ) : (
           <>
+            <Link href="/search" style={linkStyle}>
+              Search
+            </Link>
             <Link href="/login" style={linkStyle}>
               Sign in
             </Link>

@@ -37,6 +37,7 @@ export async function GET(
 
   return NextResponse.json({
     creatorProfileId: creator.id,
+    userId: creator.userId,
     displayName: creator.user.profile?.displayName,
     bio: creator.user.profile?.bio,
     avatarUrl: creator.user.profile?.avatarUrl,

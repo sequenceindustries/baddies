@@ -39,11 +39,11 @@ export function CreatorCard({ creator }: { creator: CreatorCardData }) {
   );
 }
 
-export function CreatorCardRow({ title, creators }: { title: string; creators: CreatorCardData[] }) {
+export function CreatorCardRow({ title, creators }: { title?: string; creators: CreatorCardData[] }) {
   if (creators.length === 0) return null;
   return (
     <section style={sectionStyle}>
-      <h2 style={sectionHeadingStyle}>{title}</h2>
+      {title && <h2 style={sectionHeadingStyle}>{title}</h2>}
       <div style={rowStyle}>
         {creators.map((c) => (
           <CreatorCard key={c.creatorProfileId} creator={c} />
@@ -146,6 +146,7 @@ export function ContentCard({ item }: { item: ContentCardData }) {
         <div style={mutedSmallStyle}>Subscribe on this creator&apos;s profile to unlock.</div>
       )}
       {error && <div style={{ ...mutedSmallStyle, color: "var(--danger)" }}>{error}</div>}
+      <ReportButton contentId={item.contentId} />
     </div>
   );
 }
@@ -160,6 +161,115 @@ function MediaPreview({ mimeType, url }: { mimeType: string; url: string }) {
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={url} alt="" style={mediaElStyle} />;
 }
+
+const REPORT_REASONS = [
+  { value: "NON_CONSENSUAL", label: "Non-consensual content" },
+  { value: "MINOR_SAFETY", label: "Minor safety" },
+  { value: "ILLEGAL_CONTENT", label: "Illegal content" },
+  { value: "IMPERSONATION", label: "Impersonation" },
+  { value: "HARASSMENT", label: "Harassment" },
+  { value: "SPAM", label: "Spam" },
+  { value: "OTHER", label: "Other" },
+] as const;
+
+/**
+ * Files a Report (§23 trust & safety) against either a content item or a
+ * user — pass exactly one of contentId/reportedUserId, matching
+ * POST /api/reports. Reusable across ContentCard and the creator profile
+ * page rather than duplicating the form.
+ */
+export function ReportButton({ contentId, reportedUserId }: { contentId?: string; reportedUserId?: string }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState<(typeof REPORT_REASONS)[number]["value"]>("OTHER");
+  const [details, setDetails] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    const res = await fetch("/api/reports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contentId, reportedUserId, reason, details: details || undefined }),
+    });
+    setSubmitting(false);
+    if (res.ok) {
+      setDone(true);
+      setOpen(false);
+    }
+  }
+
+  if (done) {
+    return <div style={reportLinkStyle}>✓ Reported</div>;
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} style={reportLinkButtonStyle}>
+        Report
+      </button>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} style={reportFormStyle}>
+      <select
+        style={reportSelectStyle}
+        value={reason}
+        onChange={(e) => setReason(e.target.value as typeof reason)}
+      >
+        {REPORT_REASONS.map((r) => (
+          <option key={r.value} value={r.value}>
+            {r.label}
+          </option>
+        ))}
+      </select>
+      <input
+        style={reportSelectStyle}
+        placeholder="Details (optional)"
+        value={details}
+        onChange={(e) => setDetails(e.target.value)}
+        maxLength={2000}
+      />
+      <button type="submit" disabled={submitting} style={reportLinkButtonStyle}>
+        {submitting ? "..." : "Submit"}
+      </button>
+      <button type="button" onClick={() => setOpen(false)} style={reportLinkButtonStyle}>
+        Cancel
+      </button>
+    </form>
+  );
+}
+
+const reportLinkStyle: React.CSSProperties = { fontSize: "0.72rem", color: "var(--text-muted)" };
+
+const reportLinkButtonStyle: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  color: "var(--text-muted)",
+  fontSize: "0.72rem",
+  textDecoration: "underline",
+  cursor: "pointer",
+  padding: 0,
+  alignSelf: "flex-start",
+};
+
+const reportFormStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.35rem",
+  marginTop: "0.2rem",
+};
+
+const reportSelectStyle: React.CSSProperties = {
+  background: "var(--surface-raised)",
+  border: "1px solid var(--border)",
+  borderRadius: "6px",
+  color: "var(--text)",
+  fontSize: "0.75rem",
+  padding: "0.3rem 0.4rem",
+};
 
 export function ContentGrid({ items }: { items: ContentCardData[] }) {
   if (items.length === 0) {

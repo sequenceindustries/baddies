@@ -49,7 +49,223 @@ export default function AdminDashboardPage() {
       <h1 style={displayHeadingStyle}>Admin Dashboard</h1>
       <CreatorQueue />
       <ContentQueue />
+      <PayoutQueue />
+      <UserActionsPanel />
+      <AuditLogPanel />
     </main>
+  );
+}
+
+interface PayoutRequest {
+  payoutId: string;
+  creatorEmail: string;
+  amountUsd: number;
+  requestedAt: string;
+}
+
+function PayoutQueue() {
+  const [payouts, setPayouts] = useState<PayoutRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  function reload() {
+    setLoading(true);
+    fetch("/api/admin/payouts")
+      .then((r) => (r.ok ? r.json() : { payouts: [] }))
+      .then((body) => setPayouts(body.payouts ?? []))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(reload, []);
+
+  async function approve(id: string) {
+    setBusyId(id);
+    const res = await fetch(`/api/admin/payouts/${id}/approve`, { method: "POST" });
+    setBusyId(null);
+    if (res.ok) reload();
+    else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error ?? "Approve failed.");
+    }
+  }
+
+  return (
+    <section style={{ marginBottom: "3rem" }}>
+      <h2 style={sectionHeadingStyle}>Payout requests</h2>
+      {loading ? (
+        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+      ) : payouts.length === 0 ? (
+        <p style={{ color: "var(--text-muted)" }}>Nothing pending.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          {payouts.map((p) => (
+            <div key={p.payoutId} style={rowCardStyle}>
+              <div>
+                <div style={{ fontSize: "0.9rem" }}>
+                  {p.creatorEmail} · ${p.amountUsd.toFixed(2)}
+                </div>
+                <div style={mutedSmallStyle}>requested {new Date(p.requestedAt).toLocaleString()}</div>
+              </div>
+              <button onClick={() => approve(p.payoutId)} disabled={busyId === p.payoutId} style={approveButtonStyle}>
+                {busyId === p.payoutId ? "..." : "Approve"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+interface LookedUpUser {
+  userId: string;
+  email: string;
+  role: string;
+  displayName: string | null;
+  isActive: boolean;
+  suspendedAt: string | null;
+  creatorProfileStatus: string | null;
+}
+
+function UserActionsPanel() {
+  const [email, setEmail] = useState("");
+  const [found, setFound] = useState<LookedUpUser | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function lookup(e: React.FormEvent) {
+    e.preventDefault();
+    setSearching(true);
+    setError(null);
+    setFound(null);
+    const res = await fetch(`/api/admin/users/lookup?email=${encodeURIComponent(email.trim())}`);
+    setSearching(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(body?.error ?? "User not found.");
+      return;
+    }
+    setFound(await res.json());
+  }
+
+  async function act(action: "suspend" | "ban") {
+    if (!found) return;
+    if (!window.confirm(`${action === "ban" ? "Ban" : "Suspend"} ${found.email}?`)) return;
+    setBusy(true);
+    const res = await fetch(`/api/admin/users/${found.userId}/${action}`, { method: "POST" });
+    setBusy(false);
+    if (res.ok) {
+      setFound({ ...found, isActive: false });
+    } else {
+      const body = await res.json().catch(() => null);
+      setError(body?.error ?? `${action} failed.`);
+    }
+  }
+
+  return (
+    <section style={{ marginBottom: "3rem" }}>
+      <h2 style={sectionHeadingStyle}>User actions</h2>
+      <form onSubmit={lookup} style={{ display: "flex", gap: "0.6rem", marginBottom: "1rem", maxWidth: "420px" }}>
+        <input
+          style={{
+            flex: 1,
+            padding: "0.5rem 0.7rem",
+            background: "var(--surface-raised)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius)",
+            color: "var(--text)",
+            fontSize: "0.85rem",
+          }}
+          placeholder="Look up by email..."
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          type="email"
+        />
+        <button type="submit" disabled={searching} style={approveButtonStyle}>
+          {searching ? "..." : "Look up"}
+        </button>
+      </form>
+
+      {error && <p style={{ color: "var(--danger)", fontSize: "0.85rem" }}>{error}</p>}
+
+      {found && (
+        <div style={rowCardStyle}>
+          <div>
+            <div style={{ fontWeight: 600 }}>
+              {found.displayName ?? found.email} · {found.role}
+            </div>
+            <div style={mutedSmallStyle}>
+              {found.email} · {found.isActive ? "active" : "inactive"}
+              {found.creatorProfileStatus ? ` · creator: ${found.creatorProfileStatus}` : ""}
+            </div>
+          </div>
+          {found.role !== "ADMIN" && found.isActive && (
+            <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
+              <button onClick={() => act("suspend")} disabled={busy} style={rejectButtonStyle}>
+                Suspend
+              </button>
+              <button onClick={() => act("ban")} disabled={busy} style={rejectButtonStyle}>
+                Ban
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+interface AuditLogEntry {
+  id: string;
+  action: string;
+  actorEmail: string | null;
+  targetType: string | null;
+  targetId: string | null;
+  createdAt: string;
+}
+
+function AuditLogPanel() {
+  const [entries, setEntries] = useState<AuditLogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/admin/audit-log")
+      .then((r) => (r.ok ? r.json() : { entries: [] }))
+      .then((body) => {
+        if (!cancelled) setEntries(body.entries ?? []);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <section>
+      <h2 style={sectionHeadingStyle}>Audit log</h2>
+      {loading ? (
+        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+      ) : entries.length === 0 ? (
+        <p style={{ color: "var(--text-muted)" }}>No activity yet.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          {entries.map((e) => (
+            <div key={e.id} style={auditRowStyle}>
+              <span style={{ fontWeight: 600 }}>{e.action}</span>
+              <span style={mutedSmallStyle}>
+                {e.actorEmail ?? "system"}
+                {e.targetType ? ` · ${e.targetType}:${e.targetId}` : ""} ·{" "}
+                {new Date(e.createdAt).toLocaleString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -180,7 +396,7 @@ function ContentQueue() {
   }
 
   return (
-    <section>
+    <section style={{ marginBottom: "3rem" }}>
       <h2 style={sectionHeadingStyle}>Content moderation</h2>
       {loading ? (
         <p style={{ color: "var(--text-muted)" }}>Loading...</p>
@@ -255,4 +471,13 @@ const rejectButtonStyle: React.CSSProperties = {
   fontSize: "0.82rem",
   fontWeight: 600,
   cursor: "pointer",
+};
+
+const auditRowStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.15rem",
+  padding: "0.6rem 0",
+  borderBottom: "1px solid var(--border)",
+  fontSize: "0.85rem",
 };

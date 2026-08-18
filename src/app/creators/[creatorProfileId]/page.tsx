@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { VerifiedBadge, displayHeadingStyle, useSession, inputStyle, errorBannerStyle } from "@/components/ui";
-import { ContentGrid, type ContentCardData } from "@/components/cards";
+import { ContentGrid, ReportButton, type ContentCardData } from "@/components/cards";
 
 interface CreatorProfileResponse {
   creatorProfileId: string;
+  userId: string;
   displayName: string | null;
   bio: string | null;
   avatarUrl: string | null;
@@ -119,9 +120,12 @@ export default function CreatorProfilePage() {
           </div>
         </div>
         {!isOwnProfile && user && (
-          <button onClick={toggleFollow} disabled={followBusy} style={followButtonStyle(following)}>
-            {following ? "Following" : "Follow"}
-          </button>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.5rem" }}>
+            <button onClick={toggleFollow} disabled={followBusy} style={followButtonStyle(following)}>
+              {following ? "Following" : "Follow"}
+            </button>
+            <ReportButton reportedUserId={creator.userId} />
+          </div>
         )}
       </div>
 

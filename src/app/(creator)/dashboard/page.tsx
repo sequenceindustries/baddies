@@ -81,37 +81,58 @@ interface WalletBalances {
 }
 
 /**
- * Read-model display only — balances are derived from LedgerEntry history
- * by src/lib/ledger/service.ts#recomputeWalletBalances, recomputed on every
- * dummy checkout (see src/app/api/checkout/*). No payout flow exists yet.
+ * Read-model display — balances are derived from LedgerEntry history by
+ * src/lib/ledger/service.ts#recomputeWalletBalances, recomputed on every
+ * dummy checkout (see src/app/api/checkout/*) and every payout approval.
  */
 function WalletPanel() {
   const [wallet, setWallet] = useState<WalletBalances | null>(null);
+  const [requesting, setRequesting] = useState(false);
+  const [payoutMessage, setPayoutMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  function reload() {
     fetch("/api/creator/wallet")
       .then((r) => (r.ok ? r.json() : null))
       .then((body) => {
-        if (!cancelled && body) setWallet(body);
+        if (body) setWallet(body);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }
+
+  useEffect(reload, []);
+
+  async function requestPayout() {
+    setRequesting(true);
+    setPayoutMessage(null);
+    const res = await fetch("/api/creator/payout", { method: "POST" });
+    setRequesting(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setPayoutMessage(body?.error ?? "Payout request failed.");
+      return;
+    }
+    const body = await res.json();
+    setPayoutMessage(`✓ Requested $${body.amountUsd.toFixed(2)} — awaiting admin approval.`);
+    reload();
+  }
 
   if (!wallet) return null;
 
   return (
     <div style={{ ...cardStyle, marginBottom: "2rem" }}>
       <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Wallet</h2>
-      <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap", alignItems: "flex-end" }}>
         <WalletStat label="Available" value={wallet.availableBalanceUsd} />
         <WalletStat label="Pending" value={wallet.pendingBalanceUsd} />
         <WalletStat label="Paid out" value={wallet.paidBalanceUsd} />
+        {wallet.availableBalanceUsd > 0 && (
+          <button onClick={requestPayout} disabled={requesting} style={publishButtonStyle}>
+            {requesting ? "..." : "Request payout"}
+          </button>
+        )}
       </div>
+      {payoutMessage && <p style={{ ...mutedSmallStyle, marginTop: "0.75rem", marginBottom: 0 }}>{payoutMessage}</p>}
       <p style={{ ...mutedSmallStyle, marginTop: "0.85rem", marginBottom: 0 }}>
-        Derived from ledger events (subscriptions, PPV unlocks, tips) — no payout flow yet.
+        Derived from ledger events (subscriptions, PPV unlocks, tips, payouts).
       </p>
     </div>
   );
