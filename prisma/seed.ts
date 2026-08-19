@@ -41,6 +41,10 @@ interface DummyCreatorSpec {
   vvipPriceUsd: string;
   colorA: string;
   colorB: string;
+  // Same no-people rule as post photos (see fetchPhotoBytes) — a real
+  // photo crop reads as an actual profile picture rather than a plain
+  // initial-on-a-gradient placeholder, without depicting anyone.
+  avatarPhotoId: string;
   posts: DummyPost[];
 }
 
@@ -56,6 +60,7 @@ const DUMMY_CREATORS: DummyCreatorSpec[] = [
     vvipPriceUsd: "7.99",
     colorA: "#c9a961",
     colorB: "#0e0e11",
+    avatarPhotoId: "1506905925346-21bda4d32df4",
     posts: [
       { tier: "FREE", caption: "Table Mountain never gets old", daysAgo: 9, photoId: "1506905925346-21bda4d32df4" },
       { tier: "FREE", caption: "Sunday market run, Bo-Kaap edition.", daysAgo: 4, photoId: "1490750967868-88aa4486c946" },
@@ -76,6 +81,7 @@ const DUMMY_CREATORS: DummyCreatorSpec[] = [
     vvipPriceUsd: "12.99",
     colorA: "#7c2d3b",
     colorB: "#1e1e25",
+    avatarPhotoId: "1449824913935-59a10b8d2000",
     posts: [
       { tier: "FREE", caption: "Morning run before the city wakes up.", daysAgo: 8, photoId: "1449824913935-59a10b8d2000" },
       { tier: "FREE", caption: "New look, who dis?", daysAgo: 3, photoId: "1441986300917-64674bd600d8" },
@@ -96,6 +102,7 @@ const DUMMY_CREATORS: DummyCreatorSpec[] = [
     vvipPriceUsd: "9.99",
     colorA: "#4c5faf",
     colorB: "#0e0e11",
+    avatarPhotoId: "1477959858617-67f85cf4f1df",
     posts: [
       { tier: "FREE", caption: "Golden hour by the Thames.", daysAgo: 10, photoId: "1477959858617-67f85cf4f1df" },
       { tier: "FREE", caption: "First post here — thanks for the follows!", daysAgo: 5, photoId: "1441974231531-c6227db76b6e" },
@@ -107,8 +114,8 @@ const DUMMY_CREATORS: DummyCreatorSpec[] = [
   },
 ];
 
-/** Small circular avatar — initial on a gradient — as a self-contained data: URI. Profile.avatarUrl is a plain string field, no storage provider involved. */
-function avatarDataUri(initial: string, colorA: string, colorB: string): string {
+/** Gradient-with-initial fallback avatar — only used if the real photo fetch fails, so seeding never hard-fails over a decorative image. */
+function fallbackAvatarDataUri(initial: string, colorA: string, colorB: string): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
     <defs>
       <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
@@ -120,6 +127,25 @@ function avatarDataUri(initial: string, colorA: string, colorB: string): string 
     <text x="100" y="128" font-family="Georgia, serif" font-size="88" font-weight="600" fill="#f1eee7" text-anchor="middle">${initial}</text>
   </svg>`;
   return `data:image/svg+xml;base64,${Buffer.from(svg, "utf8").toString("base64")}`;
+}
+
+/**
+ * A real profile picture — a small square crop of the same kind of
+ * people-free photography used for posts (see fetchPhotoBytes's comment;
+ * the rule applies identically here), rather than a plain initial on a
+ * gradient. Profile.avatarUrl is a plain string field, so this is stored
+ * directly as a data: URI — no storage provider involved.
+ */
+async function fetchAvatarDataUri(photoId: string, initial: string, colorA: string, colorB: string): Promise<string> {
+  try {
+    const res = await fetch(`https://images.unsplash.com/photo-${photoId}?w=240&h=240&fit=crop&q=80`);
+    if (!res.ok) throw new Error(`Unsplash returned ${res.status}`);
+    const bytes = Buffer.from(await res.arrayBuffer());
+    return `data:image/jpeg;base64,${bytes.toString("base64")}`;
+  } catch (err) {
+    console.warn(`  (couldn't fetch avatar photo ${photoId}, using gradient fallback: ${(err as Error).message})`);
+    return fallbackAvatarDataUri(initial, colorA, colorB);
+  }
 }
 
 /** Gradient fallback — only used if fetchPhotoBytes can't reach the network at seed time, so seeding never hard-fails on a flaky connection. */
@@ -179,7 +205,12 @@ async function seedDummyCreators() {
   for (const spec of DUMMY_CREATORS) {
     const passwordHash = await hashPassword(DUMMY_PASSWORD);
     const legalNameEncrypted = encryptField(spec.legalName);
-    const avatarUrl = avatarDataUri(spec.displayName.charAt(0).toUpperCase(), spec.colorA, spec.colorB);
+    const avatarUrl = await fetchAvatarDataUri(
+      spec.avatarPhotoId,
+      spec.displayName.charAt(0).toUpperCase(),
+      spec.colorA,
+      spec.colorB
+    );
 
     const user = await db.user.upsert({
       where: { email: spec.email },

@@ -13,28 +13,31 @@ const SECTION_LIMIT = 10;
 /**
  * Fan Home, composed per build brief §13's stated priority order:
  *   1. Creators the fan follows
- *   2. Subscribed creators
- *   3. Unlimited discovery
+ *   2. Your Exclusive (this fan's own active subscriptions — VVIP-tier
+ *      content only; Free/VIP content from the same creators belongs in
+ *      Following/VIP Content, not mixed into what's actually gated by
+ *      the subscription)
+ *   3. VIP Content (VIP-tier posts from creators opted into the
+ *      platform-wide VIP pass — shown to every fan the same way Trending
+ *      is: the card itself resolves to a real unlock or a paywall CTA
+ *      depending on whether this fan actually holds the pass)
  *   4. Nearby creators (same country as the fan's own, real, detected
  *      location — see LocationField/useLocationDetector)
- *   5. Recommended creators
- *   6. Trending content
- *   7. New verified creators
+ *   5. Trending content
+ *   6. New verified creators
  *
- * For a logged-out visitor, sections 1/2/3/4 are simply empty and the
- * response degrades to trending + new creators — no separate "logged out
- * home" endpoint needed. "Recommended" here is intentionally a simple
- * fallback (verified creators the fan doesn't already follow, most
- * recently approved first) rather than a recommendation model — build
- * brief §31 excludes "Complex recommendation AI" from MVP scope.
+ * For a logged-out visitor, sections 1/2 are simply empty and the
+ * response degrades to VIP Content/Trending/New — no separate "logged
+ * out home" endpoint needed.
  */
 export async function GET() {
   const user = await getCurrentUser();
 
-  const [followedContent, subscribedContent, unlimitedCreators, trending, newCreators, fanCountry] =
+  const [followedContent, subscribedContent, vipContent, unlimitedCreators, trending, newCreators, fanCountry] =
     await Promise.all([
       getFollowedCreatorsContent(user?.id),
       getSubscribedCreatorsContent(user?.id),
+      getVipContentSection(),
       getUnlimitedParticipatingCreators(),
       getTrendingSection(),
       getNewCreatorsSection(),
@@ -43,15 +46,13 @@ export async function GET() {
 
   const followedCreatorIds = new Set(followedContent.creatorIds);
   const nearby = await getNearbyCreators(fanCountry, followedCreatorIds);
-  const excludeFromRecommended = new Set([...followedCreatorIds, ...nearby.map((c) => c.creatorProfileId)]);
-  const recommended = await getRecommendedCreators(excludeFromRecommended);
 
   return NextResponse.json({
     following: followedContent.items,
     subscribed: subscribedContent.items,
+    vipContent,
     unlimited: unlimitedCreators,
     nearby,
-    recommended,
     trending,
     newCreators,
   });
@@ -101,6 +102,13 @@ async function getFollowedCreatorsContent(fanId?: string): Promise<{ items: unkn
   return { items, creatorIds };
 }
 
+/**
+ * "Your Exclusive" — VVIP-tier content only. This is specifically the
+ * content this fan's subscription actually gates; a creator's Free/VIP
+ * posts show up in Following/VIP Content instead, since mixing them in
+ * here made it look like the subscription bought less than it does (or
+ * that Free content needed one at all).
+ */
 async function getSubscribedCreatorsContent(fanId?: string) {
   if (!fanId) return { items: [] as unknown[] };
 
@@ -112,7 +120,12 @@ async function getSubscribedCreatorsContent(fanId?: string) {
   if (creatorIds.length === 0) return { items: [] };
 
   const items = await db.content.findMany({
-    where: { creatorProfileId: { in: creatorIds }, status: "APPROVED", publishedAt: { not: null } },
+    where: {
+      creatorProfileId: { in: creatorIds },
+      accessLevel: "VVIP",
+      status: "APPROVED",
+      publishedAt: { not: null },
+    },
     orderBy: { publishedAt: "desc" },
     take: SECTION_LIMIT,
     select: { id: true, accessLevel: true, caption: true, publishedAt: true, creatorProfileId: true },
@@ -130,14 +143,27 @@ async function getUnlimitedParticipatingCreators() {
   return Promise.all(creators.map(toCreatorCard));
 }
 
-async function getRecommendedCreators(excludeCreatorIds: Set<string>) {
-  const creators = await db.creatorProfile.findMany({
-    where: { status: "VERIFIED", id: { notIn: Array.from(excludeCreatorIds) } },
-    orderBy: { approvedAt: "desc" },
+/**
+ * "VIP Content" — actual VIP-tier posts from creators opted into the
+ * platform-wide VIP pass, not just a list of participating creators
+ * (that's what "Included with VIP Pass" already is). Shown to every fan
+ * the same way Trending is: ContentCard resolves each one to a real
+ * unlock or a "Get VIP Pass" CTA depending on whether this fan actually
+ * holds the pass — no need to gate the section itself on that.
+ */
+async function getVipContentSection() {
+  const items = await db.content.findMany({
+    where: {
+      accessLevel: "VIP",
+      status: "APPROVED",
+      publishedAt: { not: null },
+      creatorProfile: { unlimitedOptedIn: true },
+    },
+    orderBy: { publishedAt: "desc" },
     take: SECTION_LIMIT,
-    select: CREATOR_CARD_SELECT,
+    select: { id: true, accessLevel: true, caption: true, publishedAt: true, creatorProfileId: true },
   });
-  return Promise.all(creators.map(toCreatorCard));
+  return items;
 }
 
 async function getTrendingSection() {

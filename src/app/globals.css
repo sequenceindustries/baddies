@@ -1,4 +1,9 @@
-@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;0,800;1,600&family=Inter:wght@400;500;600;700;800&display=swap");
+/* Gotham itself is a commercial Hoefler&Co/Monotype typeface with no
+   Google Fonts license, so it can't be embedded here — Montserrat is the
+   standard free geometric-sans stand-in for it (very similar proportions,
+   the usual web substitute). Used as the single family for both display
+   and body, same as real Gotham usage (it has no serif counterpart). */
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;0,800;1,600&display=swap");
 
 :root {
     --bg: #0b0b10;
@@ -26,8 +31,8 @@
     --danger: #f0685c;
     --success: #4fd8a0;
     --radius: 12px;
-    --font-display: "Playfair Display", Georgia, serif;
-    --font-body: "Inter", system-ui, sans-serif;
+    --font-display: "Montserrat", system-ui, sans-serif;
+    --font-body: "Montserrat", system-ui, sans-serif;
 
     --glow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 12px 40px -12px rgba(0, 0, 0, 0.6);
 }
@@ -68,6 +73,15 @@ body {
 
 a {
     color: inherit;
+}
+
+/* Center all page content — every page in this app wraps its content in
+   a single <main>, so this one rule reaches all of them. text-align
+   inherits down through anything that doesn't set its own (headings,
+   paragraphs, labels, form fields), without having to touch every
+   page's inline styles individually. */
+main {
+    text-align: center;
 }
 
 input,

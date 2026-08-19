@@ -18,9 +18,9 @@ interface RawContentItem {
 interface HomeResponse {
   following: RawContentItem[];
   subscribed: RawContentItem[];
+  vipContent: RawContentItem[];
   unlimited: CreatorCardData[];
   nearby: CreatorCardData[];
-  recommended: CreatorCardData[];
   trending: RawContentItem[];
   newCreators: CreatorCardData[];
 }
@@ -96,9 +96,15 @@ export default function FanHomePage() {
             </section>
           )}
 
+          {normalize(data.vipContent).length > 0 && (
+            <section style={{ marginBottom: "2.25rem" }}>
+              <h2 style={sectionHeadingStyle}>VIP Content</h2>
+              <ContentGrid items={normalize(data.vipContent)} />
+            </section>
+          )}
+
           <CreatorCardRow title="Baddies Near You" creators={data.nearby} />
           <CreatorCardRow title="New Baddies" creators={data.newCreators} />
-          <CreatorCardRow title="Recommended Baddies" creators={data.recommended} />
           <CreatorCardRow title="Included with VIP Pass" creators={data.unlimited} />
 
           {normalize(data.trending).length > 0 && (
@@ -110,9 +116,9 @@ export default function FanHomePage() {
 
           {normalize(data.following).length === 0 &&
             normalize(data.subscribed).length === 0 &&
+            normalize(data.vipContent).length === 0 &&
             data.unlimited.length === 0 &&
             data.nearby.length === 0 &&
-            data.recommended.length === 0 &&
             normalize(data.trending).length === 0 &&
             data.newCreators.length === 0 && (
               <p style={{ color: "var(--text-muted)" }}>

@@ -13,15 +13,45 @@ export interface CreatorCardData {
   verifiedBadge: true;
   vvipPriceUsd: number;
   isLive?: boolean;
+  // This creator's latest Free post — always safe to show on a
+  // discovery card (Free is public the moment it's live, see
+  // src/lib/discovery/creator-card.ts), unlike VIP/Exclusive media.
+  thumbnailUrl?: string | null;
+  thumbnailMimeType?: string | null;
 }
 
+/**
+ * Same big-thumbnail-first layout as a content post (see ContentCard) so
+ * creator-discovery cards and content cards read as one consistent
+ * system — the latest Free post standing in for "what does this creator
+ * actually post," with the avatar/name/price as a smaller identity row
+ * underneath rather than the whole card.
+ */
 export function CreatorCard({ creator }: { creator: CreatorCardData }) {
   const initial = (creator.displayName ?? "?").trim().charAt(0).toUpperCase() || "?";
   const location = [creator.city, creator.country].filter(Boolean).join(", ");
   return (
     <Link href={`/creators/${creator.creatorProfileId}`} style={cardLinkStyle}>
       <div className="hover-lift" style={creatorCardStyle}>
-        <div style={{ position: "relative" }}>
+        <div style={contentThumbStyle}>
+          {creator.thumbnailUrl ? (
+            creator.thumbnailMimeType?.startsWith("video/") ? (
+              <video src={creator.thumbnailUrl} muted style={mediaElStyle} />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={creator.thumbnailUrl} alt="" style={mediaElStyle} />
+            )
+          ) : creator.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={creator.avatarUrl} alt="" style={{ ...mediaElStyle, objectFit: "cover" }} />
+          ) : (
+            <span style={{ fontFamily: "var(--font-display)", fontSize: "2.4rem", color: "var(--accent)" }}>
+              {initial}
+            </span>
+          )}
+          {creator.isLive && <span style={liveBadgeStyle}>● LIVE</span>}
+        </div>
+        <div style={creatorIdentityRowStyle}>
           <div style={avatarStyle}>
             {creator.avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -30,10 +60,11 @@ export function CreatorCard({ creator }: { creator: CreatorCardData }) {
               initial
             )}
           </div>
-          {creator.isLive && <span style={liveBadgeStyle}>● LIVE</span>}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 600, fontSize: "0.98rem" }}>{creator.displayName ?? "Unnamed creator"}</div>
+            <VerifiedBadge />
+          </div>
         </div>
-        <div style={{ fontWeight: 600, fontSize: "0.98rem" }}>{creator.displayName ?? "Unnamed creator"}</div>
-        <VerifiedBadge />
         {location && <div style={mutedSmallStyle}>{location}</div>}
         <div style={priceRowStyle}>
           <span>Exclusive ${creator.vvipPriceUsd.toFixed(2)}/mo</span>
@@ -48,9 +79,10 @@ export function CreatorCardRow({ title, creators }: { title?: string; creators: 
   return (
     <section style={sectionStyle}>
       {title && <h2 style={sectionHeadingStyle}>{title}</h2>}
-      {/* A wrapping grid, not a horizontal-scroll strip — a row of 3 cards
-          and a row of 5 cards both fill the width evenly instead of
-          clumping left with a dead gap on wide screens. */}
+      {/* Flexbox + wrap + justify-content: center — unlike CSS grid, this
+          centers every row including a partial last row (e.g. 1 card
+          left over after 4 fit per row), which grid's justify-content
+          only does for the whole block, not each wrapped row. */}
       <div style={creatorGridStyle}>
         {creators.map((c) => (
           <CreatorCard key={c.creatorProfileId} creator={c} />
@@ -404,23 +436,28 @@ export function ContentGrid({ items }: { items: ContentCardData[] }) {
 
 const cardLinkStyle: React.CSSProperties = { textDecoration: "none", color: "inherit", display: "block" };
 
+// Same card shell ContentCard uses (contentCardStyle) — see below.
 const creatorCardStyle: React.CSSProperties = {
   background: "var(--surface)",
   border: "1px solid var(--border)",
   borderRadius: "16px",
-  padding: "1.15rem",
+  padding: "1.1rem 1.25rem",
   display: "flex",
   flexDirection: "column",
-  alignItems: "flex-start",
-  gap: "0.35rem",
-  height: "100%",
+  gap: "0.6rem",
   boxShadow: "var(--glow)",
-  transition: "border-color 0.18s ease, transform 0.18s ease",
+  width: "300px",
+};
+
+const creatorIdentityRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.6rem",
 };
 
 const avatarStyle: React.CSSProperties = {
-  width: "52px",
-  height: "52px",
+  width: "38px",
+  height: "38px",
   borderRadius: "50%",
   background: "var(--surface-raised)",
   border: "2px solid var(--accent)",
@@ -429,26 +466,25 @@ const avatarStyle: React.CSSProperties = {
   justifyContent: "center",
   fontWeight: 700,
   fontFamily: "var(--font-display)",
-  fontSize: "1.1rem",
+  fontSize: "0.95rem",
   color: "var(--accent)",
-  marginBottom: "0.4rem",
   overflow: "hidden",
+  flexShrink: 0,
 };
 
 const avatarImgStyle: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover" };
 
 const liveBadgeStyle: React.CSSProperties = {
   position: "absolute",
-  bottom: "0.4rem",
-  left: "-0.2rem",
+  top: "0.6rem",
+  left: "0.6rem",
   background: "var(--danger)",
   color: "#fff",
-  fontSize: "0.62rem",
+  fontSize: "0.68rem",
   fontWeight: 800,
   letterSpacing: "0.02em",
-  padding: "0.1rem 0.4rem",
+  padding: "0.15rem 0.5rem",
   borderRadius: "999px",
-  boxShadow: "0 0 0 2px var(--surface)",
 };
 
 const priceRowStyle: React.CSSProperties = {
@@ -457,7 +493,6 @@ const priceRowStyle: React.CSSProperties = {
   fontSize: "0.8rem",
   color: "var(--accent-gold)",
   fontWeight: 600,
-  marginTop: "0.2rem",
 };
 
 const mutedSmallStyle: React.CSSProperties = { fontSize: "0.78rem", color: "var(--text-muted)" };
@@ -471,13 +506,15 @@ const sectionHeadingStyle: React.CSSProperties = {
   margin: "0 0 0.85rem",
 };
 
-// auto-fit (not auto-fill) + justifyContent: center — when there are
-// fewer cards than columns that fit, the populated columns center as a
-// block instead of jamming left with empty dark space to the right.
+// Flexbox + wrap + justify-content: center — see CreatorCardRow's
+// comment: this centers every wrapped row, including a partial last one,
+// which CSS grid's justify-content does not. Cards are a fixed 300px
+// (creatorCardStyle) so they read as clearly bigger than the old
+// avatar-only cards, matching the same size class as content cards.
 const creatorGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 220px))",
-  gap: "1rem",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "1.25rem",
   justifyContent: "center",
 };
 
@@ -559,12 +596,14 @@ const cardMetaRowStyle: React.CSSProperties = {
 };
 
 const contentThumbStyle: React.CSSProperties = {
+  position: "relative",
   aspectRatio: "16 / 10",
   background: "var(--surface-raised)",
   borderRadius: "14px",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
+  overflow: "hidden",
 };
 
 const mediaElStyle: React.CSSProperties = {
