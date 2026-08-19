@@ -609,6 +609,9 @@ const accountMenuButtonStyle: React.CSSProperties = {
   cursor: "pointer",
 };
 
+// text-shadow is a no-op on the flat backgrounds this also renders
+// against (e.g. the creator-profile header) — it only matters where
+// VerifiedBadge sits in a content/creator card's photo overlay.
 const badgeStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
@@ -617,6 +620,7 @@ const badgeStyle: React.CSSProperties = {
   fontWeight: 600,
   color: "var(--accent)",
   letterSpacing: "0.02em",
+  textShadow: "0 1px 4px rgba(0, 0, 0, 0.7)",
 };
 
 const fieldLabelStyle: React.CSSProperties = {

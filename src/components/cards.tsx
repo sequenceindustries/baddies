@@ -22,53 +22,64 @@ export interface CreatorCardData {
 }
 
 /**
- * Same big-thumbnail-first layout as a content post (see ContentCard) so
- * creator-discovery cards and content cards read as one consistent
- * system — the latest Free post standing in for "what does this creator
- * actually post," with the avatar/name/price as a smaller identity row
- * underneath rather than the whole card.
+ * Same full-bleed treatment as ContentCard (contentCardStyle/
+ * cardMediaLayerStyle/the two gradient scrims) so every card on the
+ * platform — a post or a creator — reads as one visual system: the photo
+ * fills the card, byline top-left, status top-right, everything else
+ * (location, price) in the bottom scrim. Unlike ContentCard the whole
+ * card is a single Link (there's no separate "expand" affordance to
+ * protect from a click), so the byline here is a plain span, not a
+ * nested Link. Fixed at 300px wide (contentCardStyle itself has no
+ * width — its other users size it via their own grid/column) so rows of
+ * these in creatorGridStyle wrap predictably.
  */
 export function CreatorCard({ creator }: { creator: CreatorCardData }) {
   const initial = (creator.displayName ?? "?").trim().charAt(0).toUpperCase() || "?";
   const location = [creator.city, creator.country].filter(Boolean).join(", ");
   return (
     <Link href={`/creators/${creator.creatorProfileId}`} style={cardLinkStyle}>
-      <div className="hover-lift" style={creatorCardStyle}>
-        <div style={contentThumbStyle}>
-          {creator.thumbnailUrl ? (
-            creator.thumbnailMimeType?.startsWith("video/") ? (
-              <video src={creator.thumbnailUrl} muted style={mediaElStyle} />
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={creator.thumbnailUrl} alt="" style={mediaElStyle} />
-            )
-          ) : creator.avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={creator.avatarUrl} alt="" style={{ ...mediaElStyle, objectFit: "cover" }} />
+      <div className="hover-lift" style={{ ...contentCardStyle, width: "300px" }}>
+        {creator.thumbnailUrl ? (
+          creator.thumbnailMimeType?.startsWith("video/") ? (
+            <video src={creator.thumbnailUrl} muted style={cardMediaLayerStyle} />
           ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={creator.thumbnailUrl} alt="" style={cardMediaLayerStyle} />
+          )
+        ) : creator.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={creator.avatarUrl} alt="" style={cardMediaLayerStyle} />
+        ) : (
+          <div style={cardMediaFallbackStyle}>
             <span style={{ fontFamily: "var(--font-display)", fontSize: "2.4rem", color: "var(--accent)" }}>
               {initial}
             </span>
-          )}
-          {creator.isLive && <span style={liveBadgeStyle}>● LIVE</span>}
-        </div>
-        <div style={creatorIdentityRowStyle}>
-          <div style={avatarStyle}>
-            {creator.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={creator.avatarUrl} alt="" style={avatarImgStyle} />
-            ) : (
-              initial
-            )}
           </div>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 600, fontSize: "0.98rem" }}>{creator.displayName ?? "Unnamed creator"}</div>
+        )}
+
+        <div style={cardTopScrimStyle}>
+          <span style={cardCreatorLinkStyle}>
+            <span style={cardCreatorAvatarStyle}>
+              {creator.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={creator.avatarUrl} alt="" style={avatarImgStyle} />
+              ) : (
+                initial
+              )}
+            </span>
+            {creator.displayName ?? "Unnamed creator"}
+          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            {creator.isLive && <span style={liveBadgeStyle}>● LIVE</span>}
             <VerifiedBadge />
           </div>
         </div>
-        {location && <div style={mutedSmallStyle}>{location}</div>}
-        <div style={priceRowStyle}>
-          <span>Exclusive ${creator.vvipPriceUsd.toFixed(2)}/mo</span>
+
+        <div style={cardBottomScrimStyle}>
+          {location && <div style={cardTimeStyle}>{location}</div>}
+          <div style={priceRowStyle}>
+            <span>Exclusive ${creator.vvipPriceUsd.toFixed(2)}/mo</span>
+          </div>
         </div>
       </div>
     </Link>
@@ -531,48 +542,11 @@ export function ContentGrid({ items }: { items: ContentCardData[] }) {
 
 const cardLinkStyle: React.CSSProperties = { textDecoration: "none", color: "inherit", display: "block" };
 
-// Same card shell ContentCard uses (contentCardStyle) — see below.
-const creatorCardStyle: React.CSSProperties = {
-  background: "var(--surface)",
-  border: "1px solid var(--border)",
-  borderRadius: "16px",
-  padding: "1.1rem 1.25rem",
-  display: "flex",
-  flexDirection: "column",
-  gap: "0.6rem",
-  boxShadow: "var(--glow)",
-  width: "300px",
-};
-
-const creatorIdentityRowStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "0.6rem",
-};
-
-const avatarStyle: React.CSSProperties = {
-  width: "38px",
-  height: "38px",
-  borderRadius: "50%",
-  background: "var(--surface-raised)",
-  border: "2px solid var(--accent)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontWeight: 700,
-  fontFamily: "var(--font-display)",
-  fontSize: "0.95rem",
-  color: "var(--accent)",
-  overflow: "hidden",
-  flexShrink: 0,
-};
-
 const avatarImgStyle: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover" };
 
+// Inline now (sits in a flex row next to VerifiedBadge in the top scrim,
+// not absolutely positioned over the photo) — see CreatorCard.
 const liveBadgeStyle: React.CSSProperties = {
-  position: "absolute",
-  top: "0.6rem",
-  left: "0.6rem",
   background: "var(--danger)",
   color: "#fff",
   fontSize: "0.68rem",
@@ -580,14 +554,18 @@ const liveBadgeStyle: React.CSSProperties = {
   letterSpacing: "0.02em",
   padding: "0.15rem 0.5rem",
   borderRadius: "999px",
+  flexShrink: 0,
 };
 
 const priceRowStyle: React.CSSProperties = {
+  position: "relative",
+  zIndex: 2,
   display: "flex",
   gap: "0.6rem",
   fontSize: "0.8rem",
   color: "var(--accent)",
   fontWeight: 600,
+  textShadow: "0 1px 4px rgba(0, 0, 0, 0.7)",
 };
 
 const mutedSmallStyle: React.CSSProperties = { fontSize: "0.78rem", color: "var(--text-muted)" };
@@ -606,8 +584,7 @@ const sectionHeadingStyle: React.CSSProperties = {
 // Flexbox + wrap + justify-content: center — see CreatorCardRow's
 // comment: this centers every wrapped row, including a partial last one,
 // which CSS grid's justify-content does not. Cards are a fixed 300px
-// (creatorCardStyle) so they read as clearly bigger than the old
-// avatar-only cards, matching the same size class as content cards.
+// (set inline in CreatorCard) so rows wrap predictably.
 const creatorGridStyle: React.CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
@@ -834,30 +811,9 @@ const cardMediaFallbackStyle: React.CSSProperties = {
   padding: "1.5rem",
 };
 
-// Kept only for any remaining non-card use of a plain thumbnail box.
-const contentThumbStyle: React.CSSProperties = {
-  position: "relative",
-  aspectRatio: "16 / 10",
-  background: "var(--surface-raised)",
-  borderRadius: "14px",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  overflow: "hidden",
-};
-
-const mediaElStyle: React.CSSProperties = {
-  width: "100%",
-  borderRadius: "14px",
-  display: "block",
-  maxHeight: "560px",
-  minHeight: "220px",
-  objectFit: "cover",
-};
-
 // Bold uppercase text over the photo, not a bordered chip — plain white
-// with a drop shadow for legibility on any photo, gold only for the
-// top Exclusive tier so the hierarchy between tiers still reads.
+// with a drop shadow for legibility on any photo, --accent-colored only
+// for the top Exclusive tier so the hierarchy between tiers still reads.
 function tierBadgeStyle(accessLevel: ContentCardData["accessLevel"]): React.CSSProperties {
   return {
     position: "relative",
