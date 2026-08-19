@@ -106,8 +106,8 @@ export default function FanHomePage() {
             </section>
           )}
 
-          <CreatorCardRow title="Baddies Near You" creators={data.nearby} />
-          <CreatorCardRow title="New Baddies" creators={data.newCreators} />
+          <CreatorCardRow title="baddies near you" creators={data.nearby} />
+          <CreatorCardRow title="new baddies" creators={data.newCreators} />
 
           {normalize(data.trending).length > 0 && (
             <section style={sectionWrapStyle}>

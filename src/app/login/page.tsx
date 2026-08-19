@@ -24,7 +24,7 @@ const COPY: Record<Intent, { subtitle: string; cta: string; registerHint: string
     registerHint: "Create an account",
   },
   CREATOR: {
-    subtitle: "Welcome back, Baddie.",
+    subtitle: "Welcome back, baddie.",
     cta: "Sign in",
     registerHint: "Become a creator",
   },

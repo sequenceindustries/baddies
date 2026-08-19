@@ -98,8 +98,8 @@ export default function DiscoveryPage() {
         </>
       ) : (
         <>
-          <CreatorCardRow title="Top Baddies" creators={topCreators} />
-          <CreatorCardRow title="Baddies Near You" creators={nearbyCreators} />
+          <CreatorCardRow title="top baddies" creators={topCreators} />
+          <CreatorCardRow title="baddies near you" creators={nearbyCreators} />
 
           <section style={sectionWrapStyle}>
             <h2 style={sectionHeadingStyle}>Discover by category</h2>

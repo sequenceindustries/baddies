@@ -50,8 +50,7 @@ export default function LandingPage() {
   return (
     <main>
       <section style={heroStyle}>
-        <h1 style={heroTitleStyle}>Baddies</h1>
-        <p style={heroTaglineStyle}>Safe. Verified. Affordable.</p>
+        <h1 style={heroTitleStyle}>baddies</h1>
         <p style={heroSubStyle}>
           A creator marketplace built on trust — every creator is identity, age, and liveness
           verified before they can publish. 18+ only.
@@ -73,7 +72,7 @@ export default function LandingPage() {
           (Discover, fan Home). */}
       {topCreators.length > 0 && (
         <section style={sectionStyle}>
-          <CreatorCardRow title="Top Baddies" creators={topCreators} size="lg" scroll />
+          <CreatorCardRow title="top baddies" creators={topCreators} size="lg" scroll />
         </section>
       )}
 
@@ -109,15 +108,6 @@ const heroTitleStyle: React.CSSProperties = {
   WebkitBackgroundClip: "text",
   backgroundClip: "text",
   color: "transparent",
-};
-
-const heroTaglineStyle: React.CSSProperties = {
-  fontSize: "1.3rem",
-  color: "var(--accent)",
-  fontWeight: 700,
-  fontFamily: "var(--font-display)",
-  fontStyle: "italic",
-  margin: "0 0 1.1rem",
 };
 
 const heroSubStyle: React.CSSProperties = {

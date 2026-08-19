@@ -3,7 +3,7 @@ import "./globals.css";
 import { Nav } from "@/components/ui";
 
 export const metadata: Metadata = {
-  title: "Baddies",
+  title: "baddies",
   description: "Verified. Safe. Adult creator marketplace. 18+ only.",
 };
 

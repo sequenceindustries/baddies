@@ -346,7 +346,7 @@ function StatusPanel({ status, onAdvance }: { status: CreatorStatus; onAdvance: 
     PENDING: "Application received.",
     VERIFICATION_REQUIRED: "Complete identity, age, and liveness verification below.",
     UNDER_REVIEW: "Verification complete — awaiting admin approval.",
-    VERIFIED: "You're a Verified Baddie. You can publish monetised content.",
+    VERIFIED: "You're a Verified baddie. You can publish monetised content.",
     SUSPENDED: "Your creator account is suspended.",
     REJECTED: "Your application was not approved.",
     BANNED: "Your creator account has been banned.",

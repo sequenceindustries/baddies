@@ -18,7 +18,7 @@ const STATUS_COPY: Record<string, string> = {
   PENDING: "Application received.",
   VERIFICATION_REQUIRED: "Awaiting identity, age, and liveness verification.",
   UNDER_REVIEW: "Verification complete — awaiting admin approval.",
-  VERIFIED: "You're a Verified Baddie.",
+  VERIFIED: "You're a Verified baddie.",
   SUSPENDED: "Your creator account is suspended.",
   REJECTED: "Your application was not approved.",
   BANNED: "Your creator account has been banned.",

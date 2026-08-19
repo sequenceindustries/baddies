@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { VerifiedBadge } from "./ui";
 
@@ -65,8 +65,12 @@ export function CreatorCard({ creator, size = "md" }: { creator: CreatorCardData
           </div>
         )}
 
-        <div style={cardTopScrimStyle}>
-          <span style={cardCreatorLinkStyle}>
+        {/* Stacked and centered, not side-by-side — the badge sits
+            directly under the name rather than racing it for horizontal
+            space, which is what made a long name collide with "● LIVE"
+            before. */}
+        <div style={creatorCardTopScrimStyle}>
+          <span style={{ ...cardCreatorLinkStyle, width: "100%" }}>
             <CardAvatar url={creator.avatarUrl} initial={initial} />
             <span style={cardCreatorNameStyle}>{creator.displayName ?? "Unnamed creator"}</span>
           </span>
@@ -101,7 +105,21 @@ export function CreatorCardRow({
   // through cards reads better than several stacked rows.
   scroll?: boolean;
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
   if (creators.length === 0) return null;
+
+  // Scrolls by roughly one card's width (plus its gap) at a time,
+  // rather than an arbitrary fixed amount, so one click reliably
+  // advances a whole card regardless of size="md"/"lg".
+  function scrollByCard(direction: 1 | -1) {
+    const el = scrollRef.current;
+    if (!el) return;
+    const card = el.firstElementChild as HTMLElement | null;
+    const amount = (card?.offsetWidth ?? 320) + 28;
+    el.scrollBy({ left: direction * amount, behavior: "smooth" });
+  }
+
   return (
     <section style={sectionStyle}>
       {title && <h2 style={sectionHeadingStyle}>{title}</h2>}
@@ -109,12 +127,34 @@ export function CreatorCardRow({
           centers every row including a partial last row (e.g. 1 card
           left over after 4 fit per row), which grid's justify-content
           only does for the whole block, not each wrapped row. */}
-      <div style={scroll ? creatorScrollRowStyle : creatorGridStyle}>
-        {creators.map((c) => (
-          <div key={c.creatorProfileId} style={scroll ? creatorScrollItemStyle : undefined}>
-            <CreatorCard creator={c} size={size} />
-          </div>
-        ))}
+      <div style={scroll ? sliderWrapStyle : undefined}>
+        {scroll && (
+          <button
+            type="button"
+            onClick={() => scrollByCard(-1)}
+            style={sliderNavButtonStyle("left")}
+            aria-label="Scroll left"
+          >
+            ‹
+          </button>
+        )}
+        <div ref={scrollRef} style={scroll ? creatorScrollRowStyle : creatorGridStyle}>
+          {creators.map((c) => (
+            <div key={c.creatorProfileId} style={scroll ? creatorScrollItemStyle : undefined}>
+              <CreatorCard creator={c} size={size} />
+            </div>
+          ))}
+        </div>
+        {scroll && (
+          <button
+            type="button"
+            onClick={() => scrollByCard(1)}
+            style={sliderNavButtonStyle("right")}
+            aria-label="Scroll right"
+          >
+            ›
+          </button>
+        )}
       </div>
     </section>
   );
@@ -623,7 +663,7 @@ const sectionHeadingStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)",
   fontSize: "1.2rem",
   fontWeight: 500,
-  margin: "0 0 0.85rem",
+  margin: "0 0 1.75rem",
 };
 
 // Flexbox + wrap + justify-content: center — see CreatorCardRow's
@@ -654,6 +694,31 @@ const creatorScrollItemStyle: React.CSSProperties = {
   flexShrink: 0,
   scrollSnapAlign: "start",
 };
+
+const sliderWrapStyle: React.CSSProperties = { position: "relative" };
+
+function sliderNavButtonStyle(side: "left" | "right"): React.CSSProperties {
+  return {
+    position: "absolute",
+    top: "50%",
+    [side]: "-0.75rem",
+    transform: "translateY(-50%)",
+    zIndex: 3,
+    width: "42px",
+    height: "42px",
+    borderRadius: "50%",
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
+    color: "var(--text)",
+    fontSize: "1.4rem",
+    lineHeight: 1,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: "var(--glow)",
+  };
+}
 
 const gridStyle: React.CSSProperties = {
   display: "grid",
@@ -753,6 +818,17 @@ const cardTopScrimBadgeStyle: React.CSSProperties = {
   alignItems: "center",
   gap: "0.5rem",
   flexShrink: 0,
+};
+
+// CreatorCard's own variant: stacked (name, then the badge row directly
+// under it) and centered, rather than ContentCard's side-by-side byline/
+// tier-badge row — the badge here is "who this account is," not a
+// second piece of content metadata competing for the same row.
+const creatorCardTopScrimStyle: React.CSSProperties = {
+  ...cardTopScrimStyle,
+  flexDirection: "column",
+  alignItems: "center",
+  gap: "0.4rem",
 };
 
 const cardBottomScrimStyle: React.CSSProperties = {

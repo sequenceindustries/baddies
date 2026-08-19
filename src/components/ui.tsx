@@ -142,7 +142,7 @@ export function Nav() {
     <div style={navWrapStyle}>
     <nav style={navStyle}>
       <Link href="/" style={{ ...brandStyle, textDecoration: "none" }}>
-        Baddies
+        baddies
       </Link>
       <div style={{ display: "flex", gap: "1.25rem", alignItems: "center" }}>
         {loading ? null : user ? (
@@ -282,7 +282,7 @@ export function VerifiedBadge() {
           strokeLinejoin="round"
         />
       </svg>
-      Baddie
+      baddie
     </span>
   );
 }
