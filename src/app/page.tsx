@@ -40,7 +40,10 @@ export default function LandingPage() {
     };
   }, []);
 
-  if (loading || user) return null;
+  // Only hide once we KNOW there's a logged-in user to redirect — not
+  // while that's still loading, which would otherwise blank the page
+  // (this is every visitor's first paint) for a beat on every load.
+  if (user) return null;
 
   return (
     <main>
