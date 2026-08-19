@@ -126,7 +126,7 @@ function LivePanel() {
         </p>
       </div>
       <button onClick={toggle} disabled={busy} style={isLive ? endLiveButtonStyle : goLiveButtonStyle}>
-        {busy ? "..." : isLive ? "End live" : "🔴 Go live"}
+        {busy ? "..." : isLive ? "End live" : "Go live"}
       </button>
     </div>
   );

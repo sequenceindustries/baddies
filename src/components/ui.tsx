@@ -329,7 +329,7 @@ export function LocationField({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.4rem" }}>
         <span style={fieldLabelStyle}>Location</span>
         <button type="button" onClick={redetect} disabled={status === "detecting"} style={detectButtonStyle}>
-          {status === "detecting" ? "Detecting..." : "📍 Detect my location"}
+          {status === "detecting" ? "Detecting..." : "Detect my location"}
         </button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>

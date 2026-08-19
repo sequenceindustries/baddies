@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CreatorCardRow, ContentGrid, type CreatorCardData, type ContentCardData } from "@/components/cards";
 import { displayHeadingStyle } from "@/components/ui";
+import { HowItWorks } from "@/components/how-it-works";
 
 interface RawContentItem {
   id?: string;
@@ -95,9 +96,10 @@ export default function FanHomePage() {
             </section>
           )}
 
-          <CreatorCardRow title="Included with VIP Pass" creators={data.unlimited} />
           <CreatorCardRow title="Baddies Near You" creators={data.nearby} />
+          <CreatorCardRow title="New Baddies" creators={data.newCreators} />
           <CreatorCardRow title="Recommended Baddies" creators={data.recommended} />
+          <CreatorCardRow title="Included with VIP Pass" creators={data.unlimited} />
 
           {normalize(data.trending).length > 0 && (
             <section style={{ marginBottom: "2.25rem" }}>
@@ -105,8 +107,6 @@ export default function FanHomePage() {
               <ContentGrid items={normalize(data.trending)} />
             </section>
           )}
-
-          <CreatorCardRow title="New Baddies" creators={data.newCreators} />
 
           {normalize(data.following).length === 0 &&
             normalize(data.subscribed).length === 0 &&
@@ -121,6 +121,8 @@ export default function FanHomePage() {
             )}
         </>
       )}
+
+      <HowItWorks />
     </main>
   );
 }

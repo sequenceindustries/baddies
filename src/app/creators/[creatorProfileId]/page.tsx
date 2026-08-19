@@ -284,10 +284,10 @@ function SubscribeAndTip({
         {subscribed && (
           <>
             <Link href={`/messages?with=${creatorUserId}`} style={{ ...ghostCheckoutButtonStyle, textDecoration: "none" }}>
-              💬 Message
+              Message
             </Link>
             <button onClick={requestVideoCall} disabled={busy !== null || callRequested} style={ghostCheckoutButtonStyle}>
-              {callRequested ? "✓ Call requested" : busy === "call" ? "..." : "📹 Request 1-on-1 video call"}
+              {callRequested ? "✓ Call requested" : busy === "call" ? "..." : "Request 1-on-1 video call"}
             </button>
           </>
         )}

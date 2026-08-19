@@ -82,47 +82,34 @@ const ACCESS_LABEL: Record<ContentCardData["accessLevel"], string> = {
 };
 
 /**
- * Renders a content item. Always tries the real thing first — clicking
- * "View" calls /api/content/:id/media and lets the server's entitlement
- * check (src/lib/entitlements/content.ts) decide, rather than the client
- * guessing from local state whether this viewer is unlocked. That guess
- * used to be wrong for anyone reloading the page: a real VVIP subscriber
- * had no way to open VVIP content at all outside the same session they'd
- * just subscribed in. Only once the server actually says no do we show a
+ * Renders a content item. Always tries the real thing first, on mount —
+ * no click required to reveal a thumbnail. /api/content/:id/media and
+ * the server's entitlement check (src/lib/entitlements/content.ts)
+ * decide, rather than the client guessing from local state whether this
+ * viewer is unlocked. That guess used to be wrong for anyone reloading
+ * the page: a real VVIP subscriber had no way to open VVIP content at
+ * all outside the same session they'd just subscribed in, and every
+ * thumbnail sat behind an extra click even when the viewer already had
+ * access. Only once the server actually says no do we show a
  * tier-specific upsell (Get VIP Pass, or "subscribe on this creator's
  * profile" for VVIP, which needs that specific creator's price and so
- * isn't duplicated here).
- *
- * `size="large"` is the Twitter-style timeline presentation used on a
- * creator's own profile (see ContentTimeline) — big media, not a small
- * grid square. `autoLoad` skips the click for FREE posts in that context
- * so a feed actually reads as a feed instead of a wall of "View" buttons.
+ * isn't duplicated here) — a locked thumbnail is the exception now, not
+ * the default.
  */
-export function ContentCard({
-  item,
-  size = "grid",
-  autoLoad = false,
-}: {
-  item: ContentCardData;
-  size?: "grid" | "large";
-  autoLoad?: boolean;
-}) {
+export function ContentCard({ item }: { item: ContentCardData }) {
   const [media, setMedia] = useState<{ mimeType: string; signedUrl: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [denied, setDenied] = useState(false);
-  const [attempted, setAttempted] = useState(false);
   const [liked, setLiked] = useState(item.viewerHasLiked ?? false);
   const [likeCount, setLikeCount] = useState(item.likeCount ?? 0);
   const [likeBusy, setLikeBusy] = useState(false);
-  const large = size === "large";
 
   async function handleView() {
     setLoading(true);
     setError(null);
     const res = await fetch(`/api/content/${item.contentId}/media`);
     setLoading(false);
-    setAttempted(true);
     if (!res.ok) {
       setDenied(true);
       if (res.status !== 401 && res.status !== 403) {
@@ -138,9 +125,7 @@ export function ContentCard({
   }
 
   useEffect(() => {
-    if (autoLoad && item.accessLevel === "FREE") {
-      handleView();
-    }
+    handleView();
     // Only ever auto-fires once per mounted card.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -170,25 +155,27 @@ export function ContentCard({
   }
 
   return (
-    <div className="hover-lift" style={large ? timelinePostStyle : contentCardStyle}>
-      <div style={large ? timelineMetaRowStyle : undefined}>
+    <div className="hover-lift" style={contentCardStyle}>
+      <div style={cardMetaRowStyle}>
         <TierBadge accessLevel={item.accessLevel} />
-        {large && item.publishedAt && <span style={mutedSmallStyle}>{timeAgo(item.publishedAt)}</span>}
+        {item.publishedAt && <span style={mutedSmallStyle}>{timeAgo(item.publishedAt)}</span>}
       </div>
       {item.caption && <p style={captionStyle}>{item.caption}</p>}
       {media ? (
-        <MediaPreview mimeType={media.mimeType} url={media.signedUrl} large={large} />
+        <MediaPreview mimeType={media.mimeType} url={media.signedUrl} />
       ) : (
-        <div style={large ? largeThumbStyle : contentThumbStyle}>
-          {denied && item.accessLevel === "VIP" ? (
-            <button onClick={handleGetVipPass} disabled={loading} style={ghostSmallButtonStyle}>
-              {loading ? "..." : "🔒 Get VIP Pass to unlock"}
+        <div style={contentThumbStyle}>
+          {loading ? (
+            <span style={mutedSmallStyle}>Loading...</span>
+          ) : denied && item.accessLevel === "VIP" ? (
+            <button onClick={handleGetVipPass} style={ghostSmallButtonStyle}>
+              Get VIP Pass to unlock
             </button>
           ) : denied ? (
-            <span style={{ fontSize: large ? "2rem" : "1.4rem" }}>🔒</span>
+            <span style={mutedSmallStyle}>Locked</span>
           ) : (
-            <button onClick={handleView} disabled={loading} style={ghostSmallButtonStyle}>
-              {loading ? "Loading..." : attempted ? "▶ Retry" : "▶ View"}
+            <button onClick={handleView} style={ghostSmallButtonStyle}>
+              Retry
             </button>
           )}
         </div>
@@ -239,9 +226,12 @@ const TIER_ORDER = ["FREE", "VIP", "VVIP"] as const;
 export function ContentTimeline({ items, vvipPriceUsd }: { items: ContentCardData[]; vvipPriceUsd: number }) {
   const present = new Set(items.map((i) => i.accessLevel));
   const tiersPresent = TIER_ORDER.filter((t) => present.has(t));
-  const [tab, setTab] = useState<"ALL" | "FREE" | "VIP" | "VVIP">("ALL");
+  // No explicit "All" tab — undefined means unfiltered. Clicking the
+  // already-active tier tab again clears it back to unfiltered, so
+  // there's still a way back without a dedicated button for it.
+  const [tab, setTab] = useState<"FREE" | "VIP" | "VVIP" | undefined>(undefined);
   const showTabs = tiersPresent.length > 1;
-  const visible = !showTabs || tab === "ALL" ? items : items.filter((i) => i.accessLevel === tab);
+  const visible = !tab ? items : items.filter((i) => i.accessLevel === tab);
 
   if (items.length === 0) {
     return <p style={mutedSmallStyle}>No content yet.</p>;
@@ -257,11 +247,12 @@ export function ContentTimeline({ items, vvipPriceUsd }: { items: ContentCardDat
     <div style={timelineWrapStyle}>
       {showTabs && (
         <div style={tabBarStyle}>
-          <button onClick={() => setTab("ALL")} style={tabButtonStyle(tab === "ALL")}>
-            All
-          </button>
           {tiersPresent.map((t) => (
-            <button key={t} onClick={() => setTab(t)} style={tabButtonStyle(tab === t)}>
+            <button
+              key={t}
+              onClick={() => setTab((current) => (current === t ? undefined : t))}
+              style={tabButtonStyle(tab === t)}
+            >
               {TAB_LABEL[t]}
             </button>
           ))}
@@ -269,23 +260,22 @@ export function ContentTimeline({ items, vvipPriceUsd }: { items: ContentCardDat
       )}
       <div style={timelineListStyle}>
         {visible.map((item) => (
-          <ContentCard key={item.contentId} item={item} size="large" autoLoad={item.accessLevel === "FREE"} />
+          <ContentCard key={item.contentId} item={item} />
         ))}
       </div>
     </div>
   );
 }
 
-function MediaPreview({ mimeType, url, large }: { mimeType: string; url: string; large?: boolean }) {
-  const style = large ? largeMediaElStyle : mediaElStyle;
+function MediaPreview({ mimeType, url }: { mimeType: string; url: string }) {
   if (mimeType.startsWith("video/")) {
-    return <video src={url} controls style={style} />;
+    return <video src={url} controls style={mediaElStyle} />;
   }
   if (mimeType.startsWith("audio/")) {
     return <audio src={url} controls style={{ width: "100%" }} />;
   }
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} alt="" style={style} />;
+  return <img src={url} alt="" style={mediaElStyle} />;
 }
 
 const REPORT_REASONS = [
@@ -404,7 +394,9 @@ export function ContentGrid({ items }: { items: ContentCardData[] }) {
   return (
     <div style={gridStyle}>
       {items.map((item) => (
-        <ContentCard key={item.contentId} item={item} />
+        <div key={item.contentId} style={gridItemStyle}>
+          <ContentCard item={item} />
+        </div>
       ))}
     </div>
   );
@@ -479,45 +471,24 @@ const sectionHeadingStyle: React.CSSProperties = {
   margin: "0 0 0.85rem",
 };
 
+// auto-fit (not auto-fill) + justifyContent: center — when there are
+// fewer cards than columns that fit, the populated columns center as a
+// block instead of jamming left with empty dark space to the right.
 const creatorGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 220px))",
   gap: "1rem",
+  justifyContent: "center",
 };
 
 const gridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-  gap: "1rem",
-};
-
-const contentCardStyle: React.CSSProperties = {
-  background: "var(--surface)",
-  border: "1px solid var(--border)",
-  borderRadius: "14px",
-  padding: "0.85rem",
-  display: "flex",
-  flexDirection: "column",
-  gap: "0.5rem",
-  boxShadow: "var(--glow)",
-};
-
-const contentThumbStyle: React.CSSProperties = {
-  aspectRatio: "1 / 1",
-  background: "var(--surface-raised)",
-  borderRadius: "8px",
-  display: "flex",
-  alignItems: "center",
+  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 420px))",
+  gap: "1.25rem",
   justifyContent: "center",
 };
 
-const mediaElStyle: React.CSSProperties = {
-  width: "100%",
-  borderRadius: "8px",
-  display: "block",
-  maxHeight: "260px",
-  objectFit: "cover",
-};
+const gridItemStyle: React.CSSProperties = { minWidth: 0 };
 
 const captionStyle: React.CSSProperties = { fontSize: "0.85rem", margin: 0, color: "var(--text)" };
 
@@ -566,7 +537,10 @@ const timelineListStyle: React.CSSProperties = {
   gap: "1.25rem",
 };
 
-const timelinePostStyle: React.CSSProperties = {
+// One card style used everywhere content appears — creator-profile
+// timeline, Home's grids, everywhere. "Cleaner and larger" than the old
+// tiny 1:1 thumbnail grid this replaced.
+const contentCardStyle: React.CSSProperties = {
   background: "var(--surface)",
   border: "1px solid var(--border)",
   borderRadius: "16px",
@@ -577,14 +551,14 @@ const timelinePostStyle: React.CSSProperties = {
   boxShadow: "var(--glow)",
 };
 
-const timelineMetaRowStyle: React.CSSProperties = {
+const cardMetaRowStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
   gap: "0.6rem",
 };
 
-const largeThumbStyle: React.CSSProperties = {
+const contentThumbStyle: React.CSSProperties = {
   aspectRatio: "16 / 10",
   background: "var(--surface-raised)",
   borderRadius: "14px",
@@ -593,7 +567,7 @@ const largeThumbStyle: React.CSSProperties = {
   justifyContent: "center",
 };
 
-const largeMediaElStyle: React.CSSProperties = {
+const mediaElStyle: React.CSSProperties = {
   width: "100%",
   borderRadius: "14px",
   display: "block",
