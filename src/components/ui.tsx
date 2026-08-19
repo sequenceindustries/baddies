@@ -190,10 +190,12 @@ export function Nav() {
             <AccountMenu user={user} onLogout={handleLogout} />
           </>
         ) : (
+          // No "Discover" link here — Discover, creator profiles, and
+          // search are all gated behind sign-in (see SignInGate's
+          // comment), so linking to them for a signed-out visitor would
+          // just be a dead end. The landing page's own Top Baddies row
+          // is the one thing they get to browse first.
           <>
-            <Link href="/discovery" style={linkStyle}>
-              Discover
-            </Link>
             <Link href="/login" style={linkStyle}>
               Sign in
             </Link>
@@ -627,6 +629,64 @@ export const displayHeadingStyle: React.CSSProperties = {
   fontSize: "1.9rem",
   fontWeight: 500,
   margin: "0 0 0.4rem",
+};
+
+/**
+ * The wall a signed-out visitor hits on any page that isn't the landing
+ * page's own Top Baddies row — Discover, a creator's profile, category
+ * browsing. Per product decision, anonymous visitors see nothing of the
+ * platform except that one row before joining, so every other browsing
+ * surface renders this instead of its real content once loading is
+ * known to be done and there's no user (see each caller's own
+ * `!loading && !user` check).
+ */
+export function SignInGate({ message }: { message?: string }) {
+  return (
+    <main style={pageWrapStyle}>
+      <h1 style={displayHeadingStyle}>Join to keep browsing</h1>
+      <p style={{ color: "var(--text-muted)", marginBottom: "1.75rem", fontSize: "0.92rem" }}>
+        {message ?? "Create a free account or sign in to browse creators and their content."}
+      </p>
+      <div style={signInGateCtaRowStyle}>
+        <Link href="/register" style={signInGatePrimaryStyle}>
+          Join free
+        </Link>
+        <Link href="/login" style={signInGateSecondaryStyle}>
+          Sign in
+        </Link>
+      </div>
+    </main>
+  );
+}
+
+const signInGateCtaRowStyle: React.CSSProperties = {
+  display: "flex",
+  gap: "0.75rem",
+  flexWrap: "wrap",
+};
+
+const signInGatePrimaryStyle: React.CSSProperties = {
+  background: "linear-gradient(135deg, var(--accent) 0%, var(--accent-dim) 100%)",
+  color: "var(--bg)",
+  border: "none",
+  borderRadius: "999px",
+  padding: "0.8rem 1.75rem",
+  fontWeight: 700,
+  fontSize: "0.92rem",
+  textDecoration: "none",
+  display: "inline-block",
+};
+
+const signInGateSecondaryStyle: React.CSSProperties = {
+  background: "transparent",
+  color: "var(--text)",
+  border: "1px solid var(--border)",
+  borderRadius: "999px",
+  padding: "0.8rem 1.75rem",
+  fontWeight: 700,
+  fontSize: "0.92rem",
+  textDecoration: "none",
+  display: "inline-block",
 };
 
 export const errorBannerStyle: React.CSSProperties = {

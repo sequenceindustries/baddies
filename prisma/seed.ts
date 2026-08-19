@@ -466,8 +466,47 @@ async function main() {
   }
 
   await seedDummyCreators();
+  await cleanupStrayCreators();
 
   console.log("Done.");
+}
+
+/**
+ * Removes any creator account that isn't in DUMMY_CREATORS — cleans up
+ * accounts like "Test Stage Name"/"Creator 1"/"E2E Creator" that ended
+ * up in the database from other sources (e.g. an E2E test run against
+ * this environment) rather than this seed script, per an explicit
+ * product decision to keep discovery limited to the known dummy roster.
+ * Only ever touches accounts with a CreatorProfile — fans and admins are
+ * never in scope here.
+ *
+ * Content's Report/ModerationCase references are ON DELETE SET NULL
+ * (see the init migration), so those cascade cleanly. LedgerEntry and
+ * Payout are the one deliberate exception in this schema — ON DELETE
+ * RESTRICT on their walletId, so a real financial record can never
+ * silently vanish via cascade — so a test account that ever received a
+ * dummy tip/subscription/payout needs those rows cleared explicitly
+ * before its Wallet (and then the User) can go.
+ */
+async function cleanupStrayCreators() {
+  const keepEmails = DUMMY_CREATORS.map((c) => c.email);
+  const stray = await db.user.findMany({
+    where: { creatorProfile: { isNot: null }, email: { notIn: keepEmails } },
+    select: { id: true, email: true },
+  });
+
+  if (stray.length === 0) return;
+
+  console.log(`Removing ${stray.length} stray creator account(s) not in DUMMY_CREATORS...`);
+  for (const user of stray) {
+    const wallet = await db.wallet.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (wallet) {
+      await db.ledgerEntry.deleteMany({ where: { walletId: wallet.id } });
+      await db.payout.deleteMany({ where: { walletId: wallet.id } });
+    }
+    await db.user.delete({ where: { id: user.id } });
+    console.log(`  Removed ${user.email}`);
+  }
 }
 
 main()

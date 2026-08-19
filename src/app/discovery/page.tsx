@@ -1,16 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { CreatorCardRow, type CreatorCardData } from "@/components/cards";
-import { displayHeadingStyle, inputStyle } from "@/components/ui";
-
-interface CategoryItem {
-  id: string;
-  slug: string;
-  name: string;
-  creatorCount: number;
-}
+import { displayHeadingStyle, inputStyle, useSession, SignInGate } from "@/components/ui";
 
 interface CreatorsResponse {
   creators: CreatorCardData[];
@@ -18,13 +10,18 @@ interface CreatorsResponse {
 
 /**
  * Discover — merges what used to be two separate pages (Search and
- * Discover) into one: a name/bio search box, the platform's own
+ * Discover) into one: a name/bio search box plus the platform's own
  * highlight rows (Top Baddies, Baddies Near You — same sections/queries
- * the landing page and fan Home use), and browse-by-category underneath.
- * /search redirects here rather than staying a second destination.
+ * the landing page and fan Home use). /search redirects here rather
+ * than staying a second destination.
+ *
+ * Signed-out visitors never see this page's real content — per product
+ * decision, the landing page's own Top Baddies row is the only thing an
+ * anonymous visitor gets to browse; everything else, this page
+ * included, is behind SignInGate.
  */
 export default function DiscoveryPage() {
-  const [categories, setCategories] = useState<CategoryItem[] | null>(null);
+  const { user, loading } = useSession();
   const [topCreators, setTopCreators] = useState<CreatorCardData[]>([]);
   const [nearbyCreators, setNearbyCreators] = useState<CreatorCardData[]>([]);
 
@@ -34,12 +31,8 @@ export default function DiscoveryPage() {
   const [searchError, setSearchError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!user) return;
     let cancelled = false;
-    fetch("/api/discovery/categories")
-      .then((r) => (r.ok ? r.json() : { categories: [] }))
-      .then((body) => {
-        if (!cancelled) setCategories(body.categories ?? []);
-      });
     fetch("/api/discovery/top-creators")
       .then((r) => (r.ok ? r.json() : { creators: [] }))
       .then((body: CreatorsResponse) => {
@@ -53,7 +46,7 @@ export default function DiscoveryPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [user]);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -72,6 +65,11 @@ export default function DiscoveryPage() {
     }
     const body = await res.json();
     setResults(body.creators ?? []);
+  }
+
+  if (loading) return <main style={mainStyle} />;
+  if (!user) {
+    return <SignInGate message="Create a free account or sign in to search and discover creators." />;
   }
 
   return (
@@ -100,28 +98,6 @@ export default function DiscoveryPage() {
         <>
           <CreatorCardRow title="Top baddies" creators={topCreators} />
           <CreatorCardRow title="baddies near you" creators={nearbyCreators} />
-
-          <section style={sectionWrapStyle}>
-            <h2 style={sectionHeadingStyle}>Discover by category</h2>
-            {!categories && <p style={{ color: "var(--text-muted)" }}>Loading...</p>}
-            {categories && categories.length === 0 && (
-              <p style={{ color: "var(--text-muted)" }}>No categories yet.</p>
-            )}
-            {categories && categories.length > 0 && (
-              <div style={gridStyle}>
-                {categories.map((c) => (
-                  <Link key={c.id} href={`/discovery/${c.slug}`} style={cardLinkStyle}>
-                    <div className="hover-lift" style={cardStyle}>
-                      <div style={{ fontWeight: 600, fontSize: "1.05rem" }}>{c.name}</div>
-                      <div style={mutedSmallStyle}>
-                        {c.creatorCount} creator{c.creatorCount === 1 ? "" : "s"}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </section>
         </>
       )}
     </main>
@@ -150,37 +126,3 @@ const submitButtonStyle: React.CSSProperties = {
   border: "none",
   flexShrink: 0,
 };
-
-// Matches the spacing used between sections on fan Home/landing —
-// clearly-separated categories on a page that stacks several of them.
-const sectionWrapStyle: React.CSSProperties = { marginBottom: "4rem" };
-
-const sectionHeadingStyle: React.CSSProperties = {
-  fontFamily: "var(--font-display)",
-  fontSize: "1.2rem",
-  fontWeight: 500,
-  margin: "0 0 1.25rem",
-};
-
-// Flexbox + wrap + justify-content: center — see CreatorCardRow's own
-// comment in cards.tsx: this centers every row, including a partial
-// last one, the way CSS grid's justify-content alone does not.
-const gridStyle: React.CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: "1.25rem",
-  justifyContent: "center",
-};
-
-const cardLinkStyle: React.CSSProperties = { textDecoration: "none", color: "inherit" };
-
-const cardStyle: React.CSSProperties = {
-  background: "var(--surface)",
-  border: "1px solid var(--border)",
-  borderRadius: "14px",
-  padding: "1.75rem 2rem",
-  boxShadow: "var(--glow)",
-  width: "220px",
-};
-
-const mutedSmallStyle: React.CSSProperties = { fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "0.3rem" };

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { VerifiedBadge, displayHeadingStyle, useSession, inputStyle, errorBannerStyle } from "@/components/ui";
+import { VerifiedBadge, displayHeadingStyle, useSession, inputStyle, errorBannerStyle, SignInGate } from "@/components/ui";
 import { ContentTimeline, ReportButton, type ContentCardData } from "@/components/cards";
 
 interface CreatorProfileResponse {
@@ -37,7 +37,7 @@ interface RawContentItem {
 export default function CreatorProfilePage() {
   const params = useParams<{ creatorProfileId: string }>();
   const creatorProfileId = params.creatorProfileId;
-  const { user } = useSession();
+  const { user, loading: sessionLoading } = useSession();
 
   const [creator, setCreator] = useState<CreatorProfileResponse | null>(null);
   const [items, setItems] = useState<RawContentItem[]>([]);
@@ -46,6 +46,9 @@ export default function CreatorProfilePage() {
   const [followBusy, setFollowBusy] = useState(false);
 
   useEffect(() => {
+    // Signed-out visitors are gated below (SignInGate) — don't even fetch
+    // this creator's data for them.
+    if (!user) return;
     let cancelled = false;
 
     fetch(`/api/creators/${creatorProfileId}`)
@@ -69,7 +72,12 @@ export default function CreatorProfilePage() {
     return () => {
       cancelled = true;
     };
-  }, [creatorProfileId]);
+  }, [creatorProfileId, user]);
+
+  if (sessionLoading) return <main style={mainStyle} />;
+  if (!user) {
+    return <SignInGate message="Create a free account or sign in to view this creator's profile." />;
+  }
 
   async function toggleFollow() {
     setFollowBusy(true);

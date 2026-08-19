@@ -4,15 +4,21 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { CreatorCardRow } from "@/components/cards";
 import type { CreatorCardData } from "@/components/cards";
-import { displayHeadingStyle } from "@/components/ui";
+import { displayHeadingStyle, useSession, SignInGate } from "@/components/ui";
 
+// Signed-out visitors are gated the same as /discovery — see that
+// page's comment. No in-app link points here anymore (Discover by
+// category was removed), but the route itself still needs the same
+// gate for anyone reaching it directly by URL.
 export default function CategoryPage() {
   const params = useParams<{ slug: string }>();
+  const { user, loading } = useSession();
   const [name, setName] = useState<string | null>(null);
   const [creators, setCreators] = useState<CreatorCardData[] | null>(null);
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
+    if (!user) return;
     let cancelled = false;
     fetch(`/api/discovery/categories/${params.slug}`)
       .then((r) => {
@@ -31,7 +37,12 @@ export default function CategoryPage() {
     return () => {
       cancelled = true;
     };
-  }, [params.slug]);
+  }, [params.slug, user]);
+
+  if (loading) return <main style={mainStyle} />;
+  if (!user) {
+    return <SignInGate message="Create a free account or sign in to browse creators by category." />;
+  }
 
   if (notFound) {
     return (
