@@ -14,19 +14,21 @@
     --text: #f5f2ec;
     --text-muted: #a19dab;
 
-    /* Brand gold — the platform's "premium" color (pricing, verified badge,
-       Exclusive tier). Stays gold everywhere regardless of who's signed
-       in; it's brand identity, not a role indicator. */
-    --accent-gold: #e0b84a;
-    --accent-gold-dim: #a3862f;
     --accent-wine: #d0466a;
 
-    /* Role accent — THE role indicator. Swapped by [data-role] on <html>
-       (see components/ui.tsx's useRoleTheme), so a creator's chrome reads
-       visibly differently from a fan's without touching every page. */
-    --accent: var(--accent-gold);
-    --accent-dim: var(--accent-gold-dim);
-    --accent-soft: rgba(224, 184, 74, 0.14);
+    /* One accent, everywhere — pricing, buttons, borders, glows, the lot,
+       for every role (fan/creator/admin alike). This replaced an earlier
+       scheme where --accent swapped per [data-role] (gold/teal/wine) and
+       a separate --accent-gold stayed gold everywhere for "premium"
+       pricing/Exclusive-tier/Verified-badge — both retired in favor of
+       one consistent blue brand color. The only place account type still
+       shows as color is the nav's account-type indicator (top right),
+       which deliberately does NOT use --accent so it reads as a distinct
+       status color instead of blending into every other blue element —
+       see VerifiedBadge/AccountTypeBadge in components/ui.tsx. */
+    --accent: #3b82f6;
+    --accent-dim: #2563eb;
+    --accent-soft: rgba(59, 130, 246, 0.14);
 
     --danger: #f0685c;
     --success: #4fd8a0;
@@ -35,18 +37,6 @@
     --font-body: "Montserrat", system-ui, sans-serif;
 
     --glow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 12px 40px -12px rgba(0, 0, 0, 0.6);
-}
-
-html[data-role="creator"] {
-    --accent: #29e0c9;
-    --accent-dim: #1b9e8f;
-    --accent-soft: rgba(41, 224, 201, 0.14);
-}
-
-html[data-role="admin"] {
-    --accent: #d0466a;
-    --accent-dim: #9c3350;
-    --accent-soft: rgba(208, 70, 106, 0.14);
 }
 
 * {
@@ -61,7 +51,7 @@ body {
 
 body {
     background:
-        radial-gradient(1100px 600px at 12% -10%, rgba(224, 184, 74, 0.08), transparent 60%),
+        radial-gradient(1100px 600px at 12% -10%, rgba(59, 130, 246, 0.08), transparent 60%),
         radial-gradient(900px 500px at 100% 0%, var(--accent-soft), transparent 55%),
         var(--bg);
     color: var(--text);

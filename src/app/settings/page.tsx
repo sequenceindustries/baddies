@@ -70,7 +70,7 @@ function AccountTypePanel({
             display: "inline-block",
             marginTop: "0.6rem",
             fontSize: "0.85rem",
-            color: "var(--accent-gold)",
+            color: "var(--accent)",
             fontWeight: 600,
           }}
         >
@@ -79,7 +79,7 @@ function AccountTypePanel({
       )}
       {creatorProfile && (
         <Link
-          href="/dashboard"
+          href="/creator-dashboard"
           style={{
             display: "inline-block",
             marginTop: "0.6rem",

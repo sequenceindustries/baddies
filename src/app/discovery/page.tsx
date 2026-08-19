@@ -145,7 +145,7 @@ const submitButtonStyle: React.CSSProperties = {
   fontWeight: 600,
   fontSize: "0.9rem",
   cursor: "pointer",
-  background: "var(--accent-gold)",
+  background: "var(--accent)",
   color: "var(--bg)",
   border: "none",
   flexShrink: 0,

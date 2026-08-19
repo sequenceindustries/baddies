@@ -358,7 +358,7 @@ function checkoutButtonStyle(active: boolean): React.CSSProperties {
     fontWeight: 600,
     fontSize: "0.85rem",
     cursor: active ? "default" : "pointer",
-    background: active ? "var(--surface-raised)" : "var(--accent-gold)",
+    background: active ? "var(--surface-raised)" : "var(--accent)",
     color: active ? "var(--text-muted)" : "var(--bg)",
     border: active ? "1px solid var(--border)" : "none",
   };
@@ -400,7 +400,7 @@ const avatarStyle: React.CSSProperties = {
   justifyContent: "center",
   fontWeight: 600,
   fontSize: "1.6rem",
-  color: "var(--accent-gold)",
+  color: "var(--accent)",
   flexShrink: 0,
   overflow: "hidden",
 };
@@ -460,7 +460,7 @@ function followButtonStyle(following: boolean): React.CSSProperties {
     fontSize: "0.85rem",
     cursor: "pointer",
     flexShrink: 0,
-    background: following ? "transparent" : "var(--accent-gold)",
+    background: following ? "transparent" : "var(--accent)",
     color: following ? "var(--text)" : "var(--bg)",
     border: following ? "1px solid var(--border)" : "none",
   };

@@ -112,7 +112,7 @@ const kickerStyle: React.CSSProperties = {
   fontSize: "0.78rem",
   fontWeight: 700,
   letterSpacing: "0.04em",
-  color: "var(--accent-gold)",
+  color: "var(--accent)",
   background: "var(--surface)",
   border: "1px solid var(--border)",
   borderRadius: "999px",
@@ -126,7 +126,7 @@ const heroTitleStyle: React.CSSProperties = {
   fontWeight: 600,
   margin: "0 0 0.6rem",
   lineHeight: 1,
-  background: "linear-gradient(135deg, var(--text) 30%, var(--accent-gold) 100%)",
+  background: "linear-gradient(135deg, var(--text) 30%, var(--accent) 100%)",
   WebkitBackgroundClip: "text",
   backgroundClip: "text",
   color: "transparent",
@@ -134,7 +134,7 @@ const heroTitleStyle: React.CSSProperties = {
 
 const heroTaglineStyle: React.CSSProperties = {
   fontSize: "1.3rem",
-  color: "var(--accent-gold)",
+  color: "var(--accent)",
   fontWeight: 700,
   fontFamily: "var(--font-display)",
   fontStyle: "italic",
@@ -157,7 +157,7 @@ const heroCtaRowStyle: React.CSSProperties = {
 };
 
 const primaryCtaStyle: React.CSSProperties = {
-  background: "linear-gradient(135deg, var(--accent-gold) 0%, var(--accent-gold-dim) 100%)",
+  background: "linear-gradient(135deg, var(--accent) 0%, var(--accent-dim) 100%)",
   color: "var(--bg)",
   border: "none",
   borderRadius: "999px",
@@ -166,7 +166,7 @@ const primaryCtaStyle: React.CSSProperties = {
   fontSize: "1rem",
   textDecoration: "none",
   display: "inline-block",
-  boxShadow: "0 8px 30px -8px rgba(224, 184, 74, 0.55)",
+  boxShadow: "0 8px 30px -8px rgba(59, 130, 246, 0.55)",
 };
 
 const secondaryCtaStyle: React.CSSProperties = {

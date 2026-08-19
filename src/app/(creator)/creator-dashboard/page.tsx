@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import {
   useSession,
   displayHeadingStyle,
@@ -44,7 +43,7 @@ const VERIFICATION_STEPS: { type: "IDENTITY" | "AGE" | "LIVENESS"; label: string
   { type: "LIVENESS", label: "Liveness" },
 ];
 
-type DashboardTab = "overview" | "content" | "golive" | "settings" | "account";
+type DashboardTab = "overview" | "content" | "golive" | "settings";
 
 export default function CreatorDashboardPage() {
   const { user, loading, refresh } = useSession();
@@ -74,13 +73,14 @@ export default function CreatorDashboardPage() {
   const active = status !== "REJECTED" && status !== "BANNED";
 
   // Go Live only means anything once verified — no point showing a tab
-  // for it while someone's still mid-application.
+  // for it while someone's still mid-application. Account (identity
+  // summary + Settings link) now lives in the nav's account menu instead
+  // of a dashboard tab — see AccountMenu in components/ui.tsx.
   const tabs: { id: DashboardTab; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "content", label: "Content" },
     ...(canMonetise ? ([{ id: "golive", label: "Go Live" }] as const) : []),
     { id: "settings", label: "Settings" },
-    { id: "account", label: "Account" },
   ];
 
   return (
@@ -98,11 +98,15 @@ export default function CreatorDashboardPage() {
             ))}
           </div>
 
-          {tab === "overview" && <WalletPanel />}
+          {tab === "overview" && (
+            <>
+              <StatsPanel />
+              <WalletPanel />
+            </>
+          )}
           {tab === "content" && <ContentPanel canMonetise={canMonetise} />}
           {tab === "golive" && canMonetise && <LivePanel />}
           {tab === "settings" && <CreatorSettingsPanel />}
-          {tab === "account" && <AccountPanel displayName={user.displayName} email={user.email} />}
         </>
       )}
     </main>
@@ -208,6 +212,42 @@ const endLiveButtonStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
+interface CreatorStats {
+  followerCount: number;
+  subscriberCount: number;
+  publishedCount: number;
+  totalCount: number;
+  totalLikes: number;
+}
+
+/** Overview's at-a-glance numbers — see GET /api/creator/stats for what each figure means and why it's computed separately from the public creator-profile endpoint. */
+function StatsPanel() {
+  const [stats, setStats] = useState<CreatorStats | null>(null);
+
+  useEffect(() => {
+    fetch("/api/creator/stats")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (body) setStats(body);
+      });
+  }, []);
+
+  if (!stats) return null;
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: "2rem" }}>
+      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Stats</h2>
+      <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
+        <WalletStat label="Followers" value={stats.followerCount} format="int" />
+        <WalletStat label="Subscribers" value={stats.subscriberCount} format="int" />
+        <WalletStat label="Published posts" value={stats.publishedCount} format="int" />
+        <WalletStat label="Total uploads" value={stats.totalCount} format="int" />
+        <WalletStat label="Total likes" value={stats.totalLikes} format="int" />
+      </div>
+    </div>
+  );
+}
+
 function WalletPanel() {
   const [wallet, setWallet] = useState<WalletBalances | null>(null);
   const [requesting, setRequesting] = useState(false);
@@ -261,11 +301,19 @@ function WalletPanel() {
   );
 }
 
-function WalletStat({ label, value }: { label: string; value: number }) {
+function WalletStat({
+  label,
+  value,
+  format = "usd",
+}: {
+  label: string;
+  value: number;
+  format?: "usd" | "int";
+}) {
   return (
     <div>
       <div style={{ fontSize: "1.4rem", fontWeight: 600, fontFamily: "var(--font-display)" }}>
-        ${value.toFixed(2)}
+        {format === "usd" ? `$${value.toFixed(2)}` : value.toLocaleString()}
       </div>
       <div style={mutedSmallStyle}>{label}</div>
     </div>
@@ -437,47 +485,17 @@ function CreatorSettingsPanel() {
 }
 
 /**
- * Compact identity summary — display name, email, account type — with a
- * link out to /settings for the actual profile form (photo, bio,
- * location). Kept deliberately thin: the full editable form stays on
- * /settings rather than being duplicated here.
+ * Content history and control: every item this creator has ever
+ * uploaded (see GET /api/creator/content's own comment on why it's
+ * unfiltered by status), each with a Delete action. Delete is a soft
+ * delete (DELETE /api/creator/content/:id — see that route's comment)
+ * so it stays in this history afterward, just labeled Removed with no
+ * further action available on it.
  */
-function AccountPanel({ displayName, email }: { displayName: string | null; email: string }) {
-  return (
-    <div style={cardStyle}>
-      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Account</h2>
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", fontSize: "0.9rem" }}>
-        <div>
-          <div style={mutedSmallStyle}>Display name</div>
-          {displayName || "—"}
-        </div>
-        <div>
-          <div style={mutedSmallStyle}>Email</div>
-          {email}
-        </div>
-        <div>
-          <div style={mutedSmallStyle}>Account type</div>
-          Creator
-        </div>
-      </div>
-      <Link href="/settings" style={accountLinkStyle}>
-        Edit profile photo, bio & location →
-      </Link>
-    </div>
-  );
-}
-
-const accountLinkStyle: React.CSSProperties = {
-  display: "inline-block",
-  marginTop: "1.25rem",
-  fontSize: "0.85rem",
-  color: "var(--accent)",
-  fontWeight: 600,
-};
-
 function ContentPanel({ canMonetise }: { canMonetise: boolean }) {
   const [items, setItems] = useState<OwnContentItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   function reload() {
     setLoadingItems(true);
@@ -494,35 +512,59 @@ function ContentPanel({ canMonetise }: { canMonetise: boolean }) {
     if (res.ok) reload();
   }
 
+  async function remove(contentId: string) {
+    if (!window.confirm("Delete this post? It will no longer be visible to anyone.")) return;
+    setDeletingId(contentId);
+    const res = await fetch(`/api/creator/content/${contentId}`, { method: "DELETE" });
+    setDeletingId(null);
+    if (res.ok) reload();
+  }
+
   return (
     <>
       <UploadForm canMonetise={canMonetise} onUploaded={reload} />
 
-      <h2 style={sectionHeadingStyle}>Your content</h2>
+      <h2 style={sectionHeadingStyle}>Content history</h2>
       {loadingItems ? (
         <p style={{ color: "var(--text-muted)" }}>Loading...</p>
       ) : items.length === 0 ? (
         <p style={{ color: "var(--text-muted)" }}>Nothing uploaded yet.</p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          {items.map((item) => (
-            <div key={item.contentId} style={rowCardStyle}>
-              <div>
-                <div style={{ fontSize: "0.9rem" }}>{item.caption || "(no caption)"}</div>
-                <div style={mutedSmallStyle}>
-                  {item.mediaType} · {item.accessLevel}
-                  {item.publishedAt ? " · live" : ` · ${item.status.toLowerCase()}`} · ♥ {item.likeCount}
+          {items.map((item) => {
+            const removed = item.status === "REMOVED";
+            return (
+              <div key={item.contentId} style={rowCardStyle}>
+                <div style={{ opacity: removed ? 0.55 : 1 }}>
+                  <div style={{ fontSize: "0.9rem" }}>{item.caption || "(no caption)"}</div>
+                  <div style={mutedSmallStyle}>
+                    {item.mediaType} · {item.accessLevel} ·{" "}
+                    {removed ? "removed" : item.publishedAt ? "live" : item.status.toLowerCase()} · ♥{" "}
+                    {item.likeCount}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
+                  {/* Uploads publish immediately (see the upload route) —
+                      this only ever fires for older rows from before that
+                      change. */}
+                  {item.status === "APPROVED" && !item.publishedAt && (
+                    <button onClick={() => publish(item.contentId)} style={publishButtonStyle}>
+                      Publish
+                    </button>
+                  )}
+                  {!removed && (
+                    <button
+                      onClick={() => remove(item.contentId)}
+                      disabled={deletingId === item.contentId}
+                      style={deleteButtonStyle}
+                    >
+                      {deletingId === item.contentId ? "..." : "Delete"}
+                    </button>
+                  )}
                 </div>
               </div>
-              {/* Uploads publish immediately (see the upload route) — this
-                  only ever fires for older rows from before that change. */}
-              {item.status === "APPROVED" && !item.publishedAt && (
-                <button onClick={() => publish(item.contentId)} style={publishButtonStyle}>
-                  Publish
-                </button>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </>
@@ -660,7 +702,7 @@ const rowCardStyle: React.CSSProperties = {
 };
 
 const publishButtonStyle: React.CSSProperties = {
-  background: "var(--accent-gold)",
+  background: "var(--accent)",
   color: "var(--bg)",
   border: "none",
   borderRadius: "var(--radius)",
@@ -671,9 +713,21 @@ const publishButtonStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
+const deleteButtonStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "1px solid var(--danger)",
+  color: "var(--danger)",
+  borderRadius: "var(--radius)",
+  padding: "0.4rem 0.85rem",
+  fontSize: "0.82rem",
+  fontWeight: 600,
+  cursor: "pointer",
+  flexShrink: 0,
+};
+
 function stepButtonStyle(done: boolean): React.CSSProperties {
   return {
-    background: done ? "var(--surface-raised)" : "var(--accent-gold)",
+    background: done ? "var(--surface-raised)" : "var(--accent)",
     color: done ? "var(--text-muted)" : "var(--bg)",
     border: done ? "1px solid var(--border)" : "none",
     borderRadius: "var(--radius)",

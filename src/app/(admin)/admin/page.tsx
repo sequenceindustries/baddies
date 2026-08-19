@@ -452,7 +452,7 @@ const rowCardStyle: React.CSSProperties = {
 };
 
 const approveButtonStyle: React.CSSProperties = {
-  background: "var(--accent-gold)",
+  background: "var(--accent)",
   color: "var(--bg)",
   border: "none",
   borderRadius: "var(--radius)",

@@ -183,7 +183,7 @@ function VipPassBanner() {
 
 const bannerStyle: React.CSSProperties = {
   background: "var(--surface)",
-  border: "1px solid var(--accent-gold)",
+  border: "1px solid var(--accent)",
   borderRadius: "12px",
   padding: "1.1rem 1.4rem",
   marginBottom: "2.25rem",
@@ -194,7 +194,7 @@ const bannerStyle: React.CSSProperties = {
 };
 
 const bannerButtonStyle: React.CSSProperties = {
-  background: "var(--accent-gold)",
+  background: "var(--accent)",
   color: "var(--bg)",
   border: "none",
   borderRadius: "var(--radius)",

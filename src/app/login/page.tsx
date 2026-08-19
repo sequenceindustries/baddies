@@ -120,7 +120,7 @@ export default function LoginPage() {
       </div>
       <p style={{ marginTop: "1.25rem", fontSize: "0.88rem", color: "var(--text-muted)" }}>
         New here?{" "}
-        <Link href="/register" style={{ color: "var(--accent-gold)" }}>
+        <Link href="/register" style={{ color: "var(--accent)" }}>
           {COPY[intent].registerHint}
         </Link>
       </p>
@@ -164,8 +164,8 @@ function intentOptionStyle(active: boolean): React.CSSProperties {
     borderRadius: "var(--radius)",
     cursor: "pointer",
     textAlign: "left",
-    background: active ? "rgba(201, 169, 97, 0.12)" : "var(--surface-raised)",
-    border: active ? "1.5px solid var(--accent-gold)" : "1px solid var(--border)",
+    background: active ? "var(--accent-soft)" : "var(--surface-raised)",
+    border: active ? "1.5px solid var(--accent)" : "1px solid var(--border)",
     color: "var(--text)",
   };
 }

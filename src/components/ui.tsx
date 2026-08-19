@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 export interface SessionUser {
@@ -76,10 +77,24 @@ export function useLocationDetector() {
   return { status, error, detect };
 }
 
-/** Fetches /api/auth/me once on mount. Minimal — no global state library for a handful of pages. */
+/**
+ * Fetches /api/auth/me on mount and again on every client-side route
+ * change. The route-change refetch matters for Nav specifically: Nav
+ * lives in the root layout, so it mounts once for the whole session
+ * rather than per-page — without this, logging in (a client-side
+ * router.push to /fan-home or /creator-dashboard, not a full page load)
+ * left Nav's
+ * own useSession() instance holding onto its original signed-out `user:
+ * null` from before login, showing "Sign in"/"Join" to someone who very
+ * much was signed in, until a hard refresh remounted it. Every other
+ * page's own useSession() call was unaffected (those components remount
+ * per navigation anyway), but there was no signal telling Nav's
+ * long-lived instance to look again.
+ */
 export function useSession() {
   const [user, setUser] = useState<SessionUser | null | undefined>(undefined); // undefined = loading
   const [reloadKey, setReloadKey] = useState(0);
+  const pathname = usePathname();
 
   useEffect(() => {
     let cancelled = false;
@@ -94,36 +109,28 @@ export function useSession() {
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [reloadKey, pathname]);
 
   const refresh = () => setReloadKey((k) => k + 1);
   return { user, loading: user === undefined, refresh };
 }
 
-/** Where a signed-in visitor's "home" is — used right after login/register, and by the landing page's already-signed-in redirect. */
+/**
+ * Where a signed-in visitor's "home" is — used right after login/
+ * register, and by the landing page's already-signed-in redirect. Every
+ * one of these URLs names its own account type (/fan-home,
+ * /creator-dashboard) rather than a generic path like the old /home,
+ * /dashboard — so a URL alone always says which kind of account it's
+ * for, with no need to already be signed in as that type to know.
+ */
 export function roleHomePath(role: SessionUser["role"]): string {
   if (role === "ADMIN") return "/admin";
-  if (role === "CREATOR") return "/dashboard";
-  return "/home";
-}
-
-/**
- * Stamps [data-role] on <html> so globals.css can swap --accent (gold for
- * fans, teal for creators, wine-red for admins) — the single mechanism
- * every page's "which mode am I in" coloring hangs off of. Lives in Nav
- * because Nav is the one thing mounted on every page via the root layout.
- * Signed-out visitors get the default (fan/gold) theme.
- */
-function useRoleTheme(role: SessionUser["role"] | null | undefined) {
-  useEffect(() => {
-    const value = role === "CREATOR" ? "creator" : role === "ADMIN" ? "admin" : "fan";
-    document.documentElement.setAttribute("data-role", value);
-  }, [role]);
+  if (role === "CREATOR") return "/creator-dashboard";
+  return "/fan-home";
 }
 
 export function Nav() {
   const { user, loading, refresh } = useSession();
-  useRoleTheme(user?.role);
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -150,16 +157,16 @@ export function Nav() {
               </Link>
             )}
             {user.role === "CREATOR" && (
-              <Link href="/dashboard" style={linkStyle}>
+              <Link href="/creator-dashboard" style={linkStyle}>
                 Dashboard
               </Link>
             )}
             {user.role === "FAN" && (
               <>
-                <Link href="/home" style={linkStyle}>
+                <Link href="/fan-home" style={linkStyle}>
                   Home
                 </Link>
-                <Link href="/subscriptions" style={linkStyle}>
+                <Link href="/fan-subscriptions" style={linkStyle}>
                   My subscriptions
                 </Link>
               </>
@@ -179,16 +186,8 @@ export function Nav() {
                 Become a creator
               </Link>
             )}
-            <Link href="/settings" style={linkStyle}>
-              Settings
-            </Link>
-            <span style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
-              {user.displayName ?? user.email}
-            </span>
-            <AccountTypeBadge role={user.role} creatorProfile={user.creatorProfile} />
-            <button onClick={handleLogout} style={ghostButtonStyle}>
-              Sign out
-            </button>
+            {user.creatorProfile?.status === "VERIFIED" && <VerifiedBadge />}
+            <AccountMenu user={user} onLogout={handleLogout} />
           </>
         ) : (
           <>
@@ -210,18 +209,71 @@ export function Nav() {
   );
 }
 
+/**
+ * Consolidates what used to be three separate things loose in the nav
+ * row (a plain "Settings" link, a bare name/email span, and the account-
+ * type pill) into one top-right control: click the name to open a small
+ * panel with the identity summary, the Settings link, and Sign out — the
+ * "Account" surface for anyone who isn't a creator using the Dashboard's
+ * own Account tab. Closes on an outside click or Escape.
+ */
+function AccountMenu({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button onClick={() => setOpen((v) => !v)} style={accountMenuTriggerStyle} aria-expanded={open}>
+        {user.displayName ?? user.email}
+        <span style={{ fontSize: "0.65rem" }}>▾</span>
+      </button>
+      {open && (
+        <div style={accountMenuPanelStyle}>
+          <div style={{ padding: "0.2rem 0.2rem 0.7rem" }}>
+            <div style={{ fontWeight: 600, fontSize: "0.92rem" }}>{user.displayName ?? "Unnamed"}</div>
+            <div style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginTop: "0.15rem" }}>{user.email}</div>
+            <div style={{ marginTop: "0.5rem" }}>
+              <AccountTypeBadge role={user.role} creatorProfile={user.creatorProfile} />
+            </div>
+          </div>
+          <Link href="/settings" style={accountMenuLinkStyle} onClick={() => setOpen(false)}>
+            Settings
+          </Link>
+          <button onClick={onLogout} style={accountMenuButtonStyle}>
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Deliberately --success (green), not --accent — this is the one badge
+// in the app that means "account type," not "brand color," so it stays
+// visually distinct from every blue button/border/glow elsewhere. Paired
+// with AccountTypeBadge's Fan color (--accent, blue) below, that's the
+// "two different colours" account-type indicator in the nav's top right.
 export function VerifiedBadge() {
   return (
-    <span style={badgeStyle}>
+    <span style={{ ...badgeStyle, color: "var(--success)" }}>
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path
-          d="M9 12.5l2 2 4.5-5"
-          stroke="var(--bg)"
-          strokeWidth="2.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle cx="12" cy="12" r="10" fill="var(--accent-gold)" />
+        <circle cx="12" cy="12" r="10" fill="var(--success)" />
         <path
           d="M9 12.5l2 2 4.5-5"
           stroke="var(--bg)"
@@ -240,7 +292,10 @@ export function VerifiedBadge() {
  * person should never have to guess whether they're looking at a fan
  * account or a creator account. Creator gets its onboarding status
  * appended (e.g. "Creator · Pending") since "Creator" alone doesn't say
- * whether they can actually publish/monetise yet.
+ * whether they can actually publish/monetise yet. Verified creators get
+ * the standalone VerifiedBadge (green) in the nav instead of this pill —
+ * see Nav — so the only colors this one actually renders are blue (Fan/
+ * Admin/general) and muted gray (still-pending creator).
  */
 function AccountTypeBadge({
   role,
@@ -253,10 +308,15 @@ function AccountTypeBadge({
     return <span style={accountBadgeStyle("var(--accent)")}>Admin</span>;
   }
   if (creatorProfile) {
-    const statusLabel = creatorProfile.status === "VERIFIED" ? "Verified" : "Pending";
-    return <span style={accountBadgeStyle("var(--accent)")}>Creator · {statusLabel}</span>;
+    const verified = creatorProfile.status === "VERIFIED";
+    const statusLabel = verified ? "Verified" : "Pending";
+    return (
+      <span style={accountBadgeStyle(verified ? "var(--success)" : "var(--text-muted)")}>
+        Creator · {statusLabel}
+      </span>
+    );
   }
-  return <span style={accountBadgeStyle("var(--accent-gold)")}>Fan</span>;
+  return <span style={accountBadgeStyle("var(--accent)")}>Fan</span>;
 }
 
 function accountBadgeStyle(color: string): React.CSSProperties {
@@ -409,7 +469,7 @@ export const checkboxRowStyle: React.CSSProperties = {
 export const primaryButtonStyle: React.CSSProperties = {
   width: "100%",
   padding: "0.8rem",
-  background: "var(--accent-gold)",
+  background: "var(--accent)",
   color: "var(--bg)",
   border: "none",
   borderRadius: "var(--radius)",
@@ -464,7 +524,7 @@ const navStyle: React.CSSProperties = {
   backdropFilter: "blur(10px)",
 };
 
-/** The role-mode color strip — same mechanism as the account badge (var(--accent), swapped by [data-role]), just visible on every single page, not only where the badge renders. */
+/** Thin brand-accent strip under the nav, visible on every page. */
 const navAccentBarStyle: React.CSSProperties = {
   height: "3px",
   background: "linear-gradient(90deg, var(--accent), transparent 70%)",
@@ -485,7 +545,7 @@ const linkStyle: React.CSSProperties = {
 
 const primaryLinkStyle: React.CSSProperties = {
   ...linkStyle,
-  color: "var(--accent-gold)",
+  color: "var(--accent)",
   fontWeight: 600,
 };
 
@@ -499,13 +559,63 @@ const ghostButtonStyle: React.CSSProperties = {
   cursor: "pointer",
 };
 
+const accountMenuTriggerStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.35rem",
+  background: "transparent",
+  border: "1px solid var(--border)",
+  color: "var(--text)",
+  borderRadius: "999px",
+  padding: "0.4rem 0.9rem",
+  fontSize: "0.85rem",
+  cursor: "pointer",
+};
+
+const accountMenuPanelStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "calc(100% + 0.5rem)",
+  right: 0,
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: "12px",
+  boxShadow: "var(--glow)",
+  padding: "0.75rem",
+  minWidth: "200px",
+  display: "flex",
+  flexDirection: "column",
+  zIndex: 50,
+};
+
+const accountMenuLinkStyle: React.CSSProperties = {
+  display: "block",
+  color: "var(--text)",
+  textDecoration: "none",
+  fontSize: "0.88rem",
+  padding: "0.55rem 0.2rem",
+  borderTop: "1px solid var(--border)",
+};
+
+const accountMenuButtonStyle: React.CSSProperties = {
+  display: "block",
+  width: "100%",
+  textAlign: "left",
+  background: "none",
+  border: "none",
+  borderTop: "1px solid var(--border)",
+  color: "var(--danger)",
+  fontSize: "0.88rem",
+  padding: "0.55rem 0.2rem",
+  cursor: "pointer",
+};
+
 const badgeStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   gap: "0.35rem",
   fontSize: "0.78rem",
   fontWeight: 600,
-  color: "var(--accent-gold)",
+  color: "var(--accent)",
   letterSpacing: "0.02em",
 };
 

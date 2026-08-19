@@ -22,7 +22,7 @@ export function HowItWorks() {
             platform.
           </p>
         </div>
-        <div className="hover-lift" style={{ ...tierCardStyle, borderColor: "var(--accent-gold)" }}>
+        <div className="hover-lift" style={{ ...tierCardStyle, borderColor: "var(--accent)" }}>
           <div style={tierNameStyle}>Exclusive</div>
           <p style={tierDescStyle}>
             Subscribe directly to a creator, at the price they set: subscriber-only posts, direct

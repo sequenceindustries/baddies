@@ -196,57 +196,80 @@ export function ContentCard({ item }: { item: ContentCardData }) {
   }
 
   return (
-    <div className="hover-lift" style={contentCardStyle}>
-      {item.creatorDisplayName && item.creatorProfileId && (
-        <Link href={`/creators/${item.creatorProfileId}`} style={cardCreatorLinkStyle}>
-          <span style={cardCreatorAvatarStyle}>
-            {item.creatorAvatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={item.creatorAvatarUrl} alt="" style={avatarImgStyle} />
-            ) : (
-              item.creatorDisplayName.charAt(0).toUpperCase()
-            )}
-          </span>
-          {item.creatorDisplayName}
-        </Link>
-      )}
-      <div style={cardMetaRowStyle}>
-        <TierBadge accessLevel={item.accessLevel} />
-        {item.publishedAt && <span style={mutedSmallStyle}>{timeAgo(item.publishedAt)}</span>}
-      </div>
-      {item.caption && <p style={captionStyle}>{item.caption}</p>}
+    <div
+      className="hover-lift"
+      style={{ ...contentCardStyle, cursor: media ? "zoom-in" : "default" }}
+      onClick={() => media && setExpanded(true)}
+      role={media ? "button" : undefined}
+      aria-label={media ? "Open full size" : undefined}
+    >
+      {/* Full-bleed photo as the card's own background layer — everything
+          else (byline, tier label, caption, actions) sits on top of it in
+          gradient-scrimmed overlays, rather than the media being one
+          element among several stacked in a padded card. */}
       {media ? (
-        <button onClick={() => setExpanded(true)} style={mediaButtonStyle} aria-label="Open full size">
-          <MediaPreview mimeType={media.mimeType} url={media.signedUrl} />
-        </button>
+        <MediaPreview mimeType={media.mimeType} url={media.signedUrl} />
       ) : (
-        <div style={contentThumbStyle}>
+        <div style={cardMediaFallbackStyle}>
           {loading ? (
             <span style={mutedSmallStyle}>Loading...</span>
           ) : denied && item.accessLevel === "VIP" ? (
-            <button onClick={handleGetVipPass} style={ghostSmallButtonStyle}>
+            <button onClick={(e) => { e.stopPropagation(); handleGetVipPass(); }} style={ghostSmallButtonStyle}>
               Get VIP Pass to unlock
             </button>
           ) : denied ? (
             <span style={mutedSmallStyle}>Locked</span>
           ) : (
-            <button onClick={handleView} style={ghostSmallButtonStyle}>
+            <button onClick={(e) => { e.stopPropagation(); handleView(); }} style={ghostSmallButtonStyle}>
               Retry
             </button>
           )}
+          {denied && item.accessLevel === "VVIP" && (
+            <div style={mutedSmallStyle}>Subscribe on this creator&apos;s profile to unlock.</div>
+          )}
+          {error && <div style={{ ...mutedSmallStyle, color: "var(--danger)" }}>{error}</div>}
         </div>
       )}
-      {denied && item.accessLevel === "VVIP" && (
-        <div style={mutedSmallStyle}>Subscribe on this creator&apos;s profile to unlock.</div>
-      )}
-      {error && <div style={{ ...mutedSmallStyle, color: "var(--danger)" }}>{error}</div>}
-      <div style={cardFooterStyle}>
-        <button onClick={toggleLike} disabled={likeBusy} style={likeButtonStyle(liked)}>
-          {liked ? "♥" : "♡"} {likeCount}
-        </button>
-        <ReportButton contentId={item.contentId} />
+
+      <div style={cardTopScrimStyle}>
+        {item.creatorDisplayName && item.creatorProfileId ? (
+          <Link
+            href={`/creators/${item.creatorProfileId}`}
+            style={cardCreatorLinkStyle}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span style={cardCreatorAvatarStyle}>
+              {item.creatorAvatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={item.creatorAvatarUrl} alt="" style={avatarImgStyle} />
+              ) : (
+                item.creatorDisplayName.charAt(0).toUpperCase()
+              )}
+            </span>
+            {item.creatorDisplayName}
+          </Link>
+        ) : (
+          <span />
+        )}
+        <TierBadge accessLevel={item.accessLevel} />
       </div>
-      {expanded && media && <MediaLightbox mimeType={media.mimeType} url={media.signedUrl} onClose={() => setExpanded(false)} />}
+
+      <div style={cardBottomScrimStyle}>
+        {item.caption && <p style={captionStyle}>{item.caption}</p>}
+        <div style={cardFooterStyle}>
+          {item.publishedAt && <span style={cardTimeStyle}>{timeAgo(item.publishedAt)}</span>}
+          <div style={cardFooterActionsStyle} onClick={(e) => e.stopPropagation()}>
+            <button onClick={toggleLike} disabled={likeBusy} style={likeButtonStyle(liked)}>
+              {liked ? "♥" : "♡"} {likeCount}
+            </button>
+            <ReportButton contentId={item.contentId} />
+          </div>
+        </div>
+      </div>
+
+      {expanded && media && (
+        <MediaLightbox mimeType={media.mimeType} url={media.signedUrl} onClose={() => setExpanded(false)} />
+      )}
     </div>
   );
 }
@@ -355,15 +378,23 @@ export function ContentTimeline({ items, vvipPriceUsd }: { items: ContentCardDat
   );
 }
 
+// Fills the card as its background layer (position: absolute, inset: 0 —
+// see cardMediaLayerStyle) so the photo/video reads as the whole card,
+// not one element stacked among several. Audio has no visual to bleed,
+// so it stays a normal in-flow control instead.
 function MediaPreview({ mimeType, url }: { mimeType: string; url: string }) {
   if (mimeType.startsWith("video/")) {
-    return <video src={url} controls style={mediaElStyle} />;
+    return <video src={url} controls style={cardMediaLayerStyle} />;
   }
   if (mimeType.startsWith("audio/")) {
-    return <audio src={url} controls style={{ width: "100%" }} />;
+    return (
+      <div style={cardMediaFallbackStyle}>
+        <audio src={url} controls style={{ width: "90%" }} onClick={(e) => e.stopPropagation()} />
+      </div>
+    );
   }
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} alt="" style={mediaElStyle} />;
+  return <img src={url} alt="" style={cardMediaLayerStyle} />;
 }
 
 const REPORT_REASONS = [
@@ -446,7 +477,14 @@ export function ReportButton({ contentId, reportedUserId }: { contentId?: string
   );
 }
 
-const reportLinkStyle: React.CSSProperties = { fontSize: "0.72rem", color: "var(--text-muted)" };
+// The text-shadow here is only visible when this renders over a content
+// card's photo scrim; it's a no-op on the flat backgrounds this button
+// also appears against elsewhere (e.g. the creator-profile header).
+const reportLinkStyle: React.CSSProperties = {
+  fontSize: "0.72rem",
+  color: "var(--text-muted)",
+  textShadow: "0 1px 4px rgba(0, 0, 0, 0.7)",
+};
 
 const reportLinkButtonStyle: React.CSSProperties = {
   background: "none",
@@ -457,6 +495,7 @@ const reportLinkButtonStyle: React.CSSProperties = {
   cursor: "pointer",
   padding: 0,
   alignSelf: "flex-start",
+  textShadow: "0 1px 4px rgba(0, 0, 0, 0.7)",
 };
 
 const reportFormStyle: React.CSSProperties = {
@@ -547,13 +586,13 @@ const priceRowStyle: React.CSSProperties = {
   display: "flex",
   gap: "0.6rem",
   fontSize: "0.8rem",
-  color: "var(--accent-gold)",
+  color: "var(--accent)",
   fontWeight: 600,
 };
 
 const mutedSmallStyle: React.CSSProperties = { fontSize: "0.78rem", color: "var(--text-muted)" };
 
-// Matches src/app/(fan)/home/page.tsx's sectionWrapStyle — clearly-
+// Matches src/app/(fan)/fan-home/page.tsx's sectionWrapStyle — clearly-
 // separated categories rather than sections running into each other.
 const sectionStyle: React.CSSProperties = { marginBottom: "4rem" };
 
@@ -585,9 +624,22 @@ const gridStyle: React.CSSProperties = {
 
 const gridItemStyle: React.CSSProperties = { minWidth: 0 };
 
-const captionStyle: React.CSSProperties = { fontSize: "0.85rem", margin: 0, color: "var(--text)" };
+// var(--text) is already near-white (this app is dark-themed throughout),
+// so the only thing overlaying it on a photo needs is a drop shadow for
+// legibility against busy image content, plus its own stacking context
+// above the media layer (z-index: 0) and its gradient scrim.
+const captionStyle: React.CSSProperties = {
+  position: "relative",
+  zIndex: 2,
+  fontSize: "0.85rem",
+  margin: 0,
+  color: "var(--text)",
+  textShadow: "0 1px 4px rgba(0, 0, 0, 0.7)",
+};
 
 const cardCreatorLinkStyle: React.CSSProperties = {
+  position: "relative",
+  zIndex: 2,
   display: "flex",
   alignItems: "center",
   gap: "0.5rem",
@@ -595,6 +647,7 @@ const cardCreatorLinkStyle: React.CSSProperties = {
   textDecoration: "none",
   fontWeight: 600,
   fontSize: "0.85rem",
+  textShadow: "0 1px 4px rgba(0, 0, 0, 0.7)",
 };
 
 const cardCreatorAvatarStyle: React.CSSProperties = {
@@ -602,7 +655,7 @@ const cardCreatorAvatarStyle: React.CSSProperties = {
   height: "26px",
   borderRadius: "50%",
   background: "var(--surface-raised)",
-  border: "1px solid var(--border)",
+  border: "1px solid rgba(255, 255, 255, 0.5)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -613,13 +666,46 @@ const cardCreatorAvatarStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
-const mediaButtonStyle: React.CSSProperties = {
-  display: "block",
-  width: "100%",
-  padding: 0,
-  border: "none",
-  background: "none",
-  cursor: "zoom-in",
+// Gradient scrims pinned to the top/bottom of the card (contentCardStyle
+// is flex column + justify-content: space-between, so these two land at
+// the edges) — the same "text over photo" pattern the reference used,
+// just with a scrim instead of a solid label background so it works over
+// any photo, light or dark.
+const cardTopScrimStyle: React.CSSProperties = {
+  position: "relative",
+  zIndex: 1,
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: "0.6rem",
+  padding: "0.9rem 1rem 2.5rem",
+  background: "linear-gradient(to bottom, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0))",
+};
+
+const cardBottomScrimStyle: React.CSSProperties = {
+  position: "relative",
+  zIndex: 1,
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.5rem",
+  padding: "2.5rem 1rem 0.9rem",
+  background: "linear-gradient(to top, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0))",
+};
+
+const cardTimeStyle: React.CSSProperties = {
+  position: "relative",
+  zIndex: 2,
+  fontSize: "0.78rem",
+  color: "var(--text-muted)",
+  textShadow: "0 1px 4px rgba(0, 0, 0, 0.7)",
+};
+
+const cardFooterActionsStyle: React.CSSProperties = {
+  position: "relative",
+  zIndex: 2,
+  display: "flex",
+  alignItems: "center",
+  gap: "0.85rem",
 };
 
 const lightboxBackdropStyle: React.CSSProperties = {
@@ -687,6 +773,7 @@ function likeButtonStyle(liked: boolean): React.CSSProperties {
     cursor: "pointer",
     padding: 0,
     fontWeight: liked ? 600 : 400,
+    textShadow: "0 1px 4px rgba(0, 0, 0, 0.7)",
   };
 }
 
@@ -706,27 +793,48 @@ const timelineListStyle: React.CSSProperties = {
   gap: "1.25rem",
 };
 
-// One card style used everywhere content appears — creator-profile
-// timeline, Home's grids, everywhere. "Cleaner and larger" than the old
-// tiny 1:1 thumbnail grid this replaced.
+// Full-bleed photo card — one style used everywhere content appears
+// (creator-profile timeline, Home's grids, everywhere). The photo is the
+// whole card (cardMediaLayerStyle, position: absolute inset: 0); byline,
+// tier label, caption, and actions sit on top of it in gradient-scrimmed
+// overlays instead of the old padded stack of separate rows above/below
+// a smaller thumbnail.
 const contentCardStyle: React.CSSProperties = {
-  background: "var(--surface)",
-  border: "1px solid var(--border)",
-  borderRadius: "16px",
-  padding: "1.1rem 1.25rem",
+  position: "relative",
+  overflow: "hidden",
+  borderRadius: "18px",
+  aspectRatio: "4 / 5",
+  background: "var(--surface-raised)",
+  boxShadow: "var(--glow)",
   display: "flex",
   flexDirection: "column",
-  gap: "0.65rem",
-  boxShadow: "var(--glow)",
-};
-
-const cardMetaRowStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
   justifyContent: "space-between",
-  gap: "0.6rem",
 };
 
+// The photo/video itself, filling the card as a background layer.
+const cardMediaLayerStyle: React.CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+  zIndex: 0,
+};
+
+// Loading/locked states render in the same full-bleed slot, centered.
+const cardMediaFallbackStyle: React.CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "0.5rem",
+  textAlign: "center",
+  padding: "1.5rem",
+};
+
+// Kept only for any remaining non-card use of a plain thumbnail box.
 const contentThumbStyle: React.CSSProperties = {
   position: "relative",
   aspectRatio: "16 / 10",
@@ -747,18 +855,19 @@ const mediaElStyle: React.CSSProperties = {
   objectFit: "cover",
 };
 
+// Bold uppercase text over the photo, not a bordered chip — plain white
+// with a drop shadow for legibility on any photo, gold only for the
+// top Exclusive tier so the hierarchy between tiers still reads.
 function tierBadgeStyle(accessLevel: ContentCardData["accessLevel"]): React.CSSProperties {
-  const color =
-    accessLevel === "VVIP" ? "var(--accent-gold)" : accessLevel === "VIP" ? "var(--accent-gold-dim)" : "var(--text-muted)";
   return {
-    fontSize: "0.7rem",
-    fontWeight: 700,
-    letterSpacing: "0.03em",
+    position: "relative",
+    zIndex: 2,
+    fontSize: "0.72rem",
+    fontWeight: 800,
+    letterSpacing: "0.06em",
     textTransform: "uppercase",
-    color,
-    border: `1px solid ${color}`,
-    borderRadius: "999px",
-    padding: "0.15rem 0.55rem",
+    color: accessLevel === "VVIP" ? "var(--accent)" : "#fff",
+    textShadow: "0 1px 4px rgba(0, 0, 0, 0.7)",
     flexShrink: 0,
   };
 }
@@ -777,7 +886,7 @@ function tabButtonStyle(active: boolean): React.CSSProperties {
     fontSize: "0.82rem",
     fontWeight: 600,
     cursor: "pointer",
-    background: active ? "var(--accent-gold)" : "transparent",
+    background: active ? "var(--accent)" : "transparent",
     color: active ? "var(--bg)" : "var(--text-muted)",
     border: active ? "none" : "1px solid var(--border)",
   };

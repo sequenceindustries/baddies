@@ -53,7 +53,7 @@ export default function RegisterPage() {
     // Agreement, which only /apply collects. Choosing "Creator" here just
     // sends them straight into that next step instead of leaving them to
     // discover "Become a creator" in the nav on their own.
-    router.push(intent === "CREATOR" ? "/apply" : "/home");
+    router.push(intent === "CREATOR" ? "/apply" : "/fan-home");
     router.refresh();
   }
 
@@ -149,7 +149,7 @@ export default function RegisterPage() {
       </div>
       <p style={{ marginTop: "1.25rem", fontSize: "0.88rem", color: "var(--text-muted)" }}>
         Already have an account?{" "}
-        <Link href="/login" style={{ color: "var(--accent-gold)" }}>
+        <Link href="/login" style={{ color: "var(--accent)" }}>
           Sign in
         </Link>
       </p>
@@ -213,8 +213,8 @@ function intentOptionStyle(active: boolean): React.CSSProperties {
     borderRadius: "var(--radius)",
     cursor: "pointer",
     textAlign: "left",
-    background: active ? "rgba(201, 169, 97, 0.12)" : "var(--surface-raised)",
-    border: active ? "1.5px solid var(--accent-gold)" : "1px solid var(--border)",
+    background: active ? "var(--accent-soft)" : "var(--surface-raised)",
+    border: active ? "1.5px solid var(--accent)" : "1px solid var(--border)",
     color: "var(--text)",
   };
 }
