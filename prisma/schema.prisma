@@ -214,7 +214,14 @@ model Profile {
   displayName String
   avatarUrl   String?
   bio         String?
+  // Nullable at the DB level (existing rows predate this field, and a
+  // NOT NULL migration would need a backfill for data we don't have) —
+  // required going forward at the application layer instead: both are
+  // mandatory on registration and on any profile edit. See
+  // RegisterSchema in src/app/api/auth/register/route.ts and
+  // UpdateProfileSchema in src/app/api/profile/route.ts.
   country     String?
+  city        String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

@@ -13,6 +13,7 @@ interface CreatorProfileResponse {
   avatarUrl: string | null;
   coverImageUrl: string | null;
   country: string | null;
+  city: string | null;
   verifiedBadge: true;
   vvipPriceUsd: number;
   unlimitedParticipant: boolean;
@@ -116,11 +117,13 @@ export default function CreatorProfilePage() {
             {creator.displayName ?? "Unnamed creator"}
           </h1>
           <VerifiedBadge />
-          {creator.country && <p style={mutedStyle}>{creator.country}</p>}
+          {(creator.city || creator.country) && (
+            <p style={mutedStyle}>{[creator.city, creator.country].filter(Boolean).join(", ")}</p>
+          )}
           {creator.bio && <p style={{ marginTop: "0.6rem" }}>{creator.bio}</p>}
           <div style={priceRowStyle}>
             <span>{creator.followerCount} followers</span>
-            <span>VVIP ${creator.vvipPriceUsd.toFixed(2)}/mo</span>
+            <span>Exclusive ${creator.vvipPriceUsd.toFixed(2)}/mo</span>
             {typeof creator.subscriberCount === "number" && <span>{creator.subscriberCount} subscribers</span>}
             {creator.unlimitedParticipant && <span>Included with VIP Pass</span>}
           </div>
@@ -139,9 +142,53 @@ export default function CreatorProfilePage() {
         <SubscribeAndTip creatorProfileId={creatorProfileId} vvipPriceUsd={creator.vvipPriceUsd} />
       )}
 
-      <h2 style={sectionHeadingStyle}>Content</h2>
-      <ContentGrid items={items} />
+      <ContentByTier items={items} vvipPriceUsd={creator.vvipPriceUsd} />
     </main>
+  );
+}
+
+/**
+ * OnlyFans-style content grouping: separate Free/VIP/Exclusive sections
+ * rather than one undifferentiated grid, so a visitor can see at a
+ * glance what's actually free vs. what needs the platform VIP Pass vs.
+ * what needs a subscription to this specific creator — with that price
+ * shown right on the section header.
+ */
+function ContentByTier({ items, vvipPriceUsd }: { items: RawContentItem[]; vvipPriceUsd: number }) {
+  const free = items.filter((i) => i.accessLevel === "FREE");
+  const vip = items.filter((i) => i.accessLevel === "VIP");
+  const exclusive = items.filter((i) => i.accessLevel === "VVIP");
+
+  if (items.length === 0) {
+    return (
+      <>
+        <h2 style={sectionHeadingStyle}>Content</h2>
+        <p style={{ color: "var(--text-muted)" }}>No content yet.</p>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {free.length > 0 && (
+        <section style={{ marginBottom: "2.25rem" }}>
+          <h2 style={sectionHeadingStyle}>Free</h2>
+          <ContentGrid items={free} />
+        </section>
+      )}
+      {vip.length > 0 && (
+        <section style={{ marginBottom: "2.25rem" }}>
+          <h2 style={sectionHeadingStyle}>VIP</h2>
+          <ContentGrid items={vip} />
+        </section>
+      )}
+      {exclusive.length > 0 && (
+        <section style={{ marginBottom: "2.25rem" }}>
+          <h2 style={sectionHeadingStyle}>Exclusive · ${vvipPriceUsd.toFixed(2)}/mo</h2>
+          <ContentGrid items={exclusive} />
+        </section>
+      )}
+    </>
   );
 }
 
@@ -224,10 +271,10 @@ function SubscribeAndTip({ creatorProfileId, vvipPriceUsd }: { creatorProfileId:
           style={checkoutButtonStyle(subscribed)}
         >
           {subscribed
-            ? "✓ Subscribed (VVIP)"
+            ? "✓ Subscribed (Exclusive)"
             : busy === "vvip"
               ? "..."
-              : `Subscribe VVIP $${vvipPriceUsd.toFixed(2)}/mo`}
+              : `Subscribe Exclusive $${vvipPriceUsd.toFixed(2)}/mo`}
         </button>
         <button onClick={getVipPass} disabled={busy !== null || vipPassActive} style={checkoutButtonStyle(vipPassActive)}>
           {vipPassActive ? "✓ VIP Pass active" : busy === "vip-pass" ? "..." : "Get platform VIP Pass"}
@@ -237,8 +284,8 @@ function SubscribeAndTip({ creatorProfileId, vvipPriceUsd }: { creatorProfileId:
         </button>
       </div>
       <p style={{ ...mutedNoteStyle }}>
-        VVIP is this creator&apos;s own subscription. The VIP Pass is one platform-wide price that unlocks VIP-tier
-        content from every participating creator.
+        Exclusive is this creator&apos;s own subscription. The VIP Pass is one platform-wide price that unlocks
+        VIP-tier content from every participating creator.
       </p>
 
       {showTip && (

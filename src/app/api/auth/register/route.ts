@@ -12,6 +12,10 @@ const RegisterSchema = z.object({
   email: z.string().email(),
   password: z.string().min(10, "Password must be at least 10 characters"),
   displayName: z.string().min(2).max(50),
+  // Mandatory at signup — see Profile.country/city's comment in
+  // prisma/schema.prisma for why these stay nullable at the DB level.
+  country: z.string().min(1, "Country is required").max(100),
+  city: z.string().min(1, "City is required").max(100),
   // Explicit self-attestation checkbox is required before any account is
   // created. This is NOT the age-verification workflow itself (see
   // src/lib/providers/verification) — it's the initial gate per build
@@ -28,7 +32,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { email, password, displayName } = parsed.data;
+  const { email, password, displayName, country, city } = parsed.data;
 
   const existing = await db.user.findUnique({ where: { email } });
   if (existing) {
@@ -43,7 +47,7 @@ export async function POST(req: NextRequest) {
         email,
         passwordHash,
         role: "FAN",
-        profile: { create: { displayName } },
+        profile: { create: { displayName, country, city } },
         wallet: { create: {} },
       },
     });

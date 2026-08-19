@@ -38,6 +38,7 @@ interface ProfileData {
   bio: string | null;
   avatarUrl: string | null;
   country: string | null;
+  city: string | null;
 }
 
 function ProfileSettings() {
@@ -71,7 +72,8 @@ function ProfileSettings() {
         displayName: data.displayName,
         bio: data.bio || null,
         avatarUrl: data.avatarUrl || null,
-        country: data.country || null,
+        country: data.country || undefined,
+        city: data.city || undefined,
       }),
     });
     setSaving(false);
@@ -116,12 +118,22 @@ function ProfileSettings() {
             placeholder="https://..."
           />
         </Field>
-        <Field label="Country" hint="Optional.">
+        <Field label="Country">
           <input
             style={inputStyle}
             value={data.country ?? ""}
             onChange={(e) => setData({ ...data, country: e.target.value })}
             maxLength={100}
+            required
+          />
+        </Field>
+        <Field label="City">
+          <input
+            style={inputStyle}
+            value={data.city ?? ""}
+            onChange={(e) => setData({ ...data, city: e.target.value })}
+            maxLength={100}
+            required
           />
         </Field>
         <button type="submit" style={primaryButtonStyle} disabled={saving}>
@@ -191,7 +203,7 @@ function CreatorSettings() {
       <form onSubmit={handleSubmit}>
         {error && <div style={errorBannerStyle}>{error}</div>}
         <Field
-          label="VVIP subscription price (USD)"
+          label="Exclusive subscription price (USD)"
           hint={`Your own subscribers pay this monthly. Leave blank to use the platform default ($${data.effectiveVvipPriceUsd.toFixed(2)}).`}
         >
           <input
@@ -227,7 +239,7 @@ function CreatorSettings() {
             checked={data.locationVisible}
             onChange={(e) => setData({ ...data, locationVisible: e.target.checked })}
           />
-          Show country publicly
+          Show country and city publicly
         </label>
         <button type="submit" style={primaryButtonStyle} disabled={saving}>
           {saving ? "Saving..." : saved ? "✓ Saved" : "Save creator settings"}

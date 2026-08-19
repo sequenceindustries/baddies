@@ -134,7 +134,7 @@ function WalletPanel() {
       </div>
       {payoutMessage && <p style={{ ...mutedSmallStyle, marginTop: "0.75rem", marginBottom: 0 }}>{payoutMessage}</p>}
       <p style={{ ...mutedSmallStyle, marginTop: "0.85rem", marginBottom: 0 }}>
-        Derived from ledger events (VVIP subscriptions, tips, payouts).
+        Derived from ledger events (Exclusive subscriptions, tips, payouts).
       </p>
     </div>
   );
@@ -329,7 +329,7 @@ function UploadForm({ canMonetise, onUploaded }: { canMonetise: boolean; onUploa
 
         <Field
           label="Access level"
-          hint="Free: anyone. VIP: unlocked by the platform-wide VIP pass. VVIP: only your own subscribers."
+          hint="Free: anyone. VIP: unlocked by the platform-wide VIP pass. Exclusive: only your own subscribers."
         >
           <select
             style={inputStyle}
@@ -341,7 +341,7 @@ function UploadForm({ canMonetise, onUploaded }: { canMonetise: boolean; onUploa
               VIP {canMonetise ? "" : "(verified creators only)"}
             </option>
             <option value="VVIP" disabled={!canMonetise}>
-              VVIP / Exclusive {canMonetise ? "" : "(verified creators only)"}
+              Exclusive {canMonetise ? "" : "(verified creators only)"}
             </option>
           </select>
         </Field>

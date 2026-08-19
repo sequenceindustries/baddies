@@ -44,6 +44,7 @@ export async function GET(
     avatarUrl: creator.user.profile?.avatarUrl,
     coverImageUrl: creator.coverImageUrl,
     country: creator.locationVisible ? creator.user.profile?.country : undefined,
+    city: creator.locationVisible ? creator.user.profile?.city : undefined,
     verifiedBadge: true, // this route only ever returns VERIFIED creators
     vvipPriceUsd: pricing.vvipPriceUsd,
     unlimitedParticipant: creator.unlimitedOptedIn,

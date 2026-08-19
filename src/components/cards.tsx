@@ -9,12 +9,14 @@ export interface CreatorCardData {
   displayName: string | null;
   avatarUrl: string | null;
   country: string | null;
+  city: string | null;
   verifiedBadge: true;
   vvipPriceUsd: number;
 }
 
 export function CreatorCard({ creator }: { creator: CreatorCardData }) {
   const initial = (creator.displayName ?? "?").trim().charAt(0).toUpperCase() || "?";
+  const location = [creator.city, creator.country].filter(Boolean).join(", ");
   return (
     <Link href={`/creators/${creator.creatorProfileId}`} style={cardLinkStyle}>
       <div style={creatorCardStyle}>
@@ -28,9 +30,9 @@ export function CreatorCard({ creator }: { creator: CreatorCardData }) {
         </div>
         <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>{creator.displayName ?? "Unnamed creator"}</div>
         <VerifiedBadge />
-        {creator.country && <div style={mutedSmallStyle}>{creator.country}</div>}
+        {location && <div style={mutedSmallStyle}>{location}</div>}
         <div style={priceRowStyle}>
-          <span>VVIP ${creator.vvipPriceUsd.toFixed(2)}/mo</span>
+          <span>Exclusive ${creator.vvipPriceUsd.toFixed(2)}/mo</span>
         </div>
       </div>
     </Link>
@@ -68,7 +70,7 @@ export interface ContentCardData {
 const ACCESS_LABEL: Record<ContentCardData["accessLevel"], string> = {
   FREE: "Free",
   VIP: "VIP",
-  VVIP: "VVIP / Exclusive",
+  VVIP: "Exclusive",
   PPV: "Pay per view",
 };
 

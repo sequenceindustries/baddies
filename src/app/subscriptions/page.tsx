@@ -110,7 +110,7 @@ export default function SubscriptionsPage() {
             </p>
           )}
 
-          <h2 style={sectionHeadingStyle}>Creator (VVIP) subscriptions</h2>
+          <h2 style={sectionHeadingStyle}>Exclusive subscriptions</h2>
           {subscriptions.length === 0 ? (
             <p style={{ color: "var(--text-muted)" }}>No creator subscriptions yet.</p>
           ) : (

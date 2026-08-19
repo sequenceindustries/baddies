@@ -19,6 +19,8 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [country, setCountry] = useState("");
+  const [city, setCity] = useState("");
   const [confirmsAdult, setConfirmsAdult] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -31,7 +33,7 @@ export default function RegisterPage() {
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, displayName, confirmsAdult }),
+      body: JSON.stringify({ email, password, displayName, country, city, confirmsAdult }),
     });
 
     setSubmitting(false);
@@ -84,6 +86,26 @@ export default function RegisterPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               minLength={10}
+              required
+            />
+          </Field>
+
+          <Field label="Country">
+            <input
+              style={inputStyle}
+              value={country}
+              onChange={(e) => setCountry(e.target.value)}
+              maxLength={100}
+              required
+            />
+          </Field>
+
+          <Field label="City">
+            <input
+              style={inputStyle}
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              maxLength={100}
               required
             />
           </Field>

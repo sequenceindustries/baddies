@@ -8,16 +8,21 @@ import { db } from "@/lib/db/client";
 export const dynamic = "force-dynamic";
 
 /**
- * Edit the current user's own public Profile (displayName/bio/avatarUrl).
- * Deliberately does not touch CreatorProfile — see PATCH
+ * Edit the current user's own public Profile (displayName/bio/avatarUrl/
+ * country/city). Deliberately does not touch CreatorProfile — see PATCH
  * /api/creator/settings for the creator-only fields (pricing overrides,
  * privacy toggles, Unlimited opt-in).
+ *
+ * country/city are mandatory (see Profile's comment in
+ * prisma/schema.prisma) — unlike bio/avatarUrl, they cannot be cleared
+ * back to null once set, only replaced with another non-empty value.
  */
 const UpdateProfileSchema = z.object({
   displayName: z.string().min(2).max(50).optional(),
   bio: z.string().max(2000).nullable().optional(),
   avatarUrl: z.string().url().nullable().optional(),
-  country: z.string().max(100).nullable().optional(),
+  country: z.string().min(1, "Country is required").max(100).optional(),
+  city: z.string().min(1, "City is required").max(100).optional(),
 });
 
 export async function GET() {
@@ -32,6 +37,7 @@ export async function GET() {
     bio: profile?.bio ?? null,
     avatarUrl: profile?.avatarUrl ?? null,
     country: profile?.country ?? null,
+    city: profile?.city ?? null,
   });
 }
 
@@ -57,5 +63,6 @@ export async function PATCH(req: NextRequest) {
     bio: profile.bio,
     avatarUrl: profile.avatarUrl,
     country: profile.country,
+    city: profile.city,
   });
 }
