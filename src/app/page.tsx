@@ -22,6 +22,7 @@ interface DiscoveryResponse {
 export default function LandingPage() {
   const router = useRouter();
   const { user, loading } = useSession();
+  const [topCreators, setTopCreators] = useState<CreatorCardData[]>([]);
   const [newCreators, setNewCreators] = useState<CreatorCardData[]>([]);
 
   useEffect(() => {
@@ -32,6 +33,11 @@ export default function LandingPage() {
 
   useEffect(() => {
     let cancelled = false;
+    fetch("/api/discovery/top-creators")
+      .then((r) => (r.ok ? r.json() : { creators: [] }))
+      .then((body: DiscoveryResponse) => {
+        if (!cancelled) setTopCreators(body.creators ?? []);
+      });
     fetch("/api/discovery/new-creators")
       .then((r) => (r.ok ? r.json() : { creators: [] }))
       .then((body: DiscoveryResponse) => {
@@ -66,6 +72,12 @@ export default function LandingPage() {
           </Link>
         </div>
       </section>
+
+      {topCreators.length > 0 && (
+        <section style={sectionStyle}>
+          <CreatorCardRow title="Top Baddies" creators={topCreators} />
+        </section>
+      )}
 
       {newCreators.length > 0 && (
         <section style={sectionStyle}>

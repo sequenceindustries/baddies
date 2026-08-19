@@ -2,13 +2,47 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
 import { toCreatorCard, CREATOR_CARD_SELECT } from "@/lib/discovery/creator-card";
+import { getFanCountry, getNearbyCreators } from "@/lib/discovery/nearby";
 import { computeTrendingContent } from "@/lib/discovery/trending";
+import type { Prisma } from "@prisma/client";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
 export const dynamic = "force-dynamic";
 
 const SECTION_LIMIT = 10;
+
+/**
+ * Every content section on Home mixes posts from potentially many
+ * different creators, unlike the single-creator timeline (see
+ * ContentTimeline), so each item needs to carry its own creator identity
+ * — name and avatar, both already public — for ContentCard to render a
+ * clickable byline instead of an anonymous post.
+ */
+const CONTENT_WITH_CREATOR_SELECT = {
+  id: true,
+  accessLevel: true,
+  caption: true,
+  publishedAt: true,
+  creatorProfileId: true,
+  creatorProfile: {
+    select: { user: { select: { profile: { select: { displayName: true, avatarUrl: true } } } } },
+  },
+} as const;
+
+type ContentWithCreator = Prisma.ContentGetPayload<{ select: typeof CONTENT_WITH_CREATOR_SELECT }>;
+
+function shapeContentItem(item: ContentWithCreator) {
+  return {
+    contentId: item.id,
+    accessLevel: item.accessLevel,
+    caption: item.caption,
+    publishedAt: item.publishedAt,
+    creatorProfileId: item.creatorProfileId,
+    creatorDisplayName: item.creatorProfile.user.profile?.displayName ?? null,
+    creatorAvatarUrl: item.creatorProfile.user.profile?.avatarUrl ?? null,
+  };
+}
 
 /**
  * Fan Home, composed per build brief §13's stated priority order:
@@ -58,29 +92,6 @@ export async function GET() {
   });
 }
 
-async function getFanCountry(fanId?: string): Promise<string | null> {
-  if (!fanId) return null;
-  const profile = await db.profile.findUnique({ where: { userId: fanId }, select: { country: true } });
-  return profile?.country ?? null;
-}
-
-/** "Baddies Near You" (§ location auto-detect) — same real country as the fan's own, not a self-reported one. */
-async function getNearbyCreators(fanCountry: string | null, excludeCreatorIds: Set<string>) {
-  if (!fanCountry) return [];
-  const creators = await db.creatorProfile.findMany({
-    where: {
-      status: "VERIFIED",
-      locationVisible: true,
-      id: { notIn: Array.from(excludeCreatorIds) },
-      user: { profile: { country: fanCountry } },
-    },
-    orderBy: { approvedAt: "desc" },
-    take: SECTION_LIMIT,
-    select: CREATOR_CARD_SELECT,
-  });
-  return Promise.all(creators.map(toCreatorCard));
-}
-
 async function getFollowedCreatorsContent(fanId?: string): Promise<{ items: unknown[]; creatorIds: string[] }> {
   if (!fanId) return { items: [], creatorIds: [] };
 
@@ -96,10 +107,10 @@ async function getFollowedCreatorsContent(fanId?: string): Promise<{ items: unkn
     },
     orderBy: { publishedAt: "desc" },
     take: SECTION_LIMIT,
-    select: { id: true, accessLevel: true, caption: true, publishedAt: true, creatorProfileId: true },
+    select: CONTENT_WITH_CREATOR_SELECT,
   });
 
-  return { items, creatorIds };
+  return { items: items.map(shapeContentItem), creatorIds };
 }
 
 /**
@@ -128,10 +139,10 @@ async function getSubscribedCreatorsContent(fanId?: string) {
     },
     orderBy: { publishedAt: "desc" },
     take: SECTION_LIMIT,
-    select: { id: true, accessLevel: true, caption: true, publishedAt: true, creatorProfileId: true },
+    select: CONTENT_WITH_CREATOR_SELECT,
   });
 
-  return { items };
+  return { items: items.map(shapeContentItem) };
 }
 
 async function getUnlimitedParticipatingCreators() {
@@ -161,9 +172,9 @@ async function getVipContentSection() {
     },
     orderBy: { publishedAt: "desc" },
     take: SECTION_LIMIT,
-    select: { id: true, accessLevel: true, caption: true, publishedAt: true, creatorProfileId: true },
+    select: CONTENT_WITH_CREATOR_SELECT,
   });
-  return items;
+  return items.map(shapeContentItem);
 }
 
 async function getTrendingSection() {
@@ -172,10 +183,10 @@ async function getTrendingSection() {
 
   const content = await db.content.findMany({
     where: { id: { in: ranked.map((r) => r.contentId) }, status: "APPROVED", publishedAt: { not: null } },
-    select: { id: true, accessLevel: true, caption: true, publishedAt: true, creatorProfileId: true },
+    select: CONTENT_WITH_CREATOR_SELECT,
   });
   const byId = new Map(content.map((c: (typeof content)[number]) => [c.id, c]));
-  return ranked.map((r) => byId.get(r.contentId)).filter(Boolean);
+  return ranked.map((r) => byId.get(r.contentId)).filter((c): c is ContentWithCreator => Boolean(c)).map(shapeContentItem);
 }
 
 async function getNewCreatorsSection() {

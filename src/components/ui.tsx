@@ -166,9 +166,6 @@ export function Nav() {
             )}
             {user.role !== "ADMIN" && (
               <>
-                <Link href="/search" style={linkStyle}>
-                  Search
-                </Link>
                 <Link href="/discovery" style={linkStyle}>
                   Discover
                 </Link>
@@ -195,8 +192,8 @@ export function Nav() {
           </>
         ) : (
           <>
-            <Link href="/search" style={linkStyle}>
-              Search
+            <Link href="/discovery" style={linkStyle}>
+              Discover
             </Link>
             <Link href="/login" style={linkStyle}>
               Sign in

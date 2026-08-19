@@ -114,7 +114,7 @@ export default function CreatorProfilePage() {
             initial
           )}
         </div>
-        <div style={{ flex: 1 }}>
+        <div style={headerTextBlockStyle}>
           <h1 style={{ ...displayHeadingStyle, marginBottom: "0.3rem" }}>
             {creator.displayName ?? "Unnamed creator"}
             {creator.isLive && <span style={liveNowBadgeStyle}>● LIVE NOW</span>}
@@ -132,11 +132,13 @@ export default function CreatorProfilePage() {
           </div>
         </div>
         {!isOwnProfile && user && (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.5rem" }}>
+          <div style={headerActionsStyle}>
             <button onClick={toggleFollow} disabled={followBusy} style={followButtonStyle(following)}>
               {following ? "Following" : "Follow"}
             </button>
-            <ReportButton reportedUserId={creator.userId} />
+            <div style={{ marginTop: "auto" }}>
+              <ReportButton reportedUserId={creator.userId} />
+            </div>
           </div>
         )}
       </div>
@@ -378,16 +380,19 @@ const mainStyle: React.CSSProperties = { padding: "2.5rem 1.75rem", maxWidth: "1
 const headerStyle: React.CSSProperties = {
   display: "flex",
   gap: "1.5rem",
-  alignItems: "flex-start",
+  alignItems: "stretch",
   marginBottom: "2.5rem",
   paddingBottom: "2rem",
   borderBottom: "1px solid var(--border)",
+  textAlign: "left",
 };
 
+// Square (rounded, not a full circle) per feedback on this specific
+// header — the small nav/card avatars elsewhere stay circular.
 const avatarStyle: React.CSSProperties = {
-  width: "84px",
-  height: "84px",
-  borderRadius: "50%",
+  width: "96px",
+  height: "96px",
+  borderRadius: "16px",
   background: "var(--surface-raised)",
   border: "1px solid var(--border)",
   display: "flex",
@@ -398,6 +403,23 @@ const avatarStyle: React.CSSProperties = {
   color: "var(--accent-gold)",
   flexShrink: 0,
   overflow: "hidden",
+};
+
+// Overrides the app-wide `main { text-align: center }` rule — this
+// header reads as a left-aligned identity block (avatar, name, bio),
+// not centered page copy.
+const headerTextBlockStyle: React.CSSProperties = { flex: 1, textAlign: "left" };
+
+// Follow sits vertically centered in the header's height (justifyContent:
+// center); Report gets marginTop: auto so it's pinned to the bottom
+// regardless — a flex child's own margin: auto on the main axis wins
+// over the container's justify-content for that one item.
+const headerActionsStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-end",
+  justifyContent: "center",
+  gap: "0.5rem",
 };
 
 const mutedStyle: React.CSSProperties = { color: "var(--text-muted)", fontSize: "0.9rem", margin: "0.2rem 0" };

@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   useSession,
   displayHeadingStyle,
   cardStyle,
   Field,
   inputStyle,
+  checkboxRowStyle,
   primaryButtonStyle,
   errorBannerStyle,
 } from "@/components/ui";
@@ -42,8 +44,11 @@ const VERIFICATION_STEPS: { type: "IDENTITY" | "AGE" | "LIVENESS"; label: string
   { type: "LIVENESS", label: "Liveness" },
 ];
 
+type DashboardTab = "overview" | "content" | "golive" | "settings" | "account";
+
 export default function CreatorDashboardPage() {
   const { user, loading, refresh } = useSession();
+  const [tab, setTab] = useState<DashboardTab>("overview");
 
   if (loading) return <main style={mainStyle} />;
 
@@ -64,17 +69,64 @@ export default function CreatorDashboardPage() {
     );
   }
 
+  const status = user.creatorProfile.status as CreatorStatus;
+  const canMonetise = status === "VERIFIED";
+  const active = status !== "REJECTED" && status !== "BANNED";
+
+  // Go Live only means anything once verified — no point showing a tab
+  // for it while someone's still mid-application.
+  const tabs: { id: DashboardTab; label: string }[] = [
+    { id: "overview", label: "Overview" },
+    { id: "content", label: "Content" },
+    ...(canMonetise ? ([{ id: "golive", label: "Go Live" }] as const) : []),
+    { id: "settings", label: "Settings" },
+    { id: "account", label: "Account" },
+  ];
+
   return (
     <main style={mainStyle}>
       <h1 style={displayHeadingStyle}>Creator Dashboard</h1>
-      <StatusPanel status={user.creatorProfile.status as CreatorStatus} onAdvance={refresh} />
-      {user.creatorProfile.status === "VERIFIED" && <LivePanel />}
-      <WalletPanel />
-      {user.creatorProfile.status !== "REJECTED" && user.creatorProfile.status !== "BANNED" && (
-        <ContentPanel canMonetise={user.creatorProfile.status === "VERIFIED"} />
+      <StatusPanel status={status} onAdvance={refresh} />
+
+      {active && (
+        <>
+          <div style={tabBarStyle}>
+            {tabs.map((t) => (
+              <button key={t.id} onClick={() => setTab(t.id)} style={tabButtonStyle(tab === t.id)}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {tab === "overview" && <WalletPanel />}
+          {tab === "content" && <ContentPanel canMonetise={canMonetise} />}
+          {tab === "golive" && canMonetise && <LivePanel />}
+          {tab === "settings" && <CreatorSettingsPanel />}
+          {tab === "account" && <AccountPanel displayName={user.displayName} email={user.email} />}
+        </>
       )}
     </main>
   );
+}
+
+const tabBarStyle: React.CSSProperties = {
+  display: "flex",
+  gap: "0.5rem",
+  marginBottom: "1.75rem",
+  flexWrap: "wrap",
+};
+
+function tabButtonStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: "0.5rem 1.1rem",
+    borderRadius: "999px",
+    fontSize: "0.85rem",
+    fontWeight: 600,
+    cursor: "pointer",
+    background: active ? "var(--accent)" : "transparent",
+    color: active ? "var(--bg)" : "var(--text-muted)",
+    border: active ? "none" : "1px solid var(--border)",
+  };
 }
 
 interface WalletBalances {
@@ -277,6 +329,151 @@ function StatusPanel({ status, onAdvance }: { status: CreatorStatus; onAdvance: 
     </div>
   );
 }
+
+interface CreatorSettingsData {
+  vvipPriceOverride: number | null;
+  effectiveVvipPriceUsd: number;
+  unlimitedOptedIn: boolean;
+  subscriberCountVisible: boolean;
+  locationVisible: boolean;
+}
+
+/** Pricing, VIP-pass opt-in, and privacy toggles — moved here from the general /settings page so a creator's whole operation (status, wallet, content, and now this) lives in one place. */
+function CreatorSettingsPanel() {
+  const [data, setData] = useState<CreatorSettingsData | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/creator/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (!cancelled && body) setData(body);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!data) return;
+    setSaving(true);
+    setError(null);
+    setSaved(false);
+    const res = await fetch("/api/creator/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        vvipPriceOverride: data.vvipPriceOverride,
+        unlimitedOptedIn: data.unlimitedOptedIn,
+        subscriberCountVisible: data.subscriberCountVisible,
+        locationVisible: data.locationVisible,
+      }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(body?.error ?? "Save failed.");
+      return;
+    }
+    setSaved(true);
+  }
+
+  if (!data) return null;
+
+  return (
+    <div style={cardStyle}>
+      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Creator settings</h2>
+      <form onSubmit={handleSubmit}>
+        {error && <div style={errorBannerStyle}>{error}</div>}
+        <Field
+          label="Exclusive subscription price (USD)"
+          hint={`Your own subscribers pay this monthly. Leave blank to use the platform default ($${data.effectiveVvipPriceUsd.toFixed(2)}).`}
+        >
+          <input
+            style={inputStyle}
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={data.vvipPriceOverride ?? ""}
+            onChange={(e) =>
+              setData({ ...data, vvipPriceOverride: e.target.value ? Number(e.target.value) : null })
+            }
+          />
+        </Field>
+        <label style={checkboxRowStyle}>
+          <input
+            type="checkbox"
+            checked={data.unlimitedOptedIn}
+            onChange={(e) => setData({ ...data, unlimitedOptedIn: e.target.checked })}
+          />
+          Include my VIP-tier content in the platform-wide VIP Pass
+        </label>
+        <label style={checkboxRowStyle}>
+          <input
+            type="checkbox"
+            checked={data.subscriberCountVisible}
+            onChange={(e) => setData({ ...data, subscriberCountVisible: e.target.checked })}
+          />
+          Show subscriber count publicly
+        </label>
+        <label style={checkboxRowStyle}>
+          <input
+            type="checkbox"
+            checked={data.locationVisible}
+            onChange={(e) => setData({ ...data, locationVisible: e.target.checked })}
+          />
+          Show country and city publicly
+        </label>
+        <button type="submit" style={primaryButtonStyle} disabled={saving}>
+          {saving ? "Saving..." : saved ? "✓ Saved" : "Save creator settings"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * Compact identity summary — display name, email, account type — with a
+ * link out to /settings for the actual profile form (photo, bio,
+ * location). Kept deliberately thin: the full editable form stays on
+ * /settings rather than being duplicated here.
+ */
+function AccountPanel({ displayName, email }: { displayName: string | null; email: string }) {
+  return (
+    <div style={cardStyle}>
+      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Account</h2>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", fontSize: "0.9rem" }}>
+        <div>
+          <div style={mutedSmallStyle}>Display name</div>
+          {displayName || "—"}
+        </div>
+        <div>
+          <div style={mutedSmallStyle}>Email</div>
+          {email}
+        </div>
+        <div>
+          <div style={mutedSmallStyle}>Account type</div>
+          Creator
+        </div>
+      </div>
+      <Link href="/settings" style={accountLinkStyle}>
+        Edit profile photo, bio & location →
+      </Link>
+    </div>
+  );
+}
+
+const accountLinkStyle: React.CSSProperties = {
+  display: "inline-block",
+  marginTop: "1.25rem",
+  fontSize: "0.85rem",
+  color: "var(--accent)",
+  fontWeight: 600,
+};
 
 function ContentPanel({ canMonetise }: { canMonetise: boolean }) {
   const [items, setItems] = useState<OwnContentItem[]>([]);

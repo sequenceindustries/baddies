@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { CreatorCardRow, ContentGrid, type CreatorCardData, type ContentCardData } from "@/components/cards";
-import { displayHeadingStyle } from "@/components/ui";
 import { HowItWorks } from "@/components/how-it-works";
 
 interface RawContentItem {
@@ -13,6 +12,9 @@ interface RawContentItem {
   caption?: string | null;
   publishedAt?: string | null;
   mediaType?: ContentCardData["mediaType"];
+  creatorProfileId?: string | null;
+  creatorDisplayName?: string | null;
+  creatorAvatarUrl?: string | null;
 }
 
 interface HomeResponse {
@@ -35,6 +37,9 @@ function normalize(items: RawContentItem[]): ContentCardData[] {
       caption: i.caption,
       publishedAt: i.publishedAt,
       mediaType: i.mediaType,
+      creatorProfileId: i.creatorProfileId,
+      creatorDisplayName: i.creatorDisplayName,
+      creatorAvatarUrl: i.creatorAvatarUrl,
     }));
 }
 
@@ -73,8 +78,6 @@ export default function FanHomePage() {
 
   return (
     <main style={mainStyle}>
-      <h1 style={displayHeadingStyle}>Home</h1>
-
       {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
       {!data && !error && <p style={{ color: "var(--text-muted)" }}>Loading...</p>}
 
@@ -83,21 +86,21 @@ export default function FanHomePage() {
       {data && (
         <>
           {normalize(data.following).length > 0 && (
-            <section style={{ marginBottom: "2.25rem" }}>
+            <section style={sectionWrapStyle}>
               <h2 style={sectionHeadingStyle}>Following</h2>
               <ContentGrid items={normalize(data.following)} />
             </section>
           )}
 
           {normalize(data.subscribed).length > 0 && (
-            <section style={{ marginBottom: "2.25rem" }}>
-              <h2 style={sectionHeadingStyle}>Your Exclusive</h2>
+            <section style={sectionWrapStyle}>
+              <h2 style={sectionHeadingStyle}>Your Exclusives</h2>
               <ContentGrid items={normalize(data.subscribed)} />
             </section>
           )}
 
           {normalize(data.vipContent).length > 0 && (
-            <section style={{ marginBottom: "2.25rem" }}>
+            <section style={sectionWrapStyle}>
               <h2 style={sectionHeadingStyle}>VIP Content</h2>
               <ContentGrid items={normalize(data.vipContent)} />
             </section>
@@ -105,10 +108,9 @@ export default function FanHomePage() {
 
           <CreatorCardRow title="Baddies Near You" creators={data.nearby} />
           <CreatorCardRow title="New Baddies" creators={data.newCreators} />
-          <CreatorCardRow title="Included with VIP Pass" creators={data.unlimited} />
 
           {normalize(data.trending).length > 0 && (
-            <section style={{ marginBottom: "2.25rem" }}>
+            <section style={sectionWrapStyle}>
               <h2 style={sectionHeadingStyle}>Trending</h2>
               <ContentGrid items={normalize(data.trending)} />
             </section>
@@ -117,7 +119,6 @@ export default function FanHomePage() {
           {normalize(data.following).length === 0 &&
             normalize(data.subscribed).length === 0 &&
             normalize(data.vipContent).length === 0 &&
-            data.unlimited.length === 0 &&
             data.nearby.length === 0 &&
             normalize(data.trending).length === 0 &&
             data.newCreators.length === 0 && (
@@ -205,6 +206,10 @@ const bannerButtonStyle: React.CSSProperties = {
 };
 
 const mainStyle: React.CSSProperties = { padding: "2.5rem 1.75rem", maxWidth: "1100px", margin: "0 auto" };
+
+// Clearly-separated categories rather than sections running straight
+// into each other — this page stacks a lot of them.
+const sectionWrapStyle: React.CSSProperties = { marginBottom: "4rem" };
 
 const sectionHeadingStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)",

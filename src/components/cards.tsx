@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { VerifiedBadge } from "./ui";
 
 export interface CreatorCardData {
@@ -104,6 +105,13 @@ export interface ContentCardData {
   mediaType?: "IMAGE" | "VIDEO" | "AUDIO" | null;
   likeCount?: number;
   viewerHasLiked?: boolean;
+  // Present when a card can come from more than one creator in the same
+  // feed (Home's Following/VIP Content/Trending) — absent on
+  // ContentTimeline, a single creator's own profile, where repeating
+  // their name on every post would be redundant with the page header.
+  creatorProfileId?: string | null;
+  creatorDisplayName?: string | null;
+  creatorAvatarUrl?: string | null;
 }
 
 const ACCESS_LABEL: Record<ContentCardData["accessLevel"], string> = {
@@ -136,6 +144,7 @@ export function ContentCard({ item }: { item: ContentCardData }) {
   const [liked, setLiked] = useState(item.viewerHasLiked ?? false);
   const [likeCount, setLikeCount] = useState(item.likeCount ?? 0);
   const [likeBusy, setLikeBusy] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   async function handleView() {
     setLoading(true);
@@ -188,13 +197,28 @@ export function ContentCard({ item }: { item: ContentCardData }) {
 
   return (
     <div className="hover-lift" style={contentCardStyle}>
+      {item.creatorDisplayName && item.creatorProfileId && (
+        <Link href={`/creators/${item.creatorProfileId}`} style={cardCreatorLinkStyle}>
+          <span style={cardCreatorAvatarStyle}>
+            {item.creatorAvatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={item.creatorAvatarUrl} alt="" style={avatarImgStyle} />
+            ) : (
+              item.creatorDisplayName.charAt(0).toUpperCase()
+            )}
+          </span>
+          {item.creatorDisplayName}
+        </Link>
+      )}
       <div style={cardMetaRowStyle}>
         <TierBadge accessLevel={item.accessLevel} />
         {item.publishedAt && <span style={mutedSmallStyle}>{timeAgo(item.publishedAt)}</span>}
       </div>
       {item.caption && <p style={captionStyle}>{item.caption}</p>}
       {media ? (
-        <MediaPreview mimeType={media.mimeType} url={media.signedUrl} />
+        <button onClick={() => setExpanded(true)} style={mediaButtonStyle} aria-label="Open full size">
+          <MediaPreview mimeType={media.mimeType} url={media.signedUrl} />
+        </button>
       ) : (
         <div style={contentThumbStyle}>
           {loading ? (
@@ -222,7 +246,39 @@ export function ContentCard({ item }: { item: ContentCardData }) {
         </button>
         <ReportButton contentId={item.contentId} />
       </div>
+      {expanded && media && <MediaLightbox mimeType={media.mimeType} url={media.signedUrl} onClose={() => setExpanded(false)} />}
     </div>
+  );
+}
+
+/** Full-size view — clicking a card's media opens this instead of only ever showing the cropped card-sized preview. */
+/**
+ * Rendered via a portal straight onto document.body — not nested inside
+ * the card. A `position: fixed` element is only fixed to the viewport
+ * when *every* ancestor is transform-free; the card it's opened from
+ * sits inside `.hover-lift`, which applies a `transform` on hover, so
+ * without the portal the "full screen" overlay ends up boxed inside the
+ * card instead of covering the screen.
+ */
+function MediaLightbox({ mimeType, url, onClose }: { mimeType: string; url: string; onClose: () => void }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div style={lightboxBackdropStyle} onClick={onClose} role="dialog" aria-modal="true">
+      <button onClick={onClose} style={lightboxCloseStyle} aria-label="Close">
+        ✕
+      </button>
+      <div style={lightboxContentStyle} onClick={(e) => e.stopPropagation()}>
+        {mimeType.startsWith("video/") ? (
+          <video src={url} controls autoPlay style={lightboxMediaStyle} />
+        ) : mimeType.startsWith("audio/") ? (
+          <audio src={url} controls autoPlay style={{ width: "100%" }} />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={url} alt="" style={lightboxMediaStyle} />
+        )}
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -497,7 +553,9 @@ const priceRowStyle: React.CSSProperties = {
 
 const mutedSmallStyle: React.CSSProperties = { fontSize: "0.78rem", color: "var(--text-muted)" };
 
-const sectionStyle: React.CSSProperties = { marginBottom: "2.25rem" };
+// Matches src/app/(fan)/home/page.tsx's sectionWrapStyle — clearly-
+// separated categories rather than sections running into each other.
+const sectionStyle: React.CSSProperties = { marginBottom: "4rem" };
 
 const sectionHeadingStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)",
@@ -528,6 +586,80 @@ const gridStyle: React.CSSProperties = {
 const gridItemStyle: React.CSSProperties = { minWidth: 0 };
 
 const captionStyle: React.CSSProperties = { fontSize: "0.85rem", margin: 0, color: "var(--text)" };
+
+const cardCreatorLinkStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.5rem",
+  color: "var(--text)",
+  textDecoration: "none",
+  fontWeight: 600,
+  fontSize: "0.85rem",
+};
+
+const cardCreatorAvatarStyle: React.CSSProperties = {
+  width: "26px",
+  height: "26px",
+  borderRadius: "50%",
+  background: "var(--surface-raised)",
+  border: "1px solid var(--border)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: "0.7rem",
+  fontWeight: 700,
+  color: "var(--accent)",
+  overflow: "hidden",
+  flexShrink: 0,
+};
+
+const mediaButtonStyle: React.CSSProperties = {
+  display: "block",
+  width: "100%",
+  padding: 0,
+  border: "none",
+  background: "none",
+  cursor: "zoom-in",
+};
+
+const lightboxBackdropStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0, 0, 0, 0.88)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 100,
+  padding: "2rem",
+};
+
+const lightboxContentStyle: React.CSSProperties = {
+  maxWidth: "min(92vw, 1100px)",
+  maxHeight: "90vh",
+};
+
+const lightboxMediaStyle: React.CSSProperties = {
+  display: "block",
+  maxWidth: "100%",
+  maxHeight: "90vh",
+  borderRadius: "10px",
+  objectFit: "contain",
+};
+
+const lightboxCloseStyle: React.CSSProperties = {
+  position: "fixed",
+  top: "1.25rem",
+  right: "1.5rem",
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  color: "var(--text)",
+  borderRadius: "50%",
+  width: "40px",
+  height: "40px",
+  fontSize: "1.1rem",
+  cursor: "pointer",
+  zIndex: 101,
+};
 
 const ghostSmallButtonStyle: React.CSSProperties = {
   background: "transparent",
