@@ -12,6 +12,7 @@ import {
   checkboxRowStyle,
   primaryButtonStyle,
   errorBannerStyle,
+  ImageUploadField,
 } from "@/components/ui";
 
 const STATUS_COPY: Record<string, string> = {
@@ -31,6 +32,8 @@ export default function ApplyPage() {
   const [displayName, setDisplayName] = useState("");
   const [legalName, setLegalName] = useState("");
   const [bio, setBio] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(null);
   const [confirmsAdult, setConfirmsAdult] = useState(false);
   const [agreesToCreatorAgreement, setAgreesToCreatorAgreement] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +84,8 @@ export default function ApplyPage() {
         displayName,
         legalName,
         bio: bio || undefined,
+        avatarUrl: avatarUrl || undefined,
+        featuredImageUrl: featuredImageUrl || undefined,
         confirmsAdult,
         agreesToCreatorAgreement,
       }),
@@ -139,6 +144,21 @@ export default function ApplyPage() {
               maxLength={2000}
             />
           </Field>
+
+          <ImageUploadField
+            label="Profile picture"
+            hint="Optional now — you can add or change this later in Settings."
+            value={avatarUrl}
+            onChange={setAvatarUrl}
+          />
+
+          <ImageUploadField
+            label="Featured image"
+            hint="What shows on Top Baddies, Baddies Near You, and other discovery cards. Optional now — add or change it later from your Dashboard's Content tab. Keep it non-explicit."
+            value={featuredImageUrl}
+            onChange={setFeaturedImageUrl}
+            shape="rect"
+          />
 
           <label style={checkboxRowStyle}>
             <input

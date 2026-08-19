@@ -16,6 +16,13 @@ export interface CreatorCardSource {
   locationVisible: boolean;
   vvipPriceOverride: unknown;
   isLive: boolean;
+  // The creator's own chosen "featured image" (set via /apply at
+  // signup or the Dashboard's Content tab) — reuses the schema's
+  // existing coverImageUrl field. Takes priority over the latest-Free-
+  // post fallback below when set, since it's a deliberate choice about
+  // what represents this creator on discovery cards, not just whatever
+  // they happened to post most recently.
+  coverImageUrl: string | null;
   user: {
     profile: { displayName: string | null; avatarUrl: string | null; country: string | null; city: string | null } | null;
   };
@@ -35,7 +42,12 @@ export interface CreatorCard {
 }
 
 export async function toCreatorCard(creator: CreatorCardSource): Promise<CreatorCard> {
-  const [pricing, thumbnail] = await Promise.all([resolveCreatorPricing(creator), getLatestFreeThumbnail(creator.id)]);
+  // Skip the latest-Free-post lookup entirely once a featured image is
+  // set — it'll never be used, no reason to pay for the query.
+  const [pricing, thumbnail] = await Promise.all([
+    resolveCreatorPricing(creator),
+    creator.coverImageUrl ? Promise.resolve(null) : getLatestFreeThumbnail(creator.id),
+  ]);
   return {
     creatorProfileId: creator.id,
     displayName: creator.user.profile?.displayName ?? null,
@@ -45,9 +57,20 @@ export async function toCreatorCard(creator: CreatorCardSource): Promise<Creator
     verifiedBadge: true,
     vvipPriceUsd: pricing.vvipPriceUsd,
     isLive: creator.isLive,
-    thumbnailUrl: thumbnail?.signedUrl ?? null,
-    thumbnailMimeType: thumbnail?.mimeType ?? null,
+    thumbnailUrl: creator.coverImageUrl ?? thumbnail?.signedUrl ?? null,
+    thumbnailMimeType: creator.coverImageUrl ? guessMimeType(creator.coverImageUrl) : (thumbnail?.mimeType ?? null),
   };
+}
+
+// The featured image is either a data: URI (uploaded via the file
+// picker — see AvatarField's pattern in settings/page.tsx, reused for
+// this) or, in principle, a real hosted URL; either way CreatorCard only
+// needs to know image vs. video to pick the right <img>/<video> tag, so
+// a data: URI's declared mime type is enough and anything else safely
+// defaults to a plain image.
+function guessMimeType(url: string): string {
+  const match = /^data:([^;,]+)[;,]/.exec(url);
+  return match?.[1] ?? "image/jpeg";
 }
 
 /**
@@ -77,5 +100,6 @@ export const CREATOR_CARD_SELECT = {
   locationVisible: true,
   vvipPriceOverride: true,
   isLive: true,
+  coverImageUrl: true,
   user: { select: { profile: { select: { displayName: true, avatarUrl: true, country: true, city: true } } } },
 } as const;

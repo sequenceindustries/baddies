@@ -456,6 +456,137 @@ export const inputStyle: React.CSSProperties = {
   fontSize: "0.95rem",
 };
 
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2MB — these fields are all plain data: URI strings (Profile.avatarUrl, CreatorProfile.coverImageUrl), no upload endpoint needed, so this keeps the row reasonable.
+
+/**
+ * A file picker that reads the chosen image straight to a data: URI
+ * client-side, no upload endpoint needed — the target fields
+ * (Profile.avatarUrl, CreatorProfile.coverImageUrl) are already just
+ * plain strings. Shared by every place a creator sets a profile picture
+ * or featured image: /settings, /apply (at signup), and the Dashboard's
+ * Content tab (see ImageUploadField's callers).
+ */
+export function ImageUploadField({
+  label,
+  hint,
+  value,
+  onChange,
+  shape = "circle",
+}: {
+  label: string;
+  hint?: string;
+  value: string | null;
+  onChange: (dataUrl: string | null) => void;
+  shape?: "circle" | "rect";
+}) {
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file later
+    if (!file) return;
+    setError(null);
+    if (file.size > MAX_IMAGE_BYTES) {
+      setError("Image is too large — please pick one under 2MB.");
+      return;
+    }
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    onChange(dataUrl);
+  }
+
+  return (
+    <Field label={label} hint={hint ?? "JPG, PNG, or WebP, up to 2MB."} error={error ?? undefined}>
+      <div style={imageUploadRowStyle}>
+        <div style={shape === "circle" ? imageUploadPreviewCircleStyle : imageUploadPreviewRectStyle}>
+          {value ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={value} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : (
+            "+"
+          )}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          <label style={uploadButtonStyle}>
+            Upload photo
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={handleFile}
+              style={{ display: "none" }}
+            />
+          </label>
+          {value && (
+            <button type="button" onClick={() => onChange(null)} style={removeImageButtonStyle}>
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
+    </Field>
+  );
+}
+
+const imageUploadRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "1rem",
+  marginTop: "0.4rem",
+};
+
+const imageUploadPreviewCircleStyle: React.CSSProperties = {
+  width: "64px",
+  height: "64px",
+  borderRadius: "50%",
+  background: "var(--surface-raised)",
+  border: "2px solid var(--accent)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "var(--accent)",
+  fontWeight: 700,
+  fontFamily: "var(--font-display)",
+  fontSize: "1.3rem",
+  overflow: "hidden",
+  flexShrink: 0,
+};
+
+// Wider than tall — a featured image is a card thumbnail (4:5-ish once
+// cropped into CreatorCard), not an avatar, so the preview shape hints
+// at that instead of implying a face-crop like the circle does.
+const imageUploadPreviewRectStyle: React.CSSProperties = {
+  ...imageUploadPreviewCircleStyle,
+  width: "84px",
+  height: "64px",
+  borderRadius: "10px",
+};
+
+const uploadButtonStyle: React.CSSProperties = {
+  display: "inline-block",
+  background: "var(--accent)",
+  color: "var(--bg)",
+  borderRadius: "var(--radius)",
+  padding: "0.55rem 1rem",
+  fontWeight: 600,
+  fontSize: "0.85rem",
+  cursor: "pointer",
+  textAlign: "center",
+};
+
+const removeImageButtonStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "1px solid var(--border)",
+  color: "var(--text-muted)",
+  borderRadius: "var(--radius)",
+  padding: "0.45rem 1rem",
+  fontSize: "0.82rem",
+  cursor: "pointer",
+};
+
 export const checkboxRowStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "flex-start",

@@ -98,7 +98,7 @@ export default function DiscoveryPage() {
         </>
       ) : (
         <>
-          <CreatorCardRow title="top baddies" creators={topCreators} />
+          <CreatorCardRow title="Top baddies" creators={topCreators} />
           <CreatorCardRow title="baddies near you" creators={nearbyCreators} />
 
           <section style={sectionWrapStyle}>

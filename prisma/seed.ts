@@ -45,6 +45,12 @@ interface DummyCreatorSpec {
   // photo crop reads as an actual profile picture rather than a plain
   // initial-on-a-gradient placeholder, without depicting anyone.
   avatarPhotoId: string;
+  // CreatorProfile.coverImageUrl — what shows on Top Baddies, Baddies
+  // Near You, etc. (see src/lib/discovery/creator-card.ts). Same
+  // no-people rule as every other seed photo; a real creator sets their
+  // own via /apply or the Dashboard's Content tab (ImageUploadField),
+  // this is just the seed data's stand-in for that.
+  featuredPhotoId: string;
   posts: DummyPost[];
 }
 
@@ -61,6 +67,7 @@ const DUMMY_CREATORS: DummyCreatorSpec[] = [
     colorA: "#c9a961",
     colorB: "#0e0e11",
     avatarPhotoId: "1506905925346-21bda4d32df4",
+    featuredPhotoId: "1500375592092-40eb2168fd21",
     posts: [
       { tier: "FREE", caption: "Table Mountain never gets old", daysAgo: 9, photoId: "1506905925346-21bda4d32df4" },
       { tier: "FREE", caption: "Sunday market run, Bo-Kaap edition.", daysAgo: 4, photoId: "1490750967868-88aa4486c946" },
@@ -82,6 +89,7 @@ const DUMMY_CREATORS: DummyCreatorSpec[] = [
     colorA: "#7c2d3b",
     colorB: "#1e1e25",
     avatarPhotoId: "1449824913935-59a10b8d2000",
+    featuredPhotoId: "1465447142348-e9952c393450",
     posts: [
       { tier: "FREE", caption: "Morning run before the city wakes up.", daysAgo: 8, photoId: "1449824913935-59a10b8d2000" },
       { tier: "FREE", caption: "New look, who dis?", daysAgo: 3, photoId: "1441986300917-64674bd600d8" },
@@ -103,6 +111,7 @@ const DUMMY_CREATORS: DummyCreatorSpec[] = [
     colorA: "#4c5faf",
     colorB: "#0e0e11",
     avatarPhotoId: "1477959858617-67f85cf4f1df",
+    featuredPhotoId: "1470071459604-3b5ec3a7fe05",
     posts: [
       { tier: "FREE", caption: "Golden hour by the Thames.", daysAgo: 10, photoId: "1477959858617-67f85cf4f1df" },
       { tier: "FREE", caption: "First post here — thanks for the follows!", daysAgo: 5, photoId: "1441974231531-c6227db76b6e" },
@@ -110,6 +119,116 @@ const DUMMY_CREATORS: DummyCreatorSpec[] = [
       { tier: "VIP", caption: "Behind the scenes from today's shoot.", daysAgo: 3, photoId: "1520250497591-112f2f40a3f4" },
       { tier: "VVIP", caption: "Exclusive content — subscribers see it first.", daysAgo: 4, photoId: "1519046904884-53103b34b206" },
       { tier: "VVIP", caption: "This week's full exclusive set is up.", daysAgo: 1, photoId: "1506905925346-21bda4d32df4" },
+    ],
+  },
+  {
+    slug: "seed-lerato",
+    email: "lerato@dummy.baddies.local",
+    displayName: "Lerato",
+    legalName: "Dummy Seed Account — Lerato",
+    bio: "Durban humidity, beachfront sunrises. Surf, sun, and content drops every week.",
+    country: "South Africa",
+    city: "Durban",
+    vvipPriceUsd: "8.99",
+    colorA: "#1f7a8c",
+    colorB: "#0e0e11",
+    avatarPhotoId: "1490645935967-10de6ba17061",
+    featuredPhotoId: "1519046904884-53103b34b206",
+    posts: [
+      { tier: "FREE", caption: "Beachfront walk this morning.", daysAgo: 11, photoId: "1490645935967-10de6ba17061" },
+      { tier: "FREE", caption: "Durban never disappoints.", daysAgo: 6, photoId: "1477959858617-67f85cf4f1df" },
+      { tier: "VIP", caption: "VIP pass holders — new drop is up.", daysAgo: 7, photoId: "1519046904884-53103b34b206" },
+      { tier: "VIP", caption: "Studio day, VIP eyes only.", daysAgo: 3, photoId: "1533105079780-92b9be482077" },
+      { tier: "VVIP", caption: "Full gallery for my Exclusive subscribers.", daysAgo: 5, photoId: "1487958449943-2429e8be8625" },
+      { tier: "VVIP", caption: "Subscribers get this set first.", daysAgo: 2, photoId: "1508739773434-c26b3d09e071" },
+    ],
+  },
+  {
+    slug: "seed-naledi",
+    email: "naledi@dummy.baddies.local",
+    displayName: "Naledi",
+    legalName: "Dummy Seed Account — Naledi",
+    bio: "Pretoria based. Jacaranda season is my favourite season. New here, be kind.",
+    country: "South Africa",
+    city: "Pretoria",
+    vvipPriceUsd: "10.99",
+    colorA: "#6a4c93",
+    colorB: "#1e1e25",
+    avatarPhotoId: "1441986300917-64674bd600d8",
+    featuredPhotoId: "1490750967868-88aa4486c946",
+    posts: [
+      { tier: "FREE", caption: "Jacaranda season in Pretoria.", daysAgo: 12, photoId: "1441986300917-64674bd600d8" },
+      { tier: "FREE", caption: "Market day finds.", daysAgo: 7, photoId: "1490750967868-88aa4486c946" },
+      { tier: "VIP", caption: "VIP-tier gallery just dropped.", daysAgo: 8, photoId: "1465447142348-e9952c393450" },
+      { tier: "VIP", caption: "Behind the scenes, VIP only.", daysAgo: 4, photoId: "1500375592092-40eb2168fd21" },
+      { tier: "VVIP", caption: "For my Exclusive baddies — new set.", daysAgo: 6, photoId: "1483729558449-99ef09a8c325" },
+      { tier: "VVIP", caption: "Thank you for subscribing — this one's for you.", daysAgo: 2, photoId: "1520250497591-112f2f40a3f4" },
+    ],
+  },
+  {
+    slug: "seed-priya",
+    email: "priya@dummy.baddies.local",
+    displayName: "Priya",
+    legalName: "Dummy Seed Account — Priya",
+    bio: "South African, Manchester based. Building my page from scratch — thanks for the support.",
+    country: "United Kingdom",
+    city: "Manchester",
+    vvipPriceUsd: "11.99",
+    colorA: "#b5482e",
+    colorB: "#0e0e11",
+    avatarPhotoId: "1519681393784-d120267933ba",
+    featuredPhotoId: "1441974231531-c6227db76b6e",
+    posts: [
+      { tier: "FREE", caption: "Manchester in the golden hour.", daysAgo: 13, photoId: "1519681393784-d120267933ba" },
+      { tier: "FREE", caption: "New account, first proper post!", daysAgo: 8, photoId: "1441974231531-c6227db76b6e" },
+      { tier: "VIP", caption: "VIP-tier content, fresh drop.", daysAgo: 9, photoId: "1487958449943-2429e8be8625" },
+      { tier: "VIP", caption: "This week's VIP gallery.", daysAgo: 5, photoId: "1508739773434-c26b3d09e071" },
+      { tier: "VVIP", caption: "Exclusive subscribers see this first.", daysAgo: 6, photoId: "1533105079780-92b9be482077" },
+      { tier: "VVIP", caption: "Full set for my Exclusive baddies.", daysAgo: 1, photoId: "1483729558449-99ef09a8c325" },
+    ],
+  },
+  {
+    slug: "seed-kea",
+    email: "kea@dummy.baddies.local",
+    displayName: "Kea",
+    legalName: "Dummy Seed Account — Kea",
+    bio: "Gqeberha born. Ocean views, good coffee, better content. Verified Baddie.",
+    country: "South Africa",
+    city: "Gqeberha",
+    vvipPriceUsd: "6.99",
+    colorA: "#2f6f4f",
+    colorB: "#0e0e11",
+    avatarPhotoId: "1470071459604-3b5ec3a7fe05",
+    featuredPhotoId: "1449824913935-59a10b8d2000",
+    posts: [
+      { tier: "FREE", caption: "Ocean views from home.", daysAgo: 14, photoId: "1470071459604-3b5ec3a7fe05" },
+      { tier: "FREE", caption: "Coffee run, good vibes.", daysAgo: 9, photoId: "1449824913935-59a10b8d2000" },
+      { tier: "VIP", caption: "VIP gallery — fresh for the week.", daysAgo: 10, photoId: "1490645935967-10de6ba17061" },
+      { tier: "VIP", caption: "Behind the scenes, VIP eyes only.", daysAgo: 4, photoId: "1465447142348-e9952c393450" },
+      { tier: "VVIP", caption: "New set for my Exclusive subscribers.", daysAgo: 7, photoId: "1519046904884-53103b34b206" },
+      { tier: "VVIP", caption: "Exclusive drop — thank you for the support.", daysAgo: 2, photoId: "1500375592092-40eb2168fd21" },
+    ],
+  },
+  {
+    slug: "seed-mia",
+    email: "mia@dummy.baddies.local",
+    displayName: "Mia",
+    legalName: "Dummy Seed Account — Mia",
+    bio: "South African in New York. Big city, small-town roots. New page, big plans.",
+    country: "United States",
+    city: "New York",
+    vvipPriceUsd: "13.99",
+    colorA: "#9c6b30",
+    colorB: "#1e1e25",
+    avatarPhotoId: "1520250497591-112f2f40a3f4",
+    featuredPhotoId: "1533105079780-92b9be482077",
+    posts: [
+      { tier: "FREE", caption: "New York, first week here.", daysAgo: 15, photoId: "1520250497591-112f2f40a3f4" },
+      { tier: "FREE", caption: "City views never get old.", daysAgo: 10, photoId: "1519681393784-d120267933ba" },
+      { tier: "VIP", caption: "VIP-tier drop, fresh from the shoot.", daysAgo: 11, photoId: "1508739773434-c26b3d09e071" },
+      { tier: "VIP", caption: "This week's VIP-only gallery.", daysAgo: 5, photoId: "1487958449943-2429e8be8625" },
+      { tier: "VVIP", caption: "Full Exclusive set — subscribers first.", daysAgo: 8, photoId: "1483729558449-99ef09a8c325" },
+      { tier: "VVIP", caption: "Thank you for 500 subscribers!", daysAgo: 3, photoId: "1506905925346-21bda4d32df4" },
     ],
   },
 ];
@@ -130,20 +249,29 @@ function fallbackAvatarDataUri(initial: string, colorA: string, colorB: string):
 }
 
 /**
- * A real profile picture — a small square crop of the same kind of
- * people-free photography used for posts (see fetchPhotoBytes's comment;
- * the rule applies identically here), rather than a plain initial on a
- * gradient. Profile.avatarUrl is a plain string field, so this is stored
- * directly as a data: URI — no storage provider involved.
+ * A real photo crop — same kind of people-free photography used for
+ * posts (see fetchPhotoBytes's comment; the rule applies identically
+ * here), rather than a plain initial on a gradient. Used for both
+ * Profile.avatarUrl (square) and CreatorProfile.coverImageUrl (the
+ * "featured image" shown on discovery cards, cropped closer to
+ * CreatorCard's own 4:5) — both are plain string fields, so this is
+ * stored directly as a data: URI, no storage provider involved.
  */
-async function fetchAvatarDataUri(photoId: string, initial: string, colorA: string, colorB: string): Promise<string> {
+async function fetchImageDataUri(
+  photoId: string,
+  width: number,
+  height: number,
+  initial: string,
+  colorA: string,
+  colorB: string
+): Promise<string> {
   try {
-    const res = await fetch(`https://images.unsplash.com/photo-${photoId}?w=240&h=240&fit=crop&q=80`);
+    const res = await fetch(`https://images.unsplash.com/photo-${photoId}?w=${width}&h=${height}&fit=crop&q=80`);
     if (!res.ok) throw new Error(`Unsplash returned ${res.status}`);
     const bytes = Buffer.from(await res.arrayBuffer());
     return `data:image/jpeg;base64,${bytes.toString("base64")}`;
   } catch (err) {
-    console.warn(`  (couldn't fetch avatar photo ${photoId}, using gradient fallback: ${(err as Error).message})`);
+    console.warn(`  (couldn't fetch photo ${photoId}, using gradient fallback: ${(err as Error).message})`);
     return fallbackAvatarDataUri(initial, colorA, colorB);
   }
 }
@@ -205,12 +333,11 @@ async function seedDummyCreators() {
   for (const spec of DUMMY_CREATORS) {
     const passwordHash = await hashPassword(DUMMY_PASSWORD);
     const legalNameEncrypted = encryptField(spec.legalName);
-    const avatarUrl = await fetchAvatarDataUri(
-      spec.avatarPhotoId,
-      spec.displayName.charAt(0).toUpperCase(),
-      spec.colorA,
-      spec.colorB
-    );
+    const initial = spec.displayName.charAt(0).toUpperCase();
+    const [avatarUrl, coverImageUrl] = await Promise.all([
+      fetchImageDataUri(spec.avatarPhotoId, 240, 240, initial, spec.colorA, spec.colorB),
+      fetchImageDataUri(spec.featuredPhotoId, 640, 800, initial, spec.colorA, spec.colorB),
+    ]);
 
     const user = await db.user.upsert({
       where: { email: spec.email },
@@ -250,6 +377,7 @@ async function seedDummyCreators() {
         locationVisible: true,
         appliedAt: approvedAt,
         approvedAt,
+        coverImageUrl,
       },
       update: {
         status: "VERIFIED",
@@ -257,6 +385,7 @@ async function seedDummyCreators() {
         unlimitedOptedIn: true,
         subscriberCountVisible: true,
         locationVisible: true,
+        coverImageUrl,
       },
     });
 

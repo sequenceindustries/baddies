@@ -10,6 +10,7 @@ import {
   checkboxRowStyle,
   primaryButtonStyle,
   errorBannerStyle,
+  ImageUploadField,
 } from "@/components/ui";
 
 type CreatorStatus =
@@ -492,6 +493,65 @@ function CreatorSettingsPanel() {
  * so it stays in this history afterward, just labeled Removed with no
  * further action available on it.
  */
+/**
+ * The image shown for this creator on discovery cards (Top Baddies,
+ * Baddies Near You, etc.) — CreatorProfile.coverImageUrl under the
+ * hood, same field /apply can optionally set at signup. Lives in
+ * Content management (not Settings) because it's about what represents
+ * this creator's content, not account configuration. Leaving it unset
+ * falls back to the latest published Free post automatically (see
+ * src/lib/discovery/creator-card.ts).
+ */
+function FeaturedImagePanel() {
+  const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null | undefined>(undefined); // undefined = loading
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/creator/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (body) setFeaturedImageUrl(body.coverImageUrl ?? null);
+      });
+  }, []);
+
+  async function save(next: string | null) {
+    setFeaturedImageUrl(next);
+    setSaving(true);
+    setError(null);
+    setSaved(false);
+    const res = await fetch("/api/creator/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ coverImageUrl: next }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(body?.error ?? "Save failed.");
+      return;
+    }
+    setSaved(true);
+  }
+
+  if (featuredImageUrl === undefined) return null;
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: "2rem" }}>
+      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Featured image</h2>
+      <p style={{ ...mutedSmallStyle, marginTop: "-0.6rem", marginBottom: "1.1rem" }}>
+        What shows on Top Baddies, Baddies Near You, and other discovery cards. Keep it
+        non-explicit. Leave blank to use your latest Free post instead.
+      </p>
+      <ImageUploadField label="Featured image" value={featuredImageUrl} onChange={save} shape="rect" />
+      {saving && <p style={{ ...mutedSmallStyle, marginBottom: 0 }}>Saving...</p>}
+      {saved && !saving && <p style={{ ...mutedSmallStyle, marginBottom: 0 }}>✓ Saved</p>}
+      {error && <div style={{ ...errorBannerStyle, marginBottom: 0 }}>{error}</div>}
+    </div>
+  );
+}
+
 function ContentPanel({ canMonetise }: { canMonetise: boolean }) {
   const [items, setItems] = useState<OwnContentItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
@@ -522,6 +582,7 @@ function ContentPanel({ canMonetise }: { canMonetise: boolean }) {
 
   return (
     <>
+      <FeaturedImagePanel />
       <UploadForm canMonetise={canMonetise} onUploaded={reload} />
 
       <h2 style={sectionHeadingStyle}>Content history</h2>

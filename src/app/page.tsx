@@ -51,10 +51,6 @@ export default function LandingPage() {
     <main>
       <section style={heroStyle}>
         <h1 style={heroTitleStyle}>baddies</h1>
-        <p style={heroSubStyle}>
-          A creator marketplace built on trust — every creator is identity, age, and liveness
-          verified before they can publish. 18+ only.
-        </p>
         <div style={heroCtaRowStyle}>
           <Link href="/register" style={primaryCtaStyle}>
             Join free
@@ -72,7 +68,7 @@ export default function LandingPage() {
           (Discover, fan Home). */}
       {topCreators.length > 0 && (
         <section style={sectionStyle}>
-          <CreatorCardRow title="top baddies" creators={topCreators} size="lg" scroll />
+          <CreatorCardRow title="Top baddies" creators={topCreators} size="lg" scroll />
         </section>
       )}
 
@@ -87,6 +83,8 @@ export default function LandingPage() {
           Create your account
         </Link>
       </section>
+
+      <p style={footerLineStyle}>South Africa to the World!</p>
     </main>
   );
 }
@@ -110,19 +108,12 @@ const heroTitleStyle: React.CSSProperties = {
   color: "transparent",
 };
 
-const heroSubStyle: React.CSSProperties = {
-  color: "var(--text-muted)",
-  fontSize: "1.02rem",
-  lineHeight: 1.65,
-  maxWidth: "480px",
-  margin: "0 auto 2.25rem",
-};
-
 const heroCtaRowStyle: React.CSSProperties = {
   display: "flex",
   gap: "0.85rem",
   justifyContent: "center",
   flexWrap: "wrap",
+  marginTop: "1.75rem",
 };
 
 const primaryCtaStyle: React.CSSProperties = {
@@ -162,4 +153,13 @@ const sectionHeadingStyle: React.CSSProperties = {
   fontWeight: 500,
   margin: "0 0 1.25rem",
   textAlign: "center",
+};
+
+const footerLineStyle: React.CSSProperties = {
+  textAlign: "center",
+  color: "var(--text-muted)",
+  fontSize: "0.85rem",
+  fontWeight: 600,
+  padding: "0 1.75rem 2.5rem",
+  margin: 0,
 };

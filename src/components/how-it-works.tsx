@@ -11,11 +11,11 @@ export function HowItWorks() {
     <section style={sectionStyle}>
       <h2 style={sectionHeadingStyle}>How it works</h2>
       <div style={tierGridStyle}>
-        <div className="hover-lift" style={tierCardStyle}>
+        <div className="hover-lift" style={{ ...tierCardStyle, borderColor: "var(--accent)" }}>
           <div style={tierNameStyle}>Free</div>
           <p style={tierDescStyle}>Browse public previews from every verified creator. No cost, no card required.</p>
         </div>
-        <div className="hover-lift" style={tierCardStyle}>
+        <div className="hover-lift" style={{ ...tierCardStyle, borderColor: "var(--accent)" }}>
           <div style={tierNameStyle}>VIP</div>
           <p style={tierDescStyle}>
             One subscription, unlocks VIP-tier content from every participating creator on the

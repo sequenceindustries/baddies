@@ -14,6 +14,11 @@ const ApplySchema = z.object({
     displayName: z.string().min(2).max(50),
     legalName: z.string().min(2).max(200),
     bio: z.string().max(2000).optional(),
+    // Both optional here — a creator can also set/change these later
+    // from /settings (avatarUrl) or the Dashboard's Content tab
+    // (featuredImageUrl, CreatorProfile.coverImageUrl).
+    avatarUrl: z.string().url().optional(),
+    featuredImageUrl: z.string().url().optional(),
     confirmsAdult: z.literal(true, {
           errorMap: () => ({ message: "You must confirm you are 18 or older to apply as a creator." }),
     }),
@@ -50,7 +55,7 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
           return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
-    const { displayName, legalName, bio } = parsed.data;
+    const { displayName, legalName, bio, avatarUrl, featuredImageUrl } = parsed.data;
 
   const legalNameEncrypted = encryptField(legalName);
 
@@ -61,12 +66,13 @@ export async function POST(req: NextRequest) {
                           status: "VERIFICATION_REQUIRED",
                           legalNameEncrypted,
                           appliedAt: new Date(),
+                          coverImageUrl: featuredImageUrl,
                 },
         });
 
                                                    await tx.profile.update({
                                                            where: { userId: user.id },
-                                                           data: { displayName, bio },
+                                                           data: { displayName, bio, avatarUrl },
                                                    });
 
                                                    // RBAC's content:create/content:publish permissions are gated on
