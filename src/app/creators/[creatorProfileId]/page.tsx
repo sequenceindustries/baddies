@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { VerifiedBadge, displayHeadingStyle, useSession, inputStyle, errorBannerStyle } from "@/components/ui";
 import { ContentTimeline, ReportButton, type ContentCardData } from "@/components/cards";
 
@@ -19,6 +20,7 @@ interface CreatorProfileResponse {
   unlimitedParticipant: boolean;
   followerCount: number;
   subscriberCount?: number;
+  isLive: boolean;
 }
 
 interface RawContentItem {
@@ -115,6 +117,7 @@ export default function CreatorProfilePage() {
         <div style={{ flex: 1 }}>
           <h1 style={{ ...displayHeadingStyle, marginBottom: "0.3rem" }}>
             {creator.displayName ?? "Unnamed creator"}
+            {creator.isLive && <span style={liveNowBadgeStyle}>● LIVE NOW</span>}
           </h1>
           <VerifiedBadge />
           {(creator.city || creator.country) && (
@@ -139,7 +142,11 @@ export default function CreatorProfilePage() {
       </div>
 
       {!isOwnProfile && user && (
-        <SubscribeAndTip creatorProfileId={creatorProfileId} vvipPriceUsd={creator.vvipPriceUsd} />
+        <SubscribeAndTip
+          creatorProfileId={creatorProfileId}
+          creatorUserId={creator.userId}
+          vvipPriceUsd={creator.vvipPriceUsd}
+        />
       )}
 
       <h2 style={sectionHeadingStyle}>Content</h2>
@@ -154,7 +161,15 @@ export default function CreatorProfilePage() {
  * instead of waiting on a payment webhook). No real money moves; this is
  * the flow real vendor integration would slot into once one is selected.
  */
-function SubscribeAndTip({ creatorProfileId, vvipPriceUsd }: { creatorProfileId: string; vvipPriceUsd: number }) {
+function SubscribeAndTip({
+  creatorProfileId,
+  creatorUserId,
+  vvipPriceUsd,
+}: {
+  creatorProfileId: string;
+  creatorUserId: string;
+  vvipPriceUsd: number;
+}) {
   const [subscribed, setSubscribed] = useState(false);
   const [vipPassActive, setVipPassActive] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -163,6 +178,7 @@ function SubscribeAndTip({ creatorProfileId, vvipPriceUsd }: { creatorProfileId:
   const [tipAmount, setTipAmount] = useState("5.00");
   const [tipMessage, setTipMessage] = useState("");
   const [tipSent, setTipSent] = useState(false);
+  const [callRequested, setCallRequested] = useState(false);
 
   async function subscribeVvip() {
     setBusy("vvip");
@@ -192,6 +208,33 @@ function SubscribeAndTip({ creatorProfileId, vvipPriceUsd }: { creatorProfileId:
       return;
     }
     setVipPassActive(true);
+  }
+
+  /**
+   * 1-on-1 video calls are an Exclusive benefit this platform can't
+   * actually transport video for (no WebRTC/media-server provider is
+   * configured — that needs real infrastructure and credentials this
+   * project doesn't have). Rather than fake a call button that does
+   * nothing, this sends a real request through the messaging system
+   * (itself gated to active subscribers — see src/lib/messaging/access.ts)
+   * so the creator gets a genuine, actionable message and can arrange the
+   * call with the fan directly.
+   */
+  async function requestVideoCall() {
+    setBusy("call");
+    setError(null);
+    const res = await fetch(`/api/messages/${creatorUserId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ body: "I'd love to book a 1-on-1 video call — what times work for you?" }),
+    });
+    setBusy(null);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(body?.error ?? "Couldn't send the request.");
+      return;
+    }
+    setCallRequested(true);
   }
 
   async function sendTip(e: React.FormEvent) {
@@ -238,10 +281,21 @@ function SubscribeAndTip({ creatorProfileId, vvipPriceUsd }: { creatorProfileId:
         <button onClick={() => setShowTip((v) => !v)} style={ghostCheckoutButtonStyle}>
           {tipSent ? "✓ Tip sent — send another?" : "Send a tip"}
         </button>
+        {subscribed && (
+          <>
+            <Link href={`/messages?with=${creatorUserId}`} style={{ ...ghostCheckoutButtonStyle, textDecoration: "none" }}>
+              💬 Message
+            </Link>
+            <button onClick={requestVideoCall} disabled={busy !== null || callRequested} style={ghostCheckoutButtonStyle}>
+              {callRequested ? "✓ Call requested" : busy === "call" ? "..." : "📹 Request 1-on-1 video call"}
+            </button>
+          </>
+        )}
       </div>
       <p style={{ ...mutedNoteStyle }}>
-        Exclusive is this creator&apos;s own subscription. The VIP Pass is one platform-wide price that unlocks
-        VIP-tier content from every participating creator.
+        Exclusive is this creator&apos;s own subscription — includes direct messaging, live videos, and 1-on-1
+        video calls with them, on top of their subscriber-only posts. The VIP Pass is a separate, one-price
+        platform-wide pass that unlocks VIP-tier content from every participating creator.
       </p>
 
       {showTip && (
@@ -347,6 +401,19 @@ const avatarStyle: React.CSSProperties = {
 };
 
 const mutedStyle: React.CSSProperties = { color: "var(--text-muted)", fontSize: "0.9rem", margin: "0.2rem 0" };
+
+const liveNowBadgeStyle: React.CSSProperties = {
+  display: "inline-block",
+  verticalAlign: "middle",
+  marginLeft: "0.75rem",
+  background: "var(--danger)",
+  color: "#fff",
+  fontSize: "0.68rem",
+  fontWeight: 800,
+  letterSpacing: "0.03em",
+  padding: "0.2rem 0.55rem",
+  borderRadius: "999px",
+};
 
 const priceRowStyle: React.CSSProperties = {
   display: "flex",

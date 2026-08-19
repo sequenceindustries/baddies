@@ -18,6 +18,7 @@ interface HomeResponse {
   following: RawContentItem[];
   subscribed: RawContentItem[];
   unlimited: CreatorCardData[];
+  nearby: CreatorCardData[];
   recommended: CreatorCardData[];
   trending: RawContentItem[];
   newCreators: CreatorCardData[];
@@ -89,13 +90,14 @@ export default function FanHomePage() {
 
           {normalize(data.subscribed).length > 0 && (
             <section style={{ marginBottom: "2.25rem" }}>
-              <h2 style={sectionHeadingStyle}>Your subscriptions</h2>
+              <h2 style={sectionHeadingStyle}>Your Exclusive</h2>
               <ContentGrid items={normalize(data.subscribed)} />
             </section>
           )}
 
           <CreatorCardRow title="Included with VIP Pass" creators={data.unlimited} />
-          <CreatorCardRow title="Recommended creators" creators={data.recommended} />
+          <CreatorCardRow title="Baddies Near You" creators={data.nearby} />
+          <CreatorCardRow title="Recommended Baddies" creators={data.recommended} />
 
           {normalize(data.trending).length > 0 && (
             <section style={{ marginBottom: "2.25rem" }}>
@@ -104,11 +106,12 @@ export default function FanHomePage() {
             </section>
           )}
 
-          <CreatorCardRow title="New verified creators" creators={data.newCreators} />
+          <CreatorCardRow title="New Baddies" creators={data.newCreators} />
 
           {normalize(data.following).length === 0 &&
             normalize(data.subscribed).length === 0 &&
             data.unlimited.length === 0 &&
+            data.nearby.length === 0 &&
             data.recommended.length === 0 &&
             normalize(data.trending).length === 0 &&
             data.newCreators.length === 0 && (

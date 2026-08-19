@@ -12,6 +12,7 @@ import {
   checkboxRowStyle,
   primaryButtonStyle,
   errorBannerStyle,
+  LocationField,
 } from "@/components/ui";
 
 type Intent = "FAN" | "CREATOR";
@@ -121,25 +122,14 @@ export default function RegisterPage() {
             />
           </Field>
 
-          <Field label="Country">
-            <input
-              style={inputStyle}
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-              maxLength={100}
-              required
-            />
-          </Field>
-
-          <Field label="City">
-            <input
-              style={inputStyle}
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              maxLength={100}
-              required
-            />
-          </Field>
+          <LocationField
+            country={country}
+            city={city}
+            onChange={(v) => {
+              setCountry(v.country);
+              setCity(v.city);
+            }}
+          />
 
           <label style={checkboxRowStyle}>
             <input

@@ -68,6 +68,7 @@ export default function CreatorDashboardPage() {
     <main style={mainStyle}>
       <h1 style={displayHeadingStyle}>Creator Dashboard</h1>
       <StatusPanel status={user.creatorProfile.status as CreatorStatus} onAdvance={refresh} />
+      {user.creatorProfile.status === "VERIFIED" && <LivePanel />}
       <WalletPanel />
       {user.creatorProfile.status !== "REJECTED" && user.creatorProfile.status !== "BANNED" && (
         <ContentPanel canMonetise={user.creatorProfile.status === "VERIFIED"} />
@@ -87,6 +88,74 @@ interface WalletBalances {
  * src/lib/ledger/service.ts#recomputeWalletBalances, recomputed on every
  * dummy checkout (see src/app/api/checkout/*) and every payout approval.
  */
+/**
+ * "Live videos" (an Exclusive-subscription benefit) — a status flag, not
+ * a real video stream. See CreatorProfile.isLive's comment in
+ * schema.prisma for why, and what upgrading this to real video would
+ * need. Fans see a "● LIVE" badge on the profile/cards while it's on.
+ */
+function LivePanel() {
+  const [isLive, setIsLive] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/creator/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (body) setIsLive(Boolean(body.isLive));
+      });
+  }, []);
+
+  async function toggle() {
+    setBusy(true);
+    const res = await fetch("/api/creator/live", { method: isLive ? "DELETE" : "POST" });
+    setBusy(false);
+    if (res.ok) setIsLive((v) => !v);
+  }
+
+  if (isLive === null) return null;
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: "2rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div>
+        <h2 style={{ ...sectionHeadingStyle, marginTop: 0, marginBottom: "0.3rem" }}>Live videos</h2>
+        <p style={{ ...mutedSmallStyle, marginTop: 0 }}>
+          {isLive
+            ? "You're marked live — subscribers see a live badge on your profile."
+            : "Toggle this on when you start a live video for subscribers."}
+        </p>
+      </div>
+      <button onClick={toggle} disabled={busy} style={isLive ? endLiveButtonStyle : goLiveButtonStyle}>
+        {busy ? "..." : isLive ? "End live" : "🔴 Go live"}
+      </button>
+    </div>
+  );
+}
+
+const goLiveButtonStyle: React.CSSProperties = {
+  background: "var(--danger)",
+  color: "#fff",
+  border: "none",
+  borderRadius: "var(--radius)",
+  padding: "0.55rem 1.1rem",
+  fontWeight: 700,
+  fontSize: "0.85rem",
+  cursor: "pointer",
+  flexShrink: 0,
+};
+
+const endLiveButtonStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "1px solid var(--border)",
+  color: "var(--text-muted)",
+  borderRadius: "var(--radius)",
+  padding: "0.55rem 1.1rem",
+  fontWeight: 600,
+  fontSize: "0.85rem",
+  cursor: "pointer",
+  flexShrink: 0,
+};
+
 function WalletPanel() {
   const [wallet, setWallet] = useState<WalletBalances | null>(null);
   const [requesting, setRequesting] = useState(false);

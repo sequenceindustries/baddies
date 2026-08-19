@@ -1,20 +1,47 @@
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700;800&display=swap");
 
 :root {
-    --bg: #0e0e11;
-    --surface: #17171c;
-    --surface-raised: #1e1e25;
-    --border: #2a2a30;
-    --text: #f1eee7;
-    --text-muted: #9a968e;
-    --accent-gold: #c9a961;
-    --accent-gold-dim: #8a7440;
-    --accent-wine: #7c2d3b;
-    --danger: #d9736a;
-    --success: #7ba88a;
-    --radius: 10px;
+    --bg: #0b0b10;
+    --bg-elevated: #121218;
+    --surface: #18181f;
+    --surface-raised: #212129;
+    --border: #2c2c36;
+    --text: #f5f2ec;
+    --text-muted: #a19dab;
+
+    /* Brand gold — the platform's "premium" color (pricing, verified badge,
+       Exclusive tier). Stays gold everywhere regardless of who's signed
+       in; it's brand identity, not a role indicator. */
+    --accent-gold: #e0b84a;
+    --accent-gold-dim: #a3862f;
+    --accent-wine: #d0466a;
+
+    /* Role accent — THE role indicator. Swapped by [data-role] on <html>
+       (see components/ui.tsx's useRoleTheme), so a creator's chrome reads
+       visibly differently from a fan's without touching every page. */
+    --accent: var(--accent-gold);
+    --accent-dim: var(--accent-gold-dim);
+    --accent-soft: rgba(224, 184, 74, 0.14);
+
+    --danger: #f0685c;
+    --success: #4fd8a0;
+    --radius: 12px;
     --font-display: "Fraunces", Georgia, serif;
     --font-body: "Inter", system-ui, sans-serif;
+
+    --glow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 12px 40px -12px rgba(0, 0, 0, 0.6);
+}
+
+html[data-role="creator"] {
+    --accent: #29e0c9;
+    --accent-dim: #1b9e8f;
+    --accent-soft: rgba(41, 224, 201, 0.14);
+}
+
+html[data-role="admin"] {
+    --accent: #d0466a;
+    --accent-dim: #9c3350;
+    --accent-soft: rgba(208, 70, 106, 0.14);
 }
 
 * {
@@ -28,10 +55,15 @@ body {
 }
 
 body {
-    background: var(--bg);
+    background:
+        radial-gradient(1100px 600px at 12% -10%, rgba(224, 184, 74, 0.08), transparent 60%),
+        radial-gradient(900px 500px at 100% 0%, var(--accent-soft), transparent 55%),
+        var(--bg);
     color: var(--text);
     font-family: var(--font-body);
     -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    transition: background 0.4s ease;
 }
 
 a {
@@ -40,12 +72,57 @@ a {
 
 input,
 button,
-textarea {
+textarea,
+select {
     font-family: inherit;
 }
 
+button {
+    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, background 0.15s ease;
+}
+
+button:not(:disabled):hover {
+    transform: translateY(-1px);
+}
+
+button:not(:disabled):active {
+    transform: translateY(0);
+}
+
+a[href]:hover {
+    opacity: 0.85;
+}
+
+/* Shared "this is clickable and alive" treatment for cards across the
+   app — creator cards, content posts, tier cards. Inline styles can't
+   express :hover, so this is the one thing that stays a real CSS class. */
+.hover-lift {
+    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.hover-lift:hover {
+    transform: translateY(-4px);
+    border-color: var(--accent);
+    box-shadow: 0 18px 44px -16px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--accent-soft);
+}
+
+::selection {
+    background: var(--accent);
+    color: var(--bg);
+}
+
+::-webkit-scrollbar {
+    height: 10px;
+    width: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 999px;
+}
+
 :focus-visible {
-    outline: 2px solid var(--accent-gold);
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
 

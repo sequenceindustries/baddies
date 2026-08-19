@@ -12,6 +12,7 @@ export interface CreatorCardData {
   city: string | null;
   verifiedBadge: true;
   vvipPriceUsd: number;
+  isLive?: boolean;
 }
 
 export function CreatorCard({ creator }: { creator: CreatorCardData }) {
@@ -19,16 +20,19 @@ export function CreatorCard({ creator }: { creator: CreatorCardData }) {
   const location = [creator.city, creator.country].filter(Boolean).join(", ");
   return (
     <Link href={`/creators/${creator.creatorProfileId}`} style={cardLinkStyle}>
-      <div style={creatorCardStyle}>
-        <div style={avatarStyle}>
-          {creator.avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={creator.avatarUrl} alt="" style={avatarImgStyle} />
-          ) : (
-            initial
-          )}
+      <div className="hover-lift" style={creatorCardStyle}>
+        <div style={{ position: "relative" }}>
+          <div style={avatarStyle}>
+            {creator.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={creator.avatarUrl} alt="" style={avatarImgStyle} />
+            ) : (
+              initial
+            )}
+          </div>
+          {creator.isLive && <span style={liveBadgeStyle}>● LIVE</span>}
         </div>
-        <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>{creator.displayName ?? "Unnamed creator"}</div>
+        <div style={{ fontWeight: 600, fontSize: "0.98rem" }}>{creator.displayName ?? "Unnamed creator"}</div>
         <VerifiedBadge />
         {location && <div style={mutedSmallStyle}>{location}</div>}
         <div style={priceRowStyle}>
@@ -44,7 +48,10 @@ export function CreatorCardRow({ title, creators }: { title?: string; creators: 
   return (
     <section style={sectionStyle}>
       {title && <h2 style={sectionHeadingStyle}>{title}</h2>}
-      <div style={rowStyle}>
+      {/* A wrapping grid, not a horizontal-scroll strip — a row of 3 cards
+          and a row of 5 cards both fill the width evenly instead of
+          clumping left with a dead gap on wide screens. */}
+      <div style={creatorGridStyle}>
         {creators.map((c) => (
           <CreatorCard key={c.creatorProfileId} creator={c} />
         ))}
@@ -163,7 +170,7 @@ export function ContentCard({
   }
 
   return (
-    <div style={large ? timelinePostStyle : contentCardStyle}>
+    <div className="hover-lift" style={large ? timelinePostStyle : contentCardStyle}>
       <div style={large ? timelineMetaRowStyle : undefined}>
         <TierBadge accessLevel={item.accessLevel} />
         {large && item.publishedAt && <span style={mutedSmallStyle}>{timeAgo(item.publishedAt)}</span>}
@@ -247,7 +254,7 @@ export function ContentTimeline({ items, vvipPriceUsd }: { items: ContentCardDat
   };
 
   return (
-    <div>
+    <div style={timelineWrapStyle}>
       {showTabs && (
         <div style={tabBarStyle}>
           <button onClick={() => setTab("ALL")} style={tabButtonStyle(tab === "ALL")}>
@@ -403,42 +410,61 @@ export function ContentGrid({ items }: { items: ContentCardData[] }) {
   );
 }
 
-const cardLinkStyle: React.CSSProperties = { textDecoration: "none", color: "inherit", flex: "0 0 auto" };
+const cardLinkStyle: React.CSSProperties = { textDecoration: "none", color: "inherit", display: "block" };
 
 const creatorCardStyle: React.CSSProperties = {
-  width: "160px",
   background: "var(--surface)",
   border: "1px solid var(--border)",
-  borderRadius: "14px",
-  padding: "1rem",
+  borderRadius: "16px",
+  padding: "1.15rem",
   display: "flex",
   flexDirection: "column",
   alignItems: "flex-start",
   gap: "0.35rem",
+  height: "100%",
+  boxShadow: "var(--glow)",
+  transition: "border-color 0.18s ease, transform 0.18s ease",
 };
 
 const avatarStyle: React.CSSProperties = {
-  width: "48px",
-  height: "48px",
+  width: "52px",
+  height: "52px",
   borderRadius: "50%",
   background: "var(--surface-raised)",
-  border: "1px solid var(--border)",
+  border: "2px solid var(--accent)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  fontWeight: 600,
-  color: "var(--accent-gold)",
-  marginBottom: "0.35rem",
+  fontWeight: 700,
+  fontFamily: "var(--font-display)",
+  fontSize: "1.1rem",
+  color: "var(--accent)",
+  marginBottom: "0.4rem",
   overflow: "hidden",
 };
 
 const avatarImgStyle: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover" };
 
+const liveBadgeStyle: React.CSSProperties = {
+  position: "absolute",
+  bottom: "0.4rem",
+  left: "-0.2rem",
+  background: "var(--danger)",
+  color: "#fff",
+  fontSize: "0.62rem",
+  fontWeight: 800,
+  letterSpacing: "0.02em",
+  padding: "0.1rem 0.4rem",
+  borderRadius: "999px",
+  boxShadow: "0 0 0 2px var(--surface)",
+};
+
 const priceRowStyle: React.CSSProperties = {
   display: "flex",
   gap: "0.6rem",
-  fontSize: "0.78rem",
-  color: "var(--text-muted)",
+  fontSize: "0.8rem",
+  color: "var(--accent-gold)",
+  fontWeight: 600,
   marginTop: "0.2rem",
 };
 
@@ -453,11 +479,10 @@ const sectionHeadingStyle: React.CSSProperties = {
   margin: "0 0 0.85rem",
 };
 
-const rowStyle: React.CSSProperties = {
-  display: "flex",
-  gap: "0.9rem",
-  overflowX: "auto",
-  paddingBottom: "0.5rem",
+const creatorGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))",
+  gap: "1rem",
 };
 
 const gridStyle: React.CSSProperties = {
@@ -469,11 +494,12 @@ const gridStyle: React.CSSProperties = {
 const contentCardStyle: React.CSSProperties = {
   background: "var(--surface)",
   border: "1px solid var(--border)",
-  borderRadius: "12px",
+  borderRadius: "14px",
   padding: "0.85rem",
   display: "flex",
   flexDirection: "column",
   gap: "0.5rem",
+  boxShadow: "var(--glow)",
 };
 
 const contentThumbStyle: React.CSSProperties = {
@@ -526,11 +552,18 @@ function likeButtonStyle(liked: boolean): React.CSSProperties {
 
 // --- Timeline (large, Twitter-style post) styles ---
 
+// Centers the whole timeline (tabs + posts) as one column instead of
+// pinning it to the left edge of a much wider page, which on a large
+// viewport left a huge dead gap down the right side.
+const timelineWrapStyle: React.CSSProperties = {
+  maxWidth: "620px",
+  margin: "0 auto",
+};
+
 const timelineListStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: "1.25rem",
-  maxWidth: "620px",
 };
 
 const timelinePostStyle: React.CSSProperties = {
@@ -541,6 +574,7 @@ const timelinePostStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: "0.65rem",
+  boxShadow: "var(--glow)",
 };
 
 const timelineMetaRowStyle: React.CSSProperties = {

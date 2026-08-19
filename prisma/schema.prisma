@@ -252,6 +252,16 @@ model CreatorProfile {
   subscriberCountVisible Boolean @default(false)
   locationVisible         Boolean @default(false)
 
+  // "Live videos" (an Exclusive-subscription benefit) — a status flag a
+  // creator toggles, not a video transport. There is no real streaming
+  // pipeline behind this (that needs a WebRTC/media-server provider —
+  // LiveKit, Agora, etc. — with real credentials this project doesn't
+  // have), so it's deliberately just "is this creator live right now,"
+  // shown as a badge. Upgrading it to actual video later only needs a
+  // player wired to isLive, not a data model change.
+  isLive        Boolean   @default(false)
+  liveStartedAt DateTime?
+
   appliedAt   DateTime  @default(now())
   approvedAt  DateTime?
   approvedBy  String? // admin User.id

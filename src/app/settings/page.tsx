@@ -11,6 +11,7 @@ import {
   checkboxRowStyle,
   primaryButtonStyle,
   errorBannerStyle,
+  LocationField,
 } from "@/components/ui";
 
 export default function SettingsPage() {
@@ -158,33 +159,13 @@ function ProfileSettings() {
             maxLength={2000}
           />
         </Field>
-        <Field label="Avatar URL" hint="Optional — link to an image.">
-          <input
-            style={inputStyle}
-            value={data.avatarUrl ?? ""}
-            onChange={(e) => setData({ ...data, avatarUrl: e.target.value })}
-            type="url"
-            placeholder="https://..."
-          />
-        </Field>
-        <Field label="Country">
-          <input
-            style={inputStyle}
-            value={data.country ?? ""}
-            onChange={(e) => setData({ ...data, country: e.target.value })}
-            maxLength={100}
-            required
-          />
-        </Field>
-        <Field label="City">
-          <input
-            style={inputStyle}
-            value={data.city ?? ""}
-            onChange={(e) => setData({ ...data, city: e.target.value })}
-            maxLength={100}
-            required
-          />
-        </Field>
+        <AvatarField avatarUrl={data.avatarUrl} onChange={(avatarUrl) => setData({ ...data, avatarUrl })} />
+        <LocationField
+          country={data.country ?? ""}
+          city={data.city ?? ""}
+          autoDetect={false}
+          onChange={(v) => setData({ ...data, country: v.country, city: v.city })}
+        />
         <button type="submit" style={primaryButtonStyle} disabled={saving}>
           {saving ? "Saving..." : saved ? "✓ Saved" : "Save profile"}
         </button>
@@ -192,6 +173,110 @@ function ProfileSettings() {
     </div>
   );
 }
+
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2MB — avatarUrl is stored as a plain data: URI string on Profile, so this keeps the row reasonable
+
+/**
+ * A real file picker instead of a raw "paste a URL" text box — nobody
+ * has a hosted image URL sitting around. Reads the chosen file straight
+ * to a data: URI client-side and hands that to the parent form; Profile.
+ * avatarUrl is already just a plain string field (unlike Content, which
+ * goes through the signed-URL storage provider), so no upload endpoint
+ * is needed — it saves the same way pasting a URL always did.
+ */
+function AvatarField({ avatarUrl, onChange }: { avatarUrl: string | null; onChange: (url: string | null) => void }) {
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file later
+    if (!file) return;
+    setError(null);
+    if (file.size > MAX_AVATAR_BYTES) {
+      setError("Image is too large — please pick one under 2MB.");
+      return;
+    }
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    onChange(dataUrl);
+  }
+
+  return (
+    <Field label="Profile picture" hint="JPG or PNG, up to 2MB." error={error ?? undefined}>
+      <div style={avatarFieldRowStyle}>
+        <div style={avatarPreviewStyle}>
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : (
+            "?"
+          )}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          <label style={uploadButtonStyle}>
+            Upload photo
+            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleFile} style={{ display: "none" }} />
+          </label>
+          {avatarUrl && (
+            <button type="button" onClick={() => onChange(null)} style={removeAvatarButtonStyle}>
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
+    </Field>
+  );
+}
+
+const avatarFieldRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "1rem",
+  marginTop: "0.4rem",
+};
+
+const avatarPreviewStyle: React.CSSProperties = {
+  width: "64px",
+  height: "64px",
+  borderRadius: "50%",
+  background: "var(--surface-raised)",
+  border: "2px solid var(--accent)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "var(--accent)",
+  fontWeight: 700,
+  fontFamily: "var(--font-display)",
+  fontSize: "1.3rem",
+  overflow: "hidden",
+  flexShrink: 0,
+};
+
+const uploadButtonStyle: React.CSSProperties = {
+  display: "inline-block",
+  background: "var(--accent)",
+  color: "var(--bg)",
+  borderRadius: "var(--radius)",
+  padding: "0.55rem 1rem",
+  fontWeight: 600,
+  fontSize: "0.85rem",
+  cursor: "pointer",
+  textAlign: "center",
+};
+
+const removeAvatarButtonStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "1px solid var(--border)",
+  color: "var(--text-muted)",
+  borderRadius: "var(--radius)",
+  padding: "0.45rem 1rem",
+  fontSize: "0.82rem",
+  cursor: "pointer",
+};
 
 interface CreatorSettingsData {
   vvipPriceOverride: number | null;

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useSession } from "@/components/ui";
+import { useSession, roleHomePath } from "@/components/ui";
 import { CreatorCardRow, ContentCard, type CreatorCardData, type ContentCardData } from "@/components/cards";
 
 interface DiscoveryResponse {
@@ -18,10 +18,11 @@ interface RecentContentItem extends ContentCardData {
 
 /**
  * The real landing page (Sprint 0's placeholder replaced) — an anonymous
- * visitor's actual entry point. Logged-in visitors skip straight to
- * /home; this is purely for signed-out discovery + sign-up, OnlyFans-
- * style: content and creators front and center, tiers explained plainly,
- * join/sign-in CTAs everywhere that matters.
+ * visitor's actual entry point. Logged-in visitors skip straight to their
+ * role's home (roleHomePath — a creator lands on their Dashboard, not a
+ * fan-oriented feed); this is purely for signed-out discovery + sign-up,
+ * OnlyFans-style: content and creators front and center, tiers explained
+ * plainly, join/sign-in CTAs everywhere that matters.
  */
 export default function LandingPage() {
   const router = useRouter();
@@ -31,7 +32,7 @@ export default function LandingPage() {
 
   useEffect(() => {
     if (!loading && user) {
-      router.replace("/home");
+      router.replace(roleHomePath(user.role));
     }
   }, [loading, user, router]);
 
@@ -60,6 +61,7 @@ export default function LandingPage() {
   return (
     <main>
       <section style={heroStyle}>
+        <span style={kickerStyle}>🇿🇦 South African-born · Global from day one</span>
         <h1 style={heroTitleStyle}>Baddies</h1>
         <p style={heroTaglineStyle}>Safe. Verified. Affordable.</p>
         <p style={heroSubStyle}>
@@ -79,22 +81,25 @@ export default function LandingPage() {
       <section style={sectionStyle}>
         <h2 style={sectionHeadingStyle}>How it works</h2>
         <div style={tierGridStyle}>
-          <div style={tierCardStyle}>
+          <div className="hover-lift" style={tierCardStyle}>
+            <div style={tierIconStyle}>🔓</div>
             <div style={tierNameStyle}>Free</div>
             <p style={tierDescStyle}>Browse public previews from every verified creator. No cost, no card required.</p>
           </div>
-          <div style={tierCardStyle}>
+          <div className="hover-lift" style={tierCardStyle}>
+            <div style={tierIconStyle}>⭐</div>
             <div style={tierNameStyle}>VIP</div>
             <p style={tierDescStyle}>
               One subscription, unlocks VIP-tier content from every participating creator on the
               platform.
             </p>
           </div>
-          <div style={{ ...tierCardStyle, borderColor: "var(--accent-gold)" }}>
+          <div className="hover-lift" style={{ ...tierCardStyle, borderColor: "var(--accent-gold)" }}>
+            <div style={tierIconStyle}>💎</div>
             <div style={tierNameStyle}>Exclusive</div>
             <p style={tierDescStyle}>
-              Subscribe directly to a creator, at the price they set, for content only their
-              subscribers ever see.
+              Subscribe directly to a creator, at the price they set: subscriber-only posts, direct
+              messaging, live videos, tipping, and 1-on-1 video calls.
             </p>
           </div>
         </div>
@@ -126,7 +131,7 @@ export default function LandingPage() {
 
       {newCreators.length > 0 && (
         <section style={sectionStyle}>
-          <CreatorCardRow title="New verified creators" creators={newCreators} />
+          <CreatorCardRow title="New Baddies" creators={newCreators} />
         </section>
       )}
 
@@ -144,32 +149,52 @@ export default function LandingPage() {
 }
 
 const heroStyle: React.CSSProperties = {
-  padding: "5rem 1.75rem 4rem",
-  maxWidth: "720px",
+  padding: "6rem 1.75rem 4.5rem",
+  maxWidth: "760px",
   margin: "0 auto",
   textAlign: "center",
 };
 
+const kickerStyle: React.CSSProperties = {
+  display: "inline-block",
+  fontSize: "0.78rem",
+  fontWeight: 700,
+  letterSpacing: "0.04em",
+  color: "var(--accent-gold)",
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: "999px",
+  padding: "0.35rem 0.9rem",
+  marginBottom: "1.5rem",
+};
+
 const heroTitleStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)",
-  fontSize: "3rem",
-  fontWeight: 500,
-  margin: "0 0 0.5rem",
+  fontSize: "clamp(3.2rem, 8vw, 5.5rem)",
+  fontWeight: 600,
+  margin: "0 0 0.6rem",
+  lineHeight: 1,
+  background: "linear-gradient(135deg, var(--text) 30%, var(--accent-gold) 100%)",
+  WebkitBackgroundClip: "text",
+  backgroundClip: "text",
+  color: "transparent",
 };
 
 const heroTaglineStyle: React.CSSProperties = {
-  fontSize: "1.15rem",
+  fontSize: "1.3rem",
   color: "var(--accent-gold)",
-  fontWeight: 600,
-  margin: "0 0 1rem",
+  fontWeight: 700,
+  fontFamily: "var(--font-display)",
+  fontStyle: "italic",
+  margin: "0 0 1.1rem",
 };
 
 const heroSubStyle: React.CSSProperties = {
   color: "var(--text-muted)",
-  fontSize: "0.95rem",
-  lineHeight: 1.6,
+  fontSize: "1.02rem",
+  lineHeight: 1.65,
   maxWidth: "480px",
-  margin: "0 auto 2rem",
+  margin: "0 auto 2.25rem",
 };
 
 const heroCtaRowStyle: React.CSSProperties = {
@@ -180,25 +205,26 @@ const heroCtaRowStyle: React.CSSProperties = {
 };
 
 const primaryCtaStyle: React.CSSProperties = {
-  background: "var(--accent-gold)",
+  background: "linear-gradient(135deg, var(--accent-gold) 0%, var(--accent-gold-dim) 100%)",
   color: "var(--bg)",
   border: "none",
-  borderRadius: "var(--radius)",
-  padding: "0.8rem 1.6rem",
-  fontWeight: 600,
-  fontSize: "0.95rem",
+  borderRadius: "999px",
+  padding: "0.95rem 2rem",
+  fontWeight: 700,
+  fontSize: "1rem",
   textDecoration: "none",
   display: "inline-block",
+  boxShadow: "0 8px 30px -8px rgba(224, 184, 74, 0.55)",
 };
 
 const secondaryCtaStyle: React.CSSProperties = {
   background: "transparent",
   color: "var(--text)",
   border: "1px solid var(--border)",
-  borderRadius: "var(--radius)",
-  padding: "0.8rem 1.6rem",
-  fontWeight: 600,
-  fontSize: "0.95rem",
+  borderRadius: "999px",
+  padding: "0.95rem 2rem",
+  fontWeight: 700,
+  fontSize: "1rem",
   textDecoration: "none",
   display: "inline-block",
 };
@@ -209,9 +235,14 @@ const sectionStyle: React.CSSProperties = {
   margin: "0 auto 1.5rem",
 };
 
+const tierIconStyle: React.CSSProperties = {
+  fontSize: "1.6rem",
+  marginBottom: "0.5rem",
+};
+
 const sectionHeadingStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)",
-  fontSize: "1.4rem",
+  fontSize: "1.7rem",
   fontWeight: 500,
   margin: "0 0 1.25rem",
   textAlign: "center",
@@ -226,8 +257,9 @@ const tierGridStyle: React.CSSProperties = {
 const tierCardStyle: React.CSSProperties = {
   background: "var(--surface)",
   border: "1px solid var(--border)",
-  borderRadius: "14px",
-  padding: "1.5rem",
+  borderRadius: "16px",
+  padding: "1.75rem",
+  boxShadow: "var(--glow)",
 };
 
 const tierNameStyle: React.CSSProperties = {

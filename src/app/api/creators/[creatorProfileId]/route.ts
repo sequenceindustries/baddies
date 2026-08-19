@@ -50,5 +50,6 @@ export async function GET(
     unlimitedParticipant: creator.unlimitedOptedIn,
     followerCount,
     subscriberCount,
+    isLive: creator.isLive,
   });
 }

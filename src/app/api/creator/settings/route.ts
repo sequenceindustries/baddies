@@ -37,6 +37,7 @@ export async function GET() {
     subscriberCountVisible: creator.subscriberCountVisible,
     locationVisible: creator.locationVisible,
     coverImageUrl: creator.coverImageUrl,
+    isLive: creator.isLive, // toggled via POST/DELETE /api/creator/live, not PATCH here
   });
 }
 

@@ -11,6 +11,8 @@ import {
   inputStyle,
   primaryButtonStyle,
   errorBannerStyle,
+  roleHomePath,
+  type SessionUser,
 } from "@/components/ui";
 
 export default function LoginPage() {
@@ -39,7 +41,8 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/home");
+    const body: { role: SessionUser["role"] } = await res.json();
+    router.push(roleHomePath(body.role));
     router.refresh();
   }
 

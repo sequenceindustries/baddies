@@ -24,6 +24,10 @@ interface DummyPost {
   tier: "FREE" | "VIP" | "VVIP";
   caption: string;
   daysAgo: number;
+  // Unsplash photo id (the part after "photo-" in images.unsplash.com/photo-<id>).
+  // Every id here was hand-checked to contain no people — see the seed
+  // script's comment on fetchPhotoBytes for why that matters.
+  photoId: string;
 }
 
 interface DummyCreatorSpec {
@@ -53,12 +57,12 @@ const DUMMY_CREATORS: DummyCreatorSpec[] = [
     colorA: "#c9a961",
     colorB: "#0e0e11",
     posts: [
-      { tier: "FREE", caption: "Table Mountain never gets old 🏔️", daysAgo: 9 },
-      { tier: "FREE", caption: "Sunday market run, Bo-Kaap edition.", daysAgo: 4 },
-      { tier: "VIP", caption: "Studio session behind the scenes — VIP only 💛", daysAgo: 6 },
-      { tier: "VIP", caption: "A little preview from this week's shoot.", daysAgo: 2 },
-      { tier: "VVIP", caption: "For my Exclusive baddies only 🔒", daysAgo: 5 },
-      { tier: "VVIP", caption: "Full set just dropped for subscribers.", daysAgo: 1 },
+      { tier: "FREE", caption: "Table Mountain never gets old 🏔️", daysAgo: 9, photoId: "1506905925346-21bda4d32df4" },
+      { tier: "FREE", caption: "Sunday market run, Bo-Kaap edition.", daysAgo: 4, photoId: "1490750967868-88aa4486c946" },
+      { tier: "VIP", caption: "Studio session behind the scenes — VIP only 💛", daysAgo: 6, photoId: "1519681393784-d120267933ba" },
+      { tier: "VIP", caption: "A little preview from this week's shoot.", daysAgo: 2, photoId: "1500375592092-40eb2168fd21" },
+      { tier: "VVIP", caption: "For my Exclusive baddies only 🔒", daysAgo: 5, photoId: "1533105079780-92b9be482077" },
+      { tier: "VVIP", caption: "Full set just dropped for subscribers.", daysAgo: 1, photoId: "1483729558449-99ef09a8c325" },
     ],
   },
   {
@@ -73,12 +77,12 @@ const DUMMY_CREATORS: DummyCreatorSpec[] = [
     colorA: "#7c2d3b",
     colorB: "#1e1e25",
     posts: [
-      { tier: "FREE", caption: "Morning run before the city wakes up.", daysAgo: 8 },
-      { tier: "FREE", caption: "New look, who dis?", daysAgo: 3 },
-      { tier: "VIP", caption: "VIP pass holders get this whole gallery.", daysAgo: 7 },
-      { tier: "VIP", caption: "Gym look of the week.", daysAgo: 2 },
-      { tier: "VVIP", caption: "Subscribers only — the real behind the scenes.", daysAgo: 4 },
-      { tier: "VVIP", caption: "Thank you for 1k subscribers 🖤", daysAgo: 1 },
+      { tier: "FREE", caption: "Morning run before the city wakes up.", daysAgo: 8, photoId: "1449824913935-59a10b8d2000" },
+      { tier: "FREE", caption: "New look, who dis?", daysAgo: 3, photoId: "1441986300917-64674bd600d8" },
+      { tier: "VIP", caption: "VIP pass holders get this whole gallery.", daysAgo: 7, photoId: "1465447142348-e9952c393450" },
+      { tier: "VIP", caption: "Gym look of the week.", daysAgo: 2, photoId: "1490645935967-10de6ba17061" },
+      { tier: "VVIP", caption: "Subscribers only — the real behind the scenes.", daysAgo: 4, photoId: "1508739773434-c26b3d09e071" },
+      { tier: "VVIP", caption: "Thank you for 1k subscribers 🖤", daysAgo: 1, photoId: "1487958449943-2429e8be8625" },
     ],
   },
   {
@@ -93,12 +97,12 @@ const DUMMY_CREATORS: DummyCreatorSpec[] = [
     colorA: "#4c5faf",
     colorB: "#0e0e11",
     posts: [
-      { tier: "FREE", caption: "Golden hour by the Thames.", daysAgo: 10 },
-      { tier: "FREE", caption: "First post here — thanks for the follows!", daysAgo: 5 },
-      { tier: "VIP", caption: "VIP-tier drop for everyone with the pass.", daysAgo: 6 },
-      { tier: "VIP", caption: "Behind the scenes from today's shoot.", daysAgo: 3 },
-      { tier: "VVIP", caption: "Exclusive content — subscribers see it first.", daysAgo: 4 },
-      { tier: "VVIP", caption: "This week's full exclusive set is up.", daysAgo: 1 },
+      { tier: "FREE", caption: "Golden hour by the Thames.", daysAgo: 10, photoId: "1477959858617-67f85cf4f1df" },
+      { tier: "FREE", caption: "First post here — thanks for the follows!", daysAgo: 5, photoId: "1441974231531-c6227db76b6e" },
+      { tier: "VIP", caption: "VIP-tier drop for everyone with the pass.", daysAgo: 6, photoId: "1470071459604-3b5ec3a7fe05" },
+      { tier: "VIP", caption: "Behind the scenes from today's shoot.", daysAgo: 3, photoId: "1520250497591-112f2f40a3f4" },
+      { tier: "VVIP", caption: "Exclusive content — subscribers see it first.", daysAgo: 4, photoId: "1519046904884-53103b34b206" },
+      { tier: "VVIP", caption: "This week's full exclusive set is up.", daysAgo: 1, photoId: "1506905925346-21bda4d32df4" },
     ],
   },
 ];
@@ -118,8 +122,8 @@ function avatarDataUri(initial: string, colorA: string, colorB: string): string 
   return `data:image/svg+xml;base64,${Buffer.from(svg, "utf8").toString("base64")}`;
 }
 
-/** Abstract gradient placeholder "post" image — no real media exists for seed accounts, so posts get a tasteful branded placeholder rather than nothing. 16:10 to match the timeline's large-media aspect ratio. */
-function postSvgBytes(label: string, tierLabel: string, colorA: string, colorB: string): Buffer {
+/** Gradient fallback — only used if fetchPhotoBytes can't reach the network at seed time, so seeding never hard-fails on a flaky connection. */
+function fallbackSvgBytes(label: string, tierLabel: string, colorA: string, colorB: string): Buffer {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 750">
     <defs>
       <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
@@ -134,6 +138,39 @@ function postSvgBytes(label: string, tierLabel: string, colorA: string, colorB: 
     <text x="60" y="705" font-family="Helvetica, Arial, sans-serif" font-size="28" letter-spacing="2" fill="#f1eee7" opacity="0.7">${tierLabel.toUpperCase()}</text>
   </svg>`;
   return Buffer.from(svg, "utf8");
+}
+
+/**
+ * Real photography for seed "post" content, fetched from Unsplash at seed
+ * time and stored as bytes (same as any upload — see the MediaBlob write
+ * below). Every photoId used by DUMMY_CREATORS was individually reviewed
+ * before being added here and contains no people at all — not faces, not
+ * bodies, not even a distant/blurry figure. That's a deliberate, simple
+ * bright line for this platform rather than a judgment call about
+ * "identifiable": Baddies never fabricates or sources a depiction of a
+ * real or fake person for seed data, full stop. These are landscapes,
+ * cityscapes, and lifestyle objects only.
+ *
+ * Falls back to the gradient placeholder if the fetch fails for any
+ * reason (offline dev environment, Unsplash unreachable) — seeding must
+ * never hard-fail over a decorative image.
+ */
+async function fetchPhotoBytes(
+  photoId: string,
+  label: string,
+  tierLabel: string,
+  colorA: string,
+  colorB: string
+): Promise<{ bytes: Buffer; mimeType: string }> {
+  try {
+    const res = await fetch(`https://images.unsplash.com/photo-${photoId}?w=1200&h=750&fit=crop&q=80`);
+    if (!res.ok) throw new Error(`Unsplash returned ${res.status}`);
+    const bytes = Buffer.from(await res.arrayBuffer());
+    return { bytes, mimeType: "image/jpeg" };
+  } catch (err) {
+    console.warn(`  (couldn't fetch photo ${photoId}, using gradient fallback: ${(err as Error).message})`);
+    return { bytes: fallbackSvgBytes(label, tierLabel, colorA, colorB), mimeType: "image/svg+xml" };
+  }
 }
 
 async function seedDummyCreators() {
@@ -196,7 +233,13 @@ async function seedDummyCreators() {
       const contentId = `${spec.slug}-post-${i + 1}`;
       const publishedAt = new Date(Date.now() - post.daysAgo * 24 * 60 * 60 * 1000);
       const storageKey = `creators/${creatorProfile.id}/content/${contentId}`;
-      const bytes = postSvgBytes(spec.displayName, post.tier === "VVIP" ? "Exclusive" : post.tier, spec.colorA, spec.colorB);
+      const { bytes, mimeType } = await fetchPhotoBytes(
+        post.photoId,
+        spec.displayName,
+        post.tier === "VVIP" ? "Exclusive" : post.tier,
+        spec.colorA,
+        spec.colorB
+      );
 
       await db.content.upsert({
         where: { id: contentId },
@@ -221,10 +264,10 @@ async function seedDummyCreators() {
           contentId,
           storageProvider: "stub",
           storageKey,
-          mimeType: "image/svg+xml",
+          mimeType,
           byteSize: bytes.byteLength,
         },
-        update: { byteSize: bytes.byteLength },
+        update: { mimeType, byteSize: bytes.byteLength },
       });
 
       // Mirrors what StubMediaStorageProvider.putObject does — writing
@@ -233,8 +276,8 @@ async function seedDummyCreators() {
       // only ever targets the stub provider's backing table anyway.
       await db.mediaBlob.upsert({
         where: { storageKey },
-        create: { storageKey, mimeType: "image/svg+xml", bytes },
-        update: { bytes },
+        create: { storageKey, mimeType, bytes },
+        update: { mimeType, bytes },
       });
     }
   }

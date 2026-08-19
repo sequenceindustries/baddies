@@ -13,6 +13,7 @@ export interface CreatorCardSource {
   id: string;
   locationVisible: boolean;
   vvipPriceOverride: unknown;
+  isLive: boolean;
   user: {
     profile: { displayName: string | null; avatarUrl: string | null; country: string | null; city: string | null } | null;
   };
@@ -26,6 +27,7 @@ export interface CreatorCard {
   city: string | null;
   verifiedBadge: true;
   vvipPriceUsd: number;
+  isLive: boolean;
 }
 
 export async function toCreatorCard(creator: CreatorCardSource): Promise<CreatorCard> {
@@ -38,6 +40,7 @@ export async function toCreatorCard(creator: CreatorCardSource): Promise<Creator
     city: creator.locationVisible ? (creator.user.profile?.city ?? null) : null,
     verifiedBadge: true,
     vvipPriceUsd: pricing.vvipPriceUsd,
+    isLive: creator.isLive,
   };
 }
 
@@ -45,5 +48,6 @@ export const CREATOR_CARD_SELECT = {
   id: true,
   locationVisible: true,
   vvipPriceOverride: true,
+  isLive: true,
   user: { select: { profile: { select: { displayName: true, avatarUrl: true, country: true, city: true } } } },
 } as const;

@@ -15,11 +15,13 @@ const SECTION_LIMIT = 10;
  *   1. Creators the fan follows
  *   2. Subscribed creators
  *   3. Unlimited discovery
- *   4. Recommended creators
- *   5. Trending content
- *   6. New verified creators
+ *   4. Nearby creators (same country as the fan's own, real, detected
+ *      location — see LocationField/useLocationDetector)
+ *   5. Recommended creators
+ *   6. Trending content
+ *   7. New verified creators
  *
- * For a logged-out visitor, sections 1/2/3 are simply empty and the
+ * For a logged-out visitor, sections 1/2/3/4 are simply empty and the
  * response degrades to trending + new creators — no separate "logged out
  * home" endpoint needed. "Recommended" here is intentionally a simple
  * fallback (verified creators the fan doesn't already follow, most
@@ -29,25 +31,53 @@ const SECTION_LIMIT = 10;
 export async function GET() {
   const user = await getCurrentUser();
 
-  const [followedContent, subscribedContent, unlimitedCreators, trending, newCreators] = await Promise.all([
-    getFollowedCreatorsContent(user?.id),
-    getSubscribedCreatorsContent(user?.id),
-    getUnlimitedParticipatingCreators(),
-    getTrendingSection(),
-    getNewCreatorsSection(),
-  ]);
+  const [followedContent, subscribedContent, unlimitedCreators, trending, newCreators, fanCountry] =
+    await Promise.all([
+      getFollowedCreatorsContent(user?.id),
+      getSubscribedCreatorsContent(user?.id),
+      getUnlimitedParticipatingCreators(),
+      getTrendingSection(),
+      getNewCreatorsSection(),
+      getFanCountry(user?.id),
+    ]);
 
   const followedCreatorIds = new Set(followedContent.creatorIds);
-  const recommended = await getRecommendedCreators(followedCreatorIds);
+  const nearby = await getNearbyCreators(fanCountry, followedCreatorIds);
+  const excludeFromRecommended = new Set([...followedCreatorIds, ...nearby.map((c) => c.creatorProfileId)]);
+  const recommended = await getRecommendedCreators(excludeFromRecommended);
 
   return NextResponse.json({
     following: followedContent.items,
     subscribed: subscribedContent.items,
     unlimited: unlimitedCreators,
+    nearby,
     recommended,
     trending,
     newCreators,
   });
+}
+
+async function getFanCountry(fanId?: string): Promise<string | null> {
+  if (!fanId) return null;
+  const profile = await db.profile.findUnique({ where: { userId: fanId }, select: { country: true } });
+  return profile?.country ?? null;
+}
+
+/** "Baddies Near You" (§ location auto-detect) — same real country as the fan's own, not a self-reported one. */
+async function getNearbyCreators(fanCountry: string | null, excludeCreatorIds: Set<string>) {
+  if (!fanCountry) return [];
+  const creators = await db.creatorProfile.findMany({
+    where: {
+      status: "VERIFIED",
+      locationVisible: true,
+      id: { notIn: Array.from(excludeCreatorIds) },
+      user: { profile: { country: fanCountry } },
+    },
+    orderBy: { approvedAt: "desc" },
+    take: SECTION_LIMIT,
+    select: CREATOR_CARD_SELECT,
+  });
+  return Promise.all(creators.map(toCreatorCard));
 }
 
 async function getFollowedCreatorsContent(fanId?: string): Promise<{ items: unknown[]; creatorIds: string[] }> {

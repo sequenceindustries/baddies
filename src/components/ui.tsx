@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export interface SessionUser {
   id: string;
@@ -9,6 +9,71 @@ export interface SessionUser {
   role: "FAN" | "CREATOR" | "ADMIN";
   displayName: string | null;
   creatorProfile: { id: string; status: string } | null;
+}
+
+export interface DetectedLocation {
+  country: string;
+  city: string;
+}
+
+/**
+ * Real-location detection so country/city reflect where someone actually
+ * is instead of whatever they feel like typing — per the product
+ * decision that location shouldn't be a free-text field anyone can lie
+ * on. Uses the browser's own Geolocation API (device GPS/network
+ * position, needs the visitor's explicit permission) reverse-geocoded via
+ * BigDataCloud's free, keyless, CORS-enabled client-side endpoint — no
+ * server round trip, no API key to provision.
+ *
+ * This can't be airtight (permission can be denied, a VPN can lie to the
+ * browser too) so callers still show the result in an editable field
+ * rather than a hard-locked one — but the default is always the real,
+ * detected value, not a blank box inviting a fabrication.
+ */
+export function useLocationDetector() {
+  const [status, setStatus] = useState<"idle" | "detecting" | "done" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  function detect(): Promise<DetectedLocation | null> {
+    return new Promise((resolve) => {
+      if (typeof navigator === "undefined" || !navigator.geolocation) {
+        setStatus("error");
+        setError("Location isn't available in this browser — enter it manually.");
+        resolve(null);
+        return;
+      }
+      setStatus("detecting");
+      setError(null);
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          try {
+            const { latitude, longitude } = pos.coords;
+            const res = await fetch(
+              `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
+            );
+            const body = await res.json();
+            const country: string = body.countryName ?? "";
+            const city: string = body.city || body.locality || body.principalSubdivision || "";
+            if (!country) throw new Error("No country in response");
+            setStatus("done");
+            resolve({ country, city });
+          } catch {
+            setStatus("error");
+            setError("Couldn't determine your location — enter it manually.");
+            resolve(null);
+          }
+        },
+        () => {
+          setStatus("error");
+          setError("Location permission denied — enter your location manually.");
+          resolve(null);
+        },
+        { timeout: 10000 }
+      );
+    });
+  }
+
+  return { status, error, detect };
 }
 
 /** Fetches /api/auth/me once on mount. Minimal — no global state library for a handful of pages. */
@@ -35,8 +100,30 @@ export function useSession() {
   return { user, loading: user === undefined, refresh };
 }
 
+/** Where a signed-in visitor's "home" is — used right after login/register, and by the landing page's already-signed-in redirect. */
+export function roleHomePath(role: SessionUser["role"]): string {
+  if (role === "ADMIN") return "/admin";
+  if (role === "CREATOR") return "/dashboard";
+  return "/home";
+}
+
+/**
+ * Stamps [data-role] on <html> so globals.css can swap --accent (gold for
+ * fans, teal for creators, wine-red for admins) — the single mechanism
+ * every page's "which mode am I in" coloring hangs off of. Lives in Nav
+ * because Nav is the one thing mounted on every page via the root layout.
+ * Signed-out visitors get the default (fan/gold) theme.
+ */
+function useRoleTheme(role: SessionUser["role"] | null | undefined) {
+  useEffect(() => {
+    const value = role === "CREATOR" ? "creator" : role === "ADMIN" ? "admin" : "fan";
+    document.documentElement.setAttribute("data-role", value);
+  }, [role]);
+}
+
 export function Nav() {
   const { user, loading, refresh } = useSession();
+  useRoleTheme(user?.role);
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -45,6 +132,7 @@ export function Nav() {
   }
 
   return (
+    <div style={navWrapStyle}>
     <nav style={navStyle}>
       <Link href="/" style={{ ...brandStyle, textDecoration: "none" }}>
         Baddies
@@ -52,39 +140,46 @@ export function Nav() {
       <div style={{ display: "flex", gap: "1.25rem", alignItems: "center" }}>
         {loading ? null : user ? (
           <>
-            <Link href="/home" style={linkStyle}>
-              Home
-            </Link>
-            <Link href="/search" style={linkStyle}>
-              Search
-            </Link>
-            <Link href="/discovery" style={linkStyle}>
-              Discover
-            </Link>
-            {user.role !== "ADMIN" && (
-              <>
-                <Link href="/subscriptions" style={linkStyle}>
-                  My subscriptions
-                </Link>
-                {user.creatorProfile ? (
-                  <>
-                    <Link href="/dashboard" style={linkStyle}>
-                      Dashboard
-                    </Link>
-                    <Link href="/apply" style={linkStyle}>
-                      Creator status
-                    </Link>
-                  </>
-                ) : (
-                  <Link href="/apply" style={linkStyle}>
-                    Become a creator
-                  </Link>
-                )}
-              </>
-            )}
+            {/* Deliberately different link sets per role (not one big list
+                with items hidden) — a creator lands on tools for running
+                their page, a fan lands on tools for browsing/paying, per
+                "creators shouldn't see what fans see." */}
             {user.role === "ADMIN" && (
               <Link href="/admin" style={linkStyle}>
                 Admin
+              </Link>
+            )}
+            {user.role === "CREATOR" && (
+              <Link href="/dashboard" style={linkStyle}>
+                Dashboard
+              </Link>
+            )}
+            {user.role === "FAN" && (
+              <>
+                <Link href="/home" style={linkStyle}>
+                  Home
+                </Link>
+                <Link href="/subscriptions" style={linkStyle}>
+                  My subscriptions
+                </Link>
+              </>
+            )}
+            {user.role !== "ADMIN" && (
+              <>
+                <Link href="/search" style={linkStyle}>
+                  Search
+                </Link>
+                <Link href="/discovery" style={linkStyle}>
+                  Discover
+                </Link>
+                <Link href="/messages" style={linkStyle}>
+                  Messages
+                </Link>
+              </>
+            )}
+            {user.role === "FAN" && !user.creatorProfile && (
+              <Link href="/apply" style={primaryLinkStyle}>
+                Become a creator
               </Link>
             )}
             <Link href="/settings" style={linkStyle}>
@@ -113,6 +208,8 @@ export function Nav() {
         )}
       </div>
     </nav>
+    <div style={navAccentBarStyle} aria-hidden="true" />
+    </div>
   );
 }
 
@@ -156,13 +253,13 @@ function AccountTypeBadge({
   creatorProfile: SessionUser["creatorProfile"];
 }) {
   if (role === "ADMIN") {
-    return <span style={accountBadgeStyle("var(--accent-wine)")}>Admin</span>;
+    return <span style={accountBadgeStyle("var(--accent)")}>Admin</span>;
   }
   if (creatorProfile) {
     const statusLabel = creatorProfile.status === "VERIFIED" ? "Verified" : "Pending";
-    return <span style={accountBadgeStyle("var(--accent-gold)")}>Creator · {statusLabel}</span>;
+    return <span style={accountBadgeStyle("var(--accent)")}>Creator · {statusLabel}</span>;
   }
-  return <span style={accountBadgeStyle("var(--text-muted)")}>Fan</span>;
+  return <span style={accountBadgeStyle("var(--accent-gold)")}>Fan</span>;
 }
 
 function accountBadgeStyle(color: string): React.CSSProperties {
@@ -177,6 +274,103 @@ function accountBadgeStyle(color: string): React.CSSProperties {
     padding: "0.2rem 0.6rem",
   };
 }
+
+/**
+ * Country/city input built around useLocationDetector. On signup
+ * (autoDetect, the default) it detects on mount, since there's no
+ * existing value yet and the common path shouldn't show a blank box
+ * someone has to decide what to type into. In settings (autoDetect=false)
+ * it only detects when the "Detect" button is clicked — a returning
+ * visitor's already-saved, already-correct location shouldn't trigger a
+ * geolocation permission prompt just from opening the page. Either way
+ * the fields stay editable as the fallback for denied permission or a
+ * wrong reverse-geocode, with a note making clear where the value came
+ * from.
+ */
+export function LocationField({
+  country,
+  city,
+  onChange,
+  autoDetect = true,
+}: {
+  country: string;
+  city: string;
+  onChange: (v: { country: string; city: string }) => void;
+  autoDetect?: boolean;
+}) {
+  const { status, error, detect } = useLocationDetector();
+  const [autoFilled, setAutoFilled] = useState(false);
+  const triedRef = useRef(false);
+
+  useEffect(() => {
+    if (!autoDetect || triedRef.current) return;
+    triedRef.current = true;
+    detect().then((loc) => {
+      if (loc) {
+        onChange(loc);
+        setAutoFilled(true);
+      }
+    });
+    // Only ever auto-fires once per mounted field.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function redetect() {
+    setAutoFilled(false);
+    const loc = await detect();
+    if (loc) {
+      onChange(loc);
+      setAutoFilled(true);
+    }
+  }
+
+  return (
+    <div style={{ marginBottom: "1.1rem" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.4rem" }}>
+        <span style={fieldLabelStyle}>Location</span>
+        <button type="button" onClick={redetect} disabled={status === "detecting"} style={detectButtonStyle}>
+          {status === "detecting" ? "Detecting..." : "📍 Detect my location"}
+        </button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
+        <input
+          style={inputStyle}
+          value={country}
+          onChange={(e) => onChange({ country: e.target.value, city })}
+          placeholder="Country"
+          maxLength={100}
+          required
+        />
+        <input
+          style={inputStyle}
+          value={city}
+          onChange={(e) => onChange({ country, city: e.target.value })}
+          placeholder="City"
+          maxLength={100}
+          required
+        />
+      </div>
+      <span style={hintStyle}>
+        {autoFilled
+          ? "Detected from your device location. Edit if it's wrong."
+          : error
+            ? `${error} (you can still enter it manually)`
+            : "We use your real location — this can't be a made-up city."}
+      </span>
+    </div>
+  );
+}
+
+const detectButtonStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "1px solid var(--accent)",
+  color: "var(--accent)",
+  borderRadius: "999px",
+  padding: "0.3rem 0.7rem",
+  fontSize: "0.76rem",
+  fontWeight: 600,
+  cursor: "pointer",
+};
 
 export function Field(props: {
   label: string;
@@ -257,12 +451,26 @@ export const errorBannerStyle: React.CSSProperties = {
   marginBottom: "1.2rem",
 };
 
+const navWrapStyle: React.CSSProperties = {
+  position: "sticky",
+  top: 0,
+  zIndex: 20,
+};
+
 const navStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
   padding: "1.1rem 1.75rem",
   borderBottom: "1px solid var(--border)",
+  background: "rgba(11, 11, 16, 0.72)",
+  backdropFilter: "blur(10px)",
+};
+
+/** The role-mode color strip — same mechanism as the account badge (var(--accent), swapped by [data-role]), just visible on every single page, not only where the badge renders. */
+const navAccentBarStyle: React.CSSProperties = {
+  height: "3px",
+  background: "linear-gradient(90deg, var(--accent), transparent 70%)",
 };
 
 const brandStyle: React.CSSProperties = {
