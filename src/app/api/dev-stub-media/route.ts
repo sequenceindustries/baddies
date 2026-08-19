@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   const expires = Number(req.nextUrl.searchParams.get("expires"));
   const sig = req.nextUrl.searchParams.get("sig") ?? "";
 
-  const object = storageKey && expires && sig ? readStubMedia(storageKey, expires, sig) : null;
+  const object = storageKey && expires && sig ? await readStubMedia(storageKey, expires, sig) : null;
   if (!object) {
     return NextResponse.json({ error: "This link has expired or is invalid." }, { status: 404 });
   }

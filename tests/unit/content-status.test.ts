@@ -7,10 +7,13 @@ import {
 } from "@/lib/content/status";
 
 describe("content status state machine", () => {
-  it("allows the happy path from DRAFT to APPROVED", () => {
+  it("allows the happy path from DRAFT to APPROVED (no mandatory moderation queue)", () => {
     expect(canTransitionContent("DRAFT", "UPLOADED")).toBe(true);
     expect(canTransitionContent("UPLOADED", "PROCESSING")).toBe(true);
-    expect(canTransitionContent("PROCESSING", "PENDING_REVIEW")).toBe(true);
+    expect(canTransitionContent("PROCESSING", "APPROVED")).toBe(true);
+  });
+
+  it("still allows PENDING_REVIEW -> APPROVED for a report-triggered re-review, just not as part of upload", () => {
     expect(canTransitionContent("PENDING_REVIEW", "APPROVED")).toBe(true);
   });
 

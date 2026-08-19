@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { VerifiedBadge, displayHeadingStyle, useSession, inputStyle, errorBannerStyle } from "@/components/ui";
-import { ContentGrid, ReportButton, type ContentCardData } from "@/components/cards";
+import { ContentTimeline, ReportButton, type ContentCardData } from "@/components/cards";
 
 interface CreatorProfileResponse {
   creatorProfileId: string;
@@ -142,53 +142,9 @@ export default function CreatorProfilePage() {
         <SubscribeAndTip creatorProfileId={creatorProfileId} vvipPriceUsd={creator.vvipPriceUsd} />
       )}
 
-      <ContentByTier items={items} vvipPriceUsd={creator.vvipPriceUsd} />
+      <h2 style={sectionHeadingStyle}>Content</h2>
+      <ContentTimeline items={items} vvipPriceUsd={creator.vvipPriceUsd} />
     </main>
-  );
-}
-
-/**
- * OnlyFans-style content grouping: separate Free/VIP/Exclusive sections
- * rather than one undifferentiated grid, so a visitor can see at a
- * glance what's actually free vs. what needs the platform VIP Pass vs.
- * what needs a subscription to this specific creator — with that price
- * shown right on the section header.
- */
-function ContentByTier({ items, vvipPriceUsd }: { items: RawContentItem[]; vvipPriceUsd: number }) {
-  const free = items.filter((i) => i.accessLevel === "FREE");
-  const vip = items.filter((i) => i.accessLevel === "VIP");
-  const exclusive = items.filter((i) => i.accessLevel === "VVIP");
-
-  if (items.length === 0) {
-    return (
-      <>
-        <h2 style={sectionHeadingStyle}>Content</h2>
-        <p style={{ color: "var(--text-muted)" }}>No content yet.</p>
-      </>
-    );
-  }
-
-  return (
-    <>
-      {free.length > 0 && (
-        <section style={{ marginBottom: "2.25rem" }}>
-          <h2 style={sectionHeadingStyle}>Free</h2>
-          <ContentGrid items={free} />
-        </section>
-      )}
-      {vip.length > 0 && (
-        <section style={{ marginBottom: "2.25rem" }}>
-          <h2 style={sectionHeadingStyle}>VIP</h2>
-          <ContentGrid items={vip} />
-        </section>
-      )}
-      {exclusive.length > 0 && (
-        <section style={{ marginBottom: "2.25rem" }}>
-          <h2 style={sectionHeadingStyle}>Exclusive · ${vvipPriceUsd.toFixed(2)}/mo</h2>
-          <ContentGrid items={exclusive} />
-        </section>
-      )}
-    </>
   );
 }
 

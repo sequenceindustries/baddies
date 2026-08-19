@@ -4,10 +4,16 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "@/components/ui";
-import { CreatorCardRow, type CreatorCardData } from "@/components/cards";
+import { CreatorCardRow, ContentCard, type CreatorCardData, type ContentCardData } from "@/components/cards";
 
 interface DiscoveryResponse {
   creators: CreatorCardData[];
+}
+
+interface RecentContentItem extends ContentCardData {
+  creatorProfileId: string;
+  creatorDisplayName: string | null;
+  creatorAvatarUrl: string | null;
 }
 
 /**
@@ -21,6 +27,7 @@ export default function LandingPage() {
   const router = useRouter();
   const { user, loading } = useSession();
   const [newCreators, setNewCreators] = useState<CreatorCardData[]>([]);
+  const [recentContent, setRecentContent] = useState<RecentContentItem[]>([]);
 
   useEffect(() => {
     if (!loading && user) {
@@ -34,6 +41,11 @@ export default function LandingPage() {
       .then((r) => (r.ok ? r.json() : { creators: [] }))
       .then((body: DiscoveryResponse) => {
         if (!cancelled) setNewCreators(body.creators ?? []);
+      });
+    fetch("/api/discovery/recent-content")
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((body: { items: RecentContentItem[] }) => {
+        if (!cancelled) setRecentContent(body.items ?? []);
       });
     return () => {
       cancelled = true;
@@ -87,6 +99,30 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {recentContent.length > 0 && (
+        <section style={sectionStyle}>
+          <h2 style={sectionHeadingStyle}>Free right now</h2>
+          <div style={previewStripStyle}>
+            {recentContent.map((item) => (
+              <div key={item.contentId} style={previewCardWrapStyle}>
+                <Link href={`/creators/${item.creatorProfileId}`} style={previewCreatorLinkStyle}>
+                  <span style={previewAvatarStyle}>
+                    {item.creatorAvatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={item.creatorAvatarUrl} alt="" style={previewAvatarImgStyle} />
+                    ) : (
+                      (item.creatorDisplayName ?? "?").charAt(0).toUpperCase()
+                    )}
+                  </span>
+                  {item.creatorDisplayName ?? "Unnamed creator"}
+                </Link>
+                <ContentCard item={item} size="large" autoLoad />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {newCreators.length > 0 && (
         <section style={sectionStyle}>
@@ -207,3 +243,46 @@ const tierDescStyle: React.CSSProperties = {
   lineHeight: 1.5,
   margin: 0,
 };
+
+const previewStripStyle: React.CSSProperties = {
+  display: "flex",
+  gap: "1.25rem",
+  overflowX: "auto",
+  paddingBottom: "0.5rem",
+};
+
+const previewCardWrapStyle: React.CSSProperties = {
+  flex: "0 0 auto",
+  width: "300px",
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.6rem",
+};
+
+const previewCreatorLinkStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.5rem",
+  color: "var(--text)",
+  textDecoration: "none",
+  fontWeight: 600,
+  fontSize: "0.88rem",
+};
+
+const previewAvatarStyle: React.CSSProperties = {
+  width: "28px",
+  height: "28px",
+  borderRadius: "50%",
+  background: "var(--surface-raised)",
+  border: "1px solid var(--border)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: "0.75rem",
+  fontWeight: 600,
+  color: "var(--accent-gold)",
+  overflow: "hidden",
+  flexShrink: 0,
+};
+
+const previewAvatarImgStyle: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover" };

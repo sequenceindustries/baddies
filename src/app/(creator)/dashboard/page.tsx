@@ -244,10 +244,12 @@ function ContentPanel({ canMonetise }: { canMonetise: boolean }) {
               <div>
                 <div style={{ fontSize: "0.9rem" }}>{item.caption || "(no caption)"}</div>
                 <div style={mutedSmallStyle}>
-                  {item.mediaType} · {item.accessLevel} · {item.status}
-                  {item.publishedAt ? " · published" : ""} · ♥ {item.likeCount}
+                  {item.mediaType} · {item.accessLevel}
+                  {item.publishedAt ? " · live" : ` · ${item.status.toLowerCase()}`} · ♥ {item.likeCount}
                 </div>
               </div>
+              {/* Uploads publish immediately (see the upload route) — this
+                  only ever fires for older rows from before that change. */}
               {item.status === "APPROVED" && !item.publishedAt && (
                 <button onClick={() => publish(item.contentId)} style={publishButtonStyle}>
                   Publish
@@ -311,6 +313,9 @@ function UploadForm({ canMonetise, onUploaded }: { canMonetise: boolean; onUploa
   return (
     <div style={{ ...cardStyle, marginBottom: "2rem" }}>
       <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Upload content</h2>
+      <p style={{ ...mutedSmallStyle, marginTop: "-0.6rem", marginBottom: "1.1rem" }}>
+        Goes live immediately — no admin approval, no waiting.
+      </p>
       <form onSubmit={handleSubmit}>
         {error && <div style={errorBannerStyle}>{error}</div>}
 

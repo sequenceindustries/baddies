@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   useSession,
   displayHeadingStyle,
@@ -27,9 +28,57 @@ export default function SettingsPage() {
   return (
     <main style={mainStyle}>
       <h1 style={displayHeadingStyle}>Settings</h1>
+      <AccountTypePanel role={user.role} creatorProfile={user.creatorProfile} />
       <ProfileSettings />
       {user.creatorProfile && <CreatorSettings />}
     </main>
+  );
+}
+
+/**
+ * Spells out, in plain words, exactly what kind of account this is —
+ * the same distinction the nav badge makes at a glance, but with room
+ * here to explain what it means and what to do about it.
+ */
+function AccountTypePanel({
+  role,
+  creatorProfile,
+}: {
+  role: "FAN" | "CREATOR" | "ADMIN";
+  creatorProfile: { id: string; status: string } | null;
+}) {
+  let heading = "Fan account";
+  let body = "You can browse, subscribe, and tip creators.";
+  if (role === "ADMIN") {
+    heading = "Admin account";
+    body = "You have platform administration access.";
+  } else if (creatorProfile) {
+    heading = "Creator account";
+    body =
+      creatorProfile.status === "VERIFIED"
+        ? "You're verified — your uploads publish immediately, no approval wait."
+        : `Application in progress (status: ${creatorProfile.status}).`;
+  }
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: "2rem" }}>
+      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>{heading}</h2>
+      <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", margin: 0 }}>{body}</p>
+      {!creatorProfile && role !== "ADMIN" && (
+        <Link
+          href="/apply"
+          style={{
+            display: "inline-block",
+            marginTop: "0.6rem",
+            fontSize: "0.85rem",
+            color: "var(--accent-gold)",
+            fontWeight: 600,
+          }}
+        >
+          Become a creator →
+        </Link>
+      )}
+    </div>
   );
 }
 

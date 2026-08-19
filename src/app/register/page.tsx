@@ -14,8 +14,11 @@ import {
   errorBannerStyle,
 } from "@/components/ui";
 
+type Intent = "FAN" | "CREATOR";
+
 export default function RegisterPage() {
   const router = useRouter();
+  const [intent, setIntent] = useState<Intent>("FAN");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -44,7 +47,12 @@ export default function RegisterPage() {
       return;
     }
 
-    router.push("/home");
+    // Every account starts as a fan (see RegisterSchema) — a creator
+    // account additionally needs a legal name and a signed Creator
+    // Agreement, which only /apply collects. Choosing "Creator" here just
+    // sends them straight into that next step instead of leaving them to
+    // discover "Become a creator" in the nav on their own.
+    router.push(intent === "CREATOR" ? "/apply" : "/home");
     router.refresh();
   }
 
@@ -57,6 +65,29 @@ export default function RegisterPage() {
       <div style={cardStyle}>
         <form onSubmit={handleSubmit}>
           {error && <div style={errorBannerStyle}>{error}</div>}
+
+          <span style={introLabelStyle}>I&apos;m joining as a...</span>
+          <div style={intentRowStyle}>
+            <IntentOption
+              label="Fan"
+              hint="Browse, subscribe, tip."
+              active={intent === "FAN"}
+              onClick={() => setIntent("FAN")}
+            />
+            <IntentOption
+              label="Creator"
+              hint="Post content, get paid."
+              active={intent === "CREATOR"}
+              onClick={() => setIntent("CREATOR")}
+            />
+          </div>
+          {intent === "CREATOR" && (
+            <p style={intentNoteStyle}>
+              This account starts as a fan account, same as anyone else — right after you sign up
+              we&apos;ll take you to the creator application (a quick identity/age check, no
+              approval wait for your posts once you&apos;re verified).
+            </p>
+          )}
 
           <Field label="Display name">
             <input
@@ -134,6 +165,68 @@ export default function RegisterPage() {
       </p>
     </main>
   );
+}
+
+function IntentOption({
+  label,
+  hint,
+  active,
+  onClick,
+}: {
+  label: string;
+  hint: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" onClick={onClick} style={intentOptionStyle(active)}>
+      <span style={{ fontWeight: 600, fontSize: "0.92rem" }}>{label}</span>
+      <span style={{ fontSize: "0.76rem", color: "var(--text-muted)" }}>{hint}</span>
+    </button>
+  );
+}
+
+const introLabelStyle: React.CSSProperties = {
+  display: "block",
+  fontSize: "0.85rem",
+  color: "var(--text-muted)",
+  fontWeight: 500,
+  marginBottom: "0.5rem",
+};
+
+const intentRowStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: "0.75rem",
+  marginBottom: "0.5rem",
+};
+
+const intentNoteStyle: React.CSSProperties = {
+  fontSize: "0.8rem",
+  color: "var(--text-muted)",
+  background: "var(--surface-raised)",
+  border: "1px solid var(--border)",
+  borderRadius: "var(--radius)",
+  padding: "0.7rem 0.85rem",
+  marginTop: "0.6rem",
+  marginBottom: "1.3rem",
+  lineHeight: 1.5,
+};
+
+function intentOptionStyle(active: boolean): React.CSSProperties {
+  return {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: "0.2rem",
+    padding: "0.7rem 0.85rem",
+    borderRadius: "var(--radius)",
+    cursor: "pointer",
+    textAlign: "left",
+    background: active ? "rgba(201, 169, 97, 0.12)" : "var(--surface-raised)",
+    border: active ? "1.5px solid var(--accent-gold)" : "1px solid var(--border)",
+    color: "var(--text)",
+  };
 }
 
 function formatError(body: unknown): string {

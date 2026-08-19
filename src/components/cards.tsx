@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { VerifiedBadge } from "./ui";
 
 export interface CreatorCardData {
@@ -75,38 +75,68 @@ const ACCESS_LABEL: Record<ContentCardData["accessLevel"], string> = {
 };
 
 /**
- * Renders a content item. FREE content can actually be viewed inline
- * (fetches its signed media URL on click, since /api/content/:id/media
- * allows anyone for free, live content). VIP content has a real "Get VIP
- * Pass" unlock button — one flat platform-wide price via the dummy
- * /api/checkout/vip-pass route (stub payment provider). VVIP content
- * points fans at the creator's own Subscribe button instead of
- * duplicating a subscribe flow on every card, since it needs that
- * specific creator's price.
+ * Renders a content item. Always tries the real thing first — clicking
+ * "View" calls /api/content/:id/media and lets the server's entitlement
+ * check (src/lib/entitlements/content.ts) decide, rather than the client
+ * guessing from local state whether this viewer is unlocked. That guess
+ * used to be wrong for anyone reloading the page: a real VVIP subscriber
+ * had no way to open VVIP content at all outside the same session they'd
+ * just subscribed in. Only once the server actually says no do we show a
+ * tier-specific upsell (Get VIP Pass, or "subscribe on this creator's
+ * profile" for VVIP, which needs that specific creator's price and so
+ * isn't duplicated here).
+ *
+ * `size="large"` is the Twitter-style timeline presentation used on a
+ * creator's own profile (see ContentTimeline) — big media, not a small
+ * grid square. `autoLoad` skips the click for FREE posts in that context
+ * so a feed actually reads as a feed instead of a wall of "View" buttons.
  */
-export function ContentCard({ item }: { item: ContentCardData }) {
+export function ContentCard({
+  item,
+  size = "grid",
+  autoLoad = false,
+}: {
+  item: ContentCardData;
+  size?: "grid" | "large";
+  autoLoad?: boolean;
+}) {
   const [media, setMedia] = useState<{ mimeType: string; signedUrl: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [unlocked, setUnlocked] = useState(false);
+  const [denied, setDenied] = useState(false);
+  const [attempted, setAttempted] = useState(false);
   const [liked, setLiked] = useState(item.viewerHasLiked ?? false);
   const [likeCount, setLikeCount] = useState(item.likeCount ?? 0);
   const [likeBusy, setLikeBusy] = useState(false);
-  const isFree = item.accessLevel === "FREE";
-  const isVip = item.accessLevel === "VIP";
+  const large = size === "large";
 
   async function handleView() {
     setLoading(true);
     setError(null);
     const res = await fetch(`/api/content/${item.contentId}/media`);
     setLoading(false);
+    setAttempted(true);
     if (!res.ok) {
-      setError("You don't have access to this content.");
+      setDenied(true);
+      if (res.status !== 401 && res.status !== 403) {
+        setError("Couldn't load this content. Try again.");
+      }
       return;
     }
     const body = await res.json();
-    if (body.media?.[0]) setMedia(body.media[0]);
+    if (body.media?.[0]) {
+      setMedia(body.media[0]);
+      setDenied(false);
+    }
   }
+
+  useEffect(() => {
+    if (autoLoad && item.accessLevel === "FREE") {
+      handleView();
+    }
+    // Only ever auto-fires once per mounted card.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleGetVipPass() {
     setLoading(true);
@@ -118,7 +148,6 @@ export function ContentCard({ item }: { item: ContentCardData }) {
       setError(body?.error ?? "Couldn't get VIP pass.");
       return;
     }
-    setUnlocked(true);
     await handleView();
   }
 
@@ -134,27 +163,30 @@ export function ContentCard({ item }: { item: ContentCardData }) {
   }
 
   return (
-    <div style={contentCardStyle}>
+    <div style={large ? timelinePostStyle : contentCardStyle}>
+      <div style={large ? timelineMetaRowStyle : undefined}>
+        <TierBadge accessLevel={item.accessLevel} />
+        {large && item.publishedAt && <span style={mutedSmallStyle}>{timeAgo(item.publishedAt)}</span>}
+      </div>
+      {item.caption && <p style={captionStyle}>{item.caption}</p>}
       {media ? (
-        <MediaPreview mimeType={media.mimeType} url={media.signedUrl} />
+        <MediaPreview mimeType={media.mimeType} url={media.signedUrl} large={large} />
       ) : (
-        <div style={contentThumbStyle}>
-          {isFree ? (
-            <button onClick={handleView} disabled={loading} style={ghostSmallButtonStyle}>
-              {loading ? "Loading..." : "▶ View"}
-            </button>
-          ) : isVip && !unlocked ? (
+        <div style={large ? largeThumbStyle : contentThumbStyle}>
+          {denied && item.accessLevel === "VIP" ? (
             <button onClick={handleGetVipPass} disabled={loading} style={ghostSmallButtonStyle}>
               {loading ? "..." : "🔒 Get VIP Pass to unlock"}
             </button>
+          ) : denied ? (
+            <span style={{ fontSize: large ? "2rem" : "1.4rem" }}>🔒</span>
           ) : (
-            <span style={{ fontSize: "1.4rem" }}>🔒</span>
+            <button onClick={handleView} disabled={loading} style={ghostSmallButtonStyle}>
+              {loading ? "Loading..." : attempted ? "▶ Retry" : "▶ View"}
+            </button>
           )}
         </div>
       )}
-      {item.caption && <p style={captionStyle}>{item.caption}</p>}
-      <div style={mutedSmallStyle}>{ACCESS_LABEL[item.accessLevel]}</div>
-      {item.accessLevel === "VVIP" && (
+      {denied && item.accessLevel === "VVIP" && (
         <div style={mutedSmallStyle}>Subscribe on this creator&apos;s profile to unlock.</div>
       )}
       {error && <div style={{ ...mutedSmallStyle, color: "var(--danger)" }}>{error}</div>}
@@ -168,15 +200,85 @@ export function ContentCard({ item }: { item: ContentCardData }) {
   );
 }
 
-function MediaPreview({ mimeType, url }: { mimeType: string; url: string }) {
+function TierBadge({ accessLevel }: { accessLevel: ContentCardData["accessLevel"] }) {
+  return <span style={tierBadgeStyle(accessLevel)}>{ACCESS_LABEL[accessLevel]}</span>;
+}
+
+function timeAgo(iso: string): string {
+  const diffSec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (diffSec < 60) return "just now";
+  const min = Math.floor(diffSec / 60);
+  if (min < 60) return `${min}m`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `${day}d`;
+  const mo = Math.floor(day / 30);
+  if (mo < 12) return `${mo}mo`;
+  return `${Math.floor(mo / 12)}y`;
+}
+
+/**
+ * OnlyFans-style creator-profile feed: a single reverse-chronological
+ * timeline (items already arrive sorted newest-first from
+ * /api/creators/:id/content) rather than three permanently-stacked
+ * sections. Tier tabs only appear at all once this creator actually has
+ * content in more than one tier — a creator who only ever posts Free
+ * content shouldn't see empty "VIP"/"Exclusive" tabs cluttering their
+ * page.
+ */
+const TIER_ORDER = ["FREE", "VIP", "VVIP"] as const;
+
+export function ContentTimeline({ items, vvipPriceUsd }: { items: ContentCardData[]; vvipPriceUsd: number }) {
+  const present = new Set(items.map((i) => i.accessLevel));
+  const tiersPresent = TIER_ORDER.filter((t) => present.has(t));
+  const [tab, setTab] = useState<"ALL" | "FREE" | "VIP" | "VVIP">("ALL");
+  const showTabs = tiersPresent.length > 1;
+  const visible = !showTabs || tab === "ALL" ? items : items.filter((i) => i.accessLevel === tab);
+
+  if (items.length === 0) {
+    return <p style={mutedSmallStyle}>No content yet.</p>;
+  }
+
+  const TAB_LABEL: Record<"FREE" | "VIP" | "VVIP", string> = {
+    FREE: "Free",
+    VIP: "VIP",
+    VVIP: vvipPriceUsd ? `Exclusive · $${vvipPriceUsd.toFixed(2)}/mo` : "Exclusive",
+  };
+
+  return (
+    <div>
+      {showTabs && (
+        <div style={tabBarStyle}>
+          <button onClick={() => setTab("ALL")} style={tabButtonStyle(tab === "ALL")}>
+            All
+          </button>
+          {tiersPresent.map((t) => (
+            <button key={t} onClick={() => setTab(t)} style={tabButtonStyle(tab === t)}>
+              {TAB_LABEL[t]}
+            </button>
+          ))}
+        </div>
+      )}
+      <div style={timelineListStyle}>
+        {visible.map((item) => (
+          <ContentCard key={item.contentId} item={item} size="large" autoLoad={item.accessLevel === "FREE"} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MediaPreview({ mimeType, url, large }: { mimeType: string; url: string; large?: boolean }) {
+  const style = large ? largeMediaElStyle : mediaElStyle;
   if (mimeType.startsWith("video/")) {
-    return <video src={url} controls style={mediaElStyle} />;
+    return <video src={url} controls style={style} />;
   }
   if (mimeType.startsWith("audio/")) {
     return <audio src={url} controls style={{ width: "100%" }} />;
   }
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} alt="" style={mediaElStyle} />;
+  return <img src={url} alt="" style={style} />;
 }
 
 const REPORT_REASONS = [
@@ -419,5 +521,85 @@ function likeButtonStyle(liked: boolean): React.CSSProperties {
     cursor: "pointer",
     padding: 0,
     fontWeight: liked ? 600 : 400,
+  };
+}
+
+// --- Timeline (large, Twitter-style post) styles ---
+
+const timelineListStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "1.25rem",
+  maxWidth: "620px",
+};
+
+const timelinePostStyle: React.CSSProperties = {
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: "16px",
+  padding: "1.1rem 1.25rem",
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.65rem",
+};
+
+const timelineMetaRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "0.6rem",
+};
+
+const largeThumbStyle: React.CSSProperties = {
+  aspectRatio: "16 / 10",
+  background: "var(--surface-raised)",
+  borderRadius: "14px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const largeMediaElStyle: React.CSSProperties = {
+  width: "100%",
+  borderRadius: "14px",
+  display: "block",
+  maxHeight: "560px",
+  minHeight: "220px",
+  objectFit: "cover",
+};
+
+function tierBadgeStyle(accessLevel: ContentCardData["accessLevel"]): React.CSSProperties {
+  const color =
+    accessLevel === "VVIP" ? "var(--accent-gold)" : accessLevel === "VIP" ? "var(--accent-gold-dim)" : "var(--text-muted)";
+  return {
+    fontSize: "0.7rem",
+    fontWeight: 700,
+    letterSpacing: "0.03em",
+    textTransform: "uppercase",
+    color,
+    border: `1px solid ${color}`,
+    borderRadius: "999px",
+    padding: "0.15rem 0.55rem",
+    flexShrink: 0,
+  };
+}
+
+const tabBarStyle: React.CSSProperties = {
+  display: "flex",
+  gap: "0.5rem",
+  marginBottom: "1.25rem",
+  flexWrap: "wrap",
+};
+
+function tabButtonStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: "0.4rem 0.9rem",
+    borderRadius: "999px",
+    fontSize: "0.82rem",
+    fontWeight: 600,
+    cursor: "pointer",
+    background: active ? "var(--accent-gold)" : "transparent",
+    color: active ? "var(--bg)" : "var(--text-muted)",
+    border: active ? "none" : "1px solid var(--border)",
   };
 }

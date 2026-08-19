@@ -93,6 +93,7 @@ export function Nav() {
             <span style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
               {user.displayName ?? user.email}
             </span>
+            <AccountTypeBadge role={user.role} creatorProfile={user.creatorProfile} />
             <button onClick={handleLogout} style={ghostButtonStyle}>
               Sign out
             </button>
@@ -138,6 +139,43 @@ export function VerifiedBadge() {
       Verified Baddie
     </span>
   );
+}
+
+/**
+ * Always-visible account-type pill — the whole point is that a signed-in
+ * person should never have to guess whether they're looking at a fan
+ * account or a creator account. Creator gets its onboarding status
+ * appended (e.g. "Creator · Pending") since "Creator" alone doesn't say
+ * whether they can actually publish/monetise yet.
+ */
+function AccountTypeBadge({
+  role,
+  creatorProfile,
+}: {
+  role: SessionUser["role"];
+  creatorProfile: SessionUser["creatorProfile"];
+}) {
+  if (role === "ADMIN") {
+    return <span style={accountBadgeStyle("var(--accent-wine)")}>Admin</span>;
+  }
+  if (creatorProfile) {
+    const statusLabel = creatorProfile.status === "VERIFIED" ? "Verified" : "Pending";
+    return <span style={accountBadgeStyle("var(--accent-gold)")}>Creator · {statusLabel}</span>;
+  }
+  return <span style={accountBadgeStyle("var(--text-muted)")}>Fan</span>;
+}
+
+function accountBadgeStyle(color: string): React.CSSProperties {
+  return {
+    fontSize: "0.72rem",
+    fontWeight: 700,
+    letterSpacing: "0.03em",
+    textTransform: "uppercase",
+    color,
+    border: `1px solid ${color}`,
+    borderRadius: "999px",
+    padding: "0.2rem 0.6rem",
+  };
 }
 
 export function Field(props: {

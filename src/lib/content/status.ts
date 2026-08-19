@@ -1,19 +1,26 @@
 import type { ContentStatus } from "@prisma/client";
 
 /**
- * Content lifecycle state machine, per build brief §10:
- *   DRAFT → UPLOADED → PROCESSING → PENDING_REVIEW → APPROVED → REJECTED → REMOVED
+ * Content lifecycle state machine.
+ *
+ * Product decision: uploads do not sit in an admin moderation queue —
+ * DRAFT → UPLOADED → PROCESSING → APPROVED is the whole happy path now,
+ * with no PENDING_REVIEW gate in between (see the upload route's own
+ * comment on this, src/app/api/creator/content/route.ts). PENDING_REVIEW
+ * stays a legal state — reachable from APPROVED — for the case a report
+ * pulls something back for a human to re-review, just not as a mandatory
+ * stop every upload has to clear first.
  *
  * Mirrors src/lib/creator/status.ts — same rationale: encode legal
  * transitions in one place so upload/moderation/admin routes can't drift
- * out of sync or let a route accidentally publish unreviewed content.
+ * out of sync.
  */
 
 const ALLOWED_TRANSITIONS: Record<ContentStatus, ContentStatus[]> = {
   DRAFT: ["UPLOADED"],
   UPLOADED: ["PROCESSING", "REMOVED"],
-  PROCESSING: ["PENDING_REVIEW", "REJECTED"],
-  PENDING_REVIEW: ["APPROVED", "REJECTED"],
+  PROCESSING: ["APPROVED", "REJECTED"],
+  PENDING_REVIEW: ["APPROVED", "REJECTED"], // reachable only via a report-triggered re-review, not the upload path
   APPROVED: ["PENDING_REVIEW", "REMOVED"], // re-review on report, or takedown
   REJECTED: ["PENDING_REVIEW"], // creator can resubmit after fixing an issue
   REMOVED: [], // terminal

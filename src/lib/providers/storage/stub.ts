@@ -1,41 +1,25 @@
 import crypto from "crypto";
-import fs from "fs";
-import os from "os";
-import path from "path";
+import { db } from "@/lib/db/client";
 import type { MediaStorageProvider, UploadResult } from "./types";
 
 const DEFAULT_TTL = Number(process.env.MEDIA_SIGNED_URL_TTL_SECONDS ?? 300);
 
-const STORE_DIR = path.join(os.tmpdir(), "baddies-stub-media");
-
-function fileFor(storageKey: string): string {
-  // storageKey contains slashes (e.g. "creators/:id/content/:id"); flatten
-  // it to a single safe filename rather than trying to mirror it as a
-  // directory tree.
-  const safe = crypto.createHash("sha256").update(storageKey).digest("hex");
-  return path.join(STORE_DIR, safe);
-}
-
 /**
- * In-memory-adjacent stub — for local dev only, backed by the OS temp
- * directory rather than a module-level Map. A plain in-memory Map does not
- * reliably survive across requests here: Next.js dev can re-evaluate route
- * modules independently per route, so state written by one API route isn't
- * guaranteed visible to another. Disk (scoped to this process's tmpdir) is
- * the simplest thing that actually round-trips bytes across requests.
+ * DB-backed stub — for local dev and demo/seed data only, backed by the
+ * MediaBlob table rather than local disk. A plain local-disk store (the
+ * original version of this file) does not survive Railway's deploy
+ * pipeline: `preDeployCommand` (migrate + seed) runs in a separate,
+ * throwaway container from the one that actually serves requests, so
+ * anything seeded to disk there would vanish before the app ever started.
+ * Postgres is the one thing both containers share.
  *
  * getSignedReadUrl is a genuinely self-contained signed URL (HMAC over
  * storageKey + expiry, keyed off AUTH_SECRET) rather than a server-side
- * token lookup — no shared state required between the route that issues it
- * and the route that serves it, which sidesteps the module-caching problem
- * entirely instead of working around it.
+ * token lookup — no shared state required beyond the row itself.
  *
  * Served by /api/dev-stub-media, which 404s unless
  * MEDIA_STORAGE_PROVIDER=stub — inert wherever a real provider is
- * configured. (Not nested under an "_dev" folder — a leading underscore is
- * a Next.js "private folder" convention that opts a directory out of
- * routing entirely, which silently made an earlier version of this route
- * unreachable no matter what was under it.)
+ * configured.
  */
 export class StubMediaStorageProvider implements MediaStorageProvider {
   readonly name = "stub";
@@ -46,9 +30,11 @@ export class StubMediaStorageProvider implements MediaStorageProvider {
     body: Buffer | Uint8Array;
   }): Promise<UploadResult> {
     const key = params.key || `media/${crypto.randomUUID()}`;
-    fs.mkdirSync(STORE_DIR, { recursive: true });
-    fs.writeFileSync(fileFor(key), Buffer.from(params.body));
-    fs.writeFileSync(fileFor(key) + ".type", params.contentType, "utf8");
+    await db.mediaBlob.upsert({
+      where: { storageKey: key },
+      create: { storageKey: key, mimeType: params.contentType, bytes: Buffer.from(params.body) },
+      update: { mimeType: params.contentType, bytes: Buffer.from(params.body) },
+    });
     return { storageKey: key };
   }
 
@@ -59,8 +45,7 @@ export class StubMediaStorageProvider implements MediaStorageProvider {
   }
 
   async deleteObject(storageKey: string): Promise<void> {
-    fs.rmSync(fileFor(storageKey), { force: true });
-    fs.rmSync(fileFor(storageKey) + ".type", { force: true });
+    await db.mediaBlob.deleteMany({ where: { storageKey } });
   }
 }
 
@@ -69,19 +54,17 @@ function sign(storageKey: string, expires: number): string {
   return crypto.createHmac("sha256", secret).update(`${storageKey}:${expires}`).digest("hex");
 }
 
-/** Used only by the /api/_dev/stub-media/[...key] route — never exported to application code. */
-export function readStubMedia(
+/** Used only by /api/dev-stub-media — never exported to application code. */
+export async function readStubMedia(
   storageKey: string,
   expires: number,
   sig: string
-): { body: Buffer; contentType: string } | null {
+): Promise<{ body: Buffer; contentType: string } | null> {
   if (Date.now() > expires) return null;
   if (sig !== sign(storageKey, expires)) return null;
 
-  const file = fileFor(storageKey);
-  if (!fs.existsSync(file)) return null;
+  const row = await db.mediaBlob.findUnique({ where: { storageKey } });
+  if (!row) return null;
 
-  const body = fs.readFileSync(file);
-  const contentType = fs.existsSync(file + ".type") ? fs.readFileSync(file + ".type", "utf8") : "application/octet-stream";
-  return { body, contentType };
+  return { body: Buffer.from(row.bytes), contentType: row.mimeType };
 }

@@ -476,6 +476,22 @@ model MediaAsset {
   @@map("media_assets")
 }
 
+// Backing store for the "stub" MediaStorageProvider only (see
+// src/lib/providers/storage/stub.ts) — holds actual bytes in Postgres so
+// content survives across process boundaries. This matters specifically
+// because Railway's preDeployCommand (migrate + seed) runs in a separate,
+// throwaway container from the one that ends up serving requests: local
+// disk written during seeding would vanish before the app ever started.
+// A real provider (S3 etc.) would never touch this table.
+model MediaBlob {
+  storageKey String   @id
+  mimeType   String
+  bytes      Bytes
+  createdAt  DateTime @default(now())
+
+  @@map("media_blobs")
+}
+
 // =========================================================================
 // ENTITLEMENTS & SUBSCRIPTIONS
 // =========================================================================

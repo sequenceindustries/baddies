@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
 import { canMonetise } from "@/lib/creator/status";
+import { assertContentTransition } from "@/lib/content/status";
 import { getMediaStorageProvider } from "@/lib/providers/storage";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
@@ -162,15 +163,26 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Sprint 2 has no real async transcoding/moderation pipeline yet, so
-    // we advance synchronously through UPLOADED → PROCESSING →
-    // PENDING_REVIEW. A real pipeline (thumbnailing, transcoding, CSAM/
-    // hash-matching scan, NSFW classification) should replace this block
-    // with a queued job that lands the content in PENDING_REVIEW only
-    // once those checks are complete — see build brief §10.
+    // Product decision: uploads do not sit in an admin moderation queue —
+    // a verified creator's content goes live the moment they publish it,
+    // no waiting on approval. Walk the real state machine (see
+    // src/lib/content/status.ts, which no longer routes the upload path
+    // through PENDING_REVIEW) rather than just setting a status literal,
+    // so an illegal jump would throw instead of silently drifting out of
+    // sync with the one place those transitions are defined. Publish
+    // immediately too (publishedAt set here, rather than requiring a
+    // separate "Publish" click) so upload really does mean "it's live."
+    // ContentStatus.PENDING_REVIEW and the admin approve/reject routes
+    // (src/app/api/admin/content/*) are kept in place rather than
+    // deleted — useful infrastructure if a moderation queue is ever
+    // reintroduced (e.g. in response to reports), just nothing routes new
+    // uploads through it today.
+    assertContentTransition("DRAFT", "UPLOADED");
+    assertContentTransition("UPLOADED", "PROCESSING");
+    assertContentTransition("PROCESSING", "APPROVED");
     const updatedContent = await tx.content.update({
       where: { id: createdContent.id },
-      data: { status: "PENDING_REVIEW", moderationStatus: "PENDING_REVIEW" },
+      data: { status: "APPROVED", moderationStatus: "APPROVED", publishedAt: new Date() },
     });
 
     await tx.auditLog.create({
