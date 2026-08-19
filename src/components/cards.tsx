@@ -68,7 +68,7 @@ export function CreatorCard({ creator, size = "md" }: { creator: CreatorCardData
         <div style={cardTopScrimStyle}>
           <span style={cardCreatorLinkStyle}>
             <CardAvatar url={creator.avatarUrl} initial={initial} />
-            {creator.displayName ?? "Unnamed creator"}
+            <span style={cardCreatorNameStyle}>{creator.displayName ?? "Unnamed creator"}</span>
           </span>
           <div style={cardTopScrimBadgeStyle}>
             {creator.isLive && <span style={liveBadgeStyle}>● LIVE</span>}
@@ -270,15 +270,19 @@ export function ContentCard({ item }: { item: ContentCardData }) {
       )}
 
       <div style={cardTopScrimStyle}>
-        {item.creatorDisplayName && item.creatorProfileId && (
+        {item.creatorDisplayName && item.creatorProfileId ? (
           <Link
             href={`/creators/${item.creatorProfileId}`}
             style={cardCreatorLinkStyle}
             onClick={(e) => e.stopPropagation()}
           >
             <CardAvatar url={item.creatorAvatarUrl} initial={item.creatorDisplayName.charAt(0).toUpperCase()} />
-            {item.creatorDisplayName}
+            <span style={cardCreatorNameStyle}>{item.creatorDisplayName}</span>
           </Link>
+        ) : (
+          // Keeps the tier badge pushed to the right (its normal flex
+          // position) even with no byline to fill the flex: 1 space.
+          <span style={{ flex: "1 1 auto" }} />
         )}
         <div style={cardTopScrimBadgeStyle}>
           <TierBadge accessLevel={item.accessLevel} />
@@ -673,17 +677,37 @@ const captionStyle: React.CSSProperties = {
   textShadow: "0 1px 4px rgba(0, 0, 0, 0.7)",
 };
 
+// flex: 1 + minWidth: 0 (not the row's natural content width) is what
+// actually centers this safely: the badge sibling in cardTopScrimStyle
+// keeps its own real width as a normal flex item, so the byline's
+// available space is exactly "whatever's left," never fighting the
+// badge for the same pixels. See cardCreatorNameStyle for how the name
+// itself truncates instead of overflowing that space.
 const cardCreatorLinkStyle: React.CSSProperties = {
   position: "relative",
   zIndex: 2,
   display: "flex",
   alignItems: "center",
+  justifyContent: "center",
+  flex: "1 1 auto",
+  minWidth: 0,
   gap: "0.5rem",
   color: "var(--text)",
   textDecoration: "none",
   fontWeight: 600,
   fontSize: "0.85rem",
   textShadow: "0 1px 4px rgba(0, 0, 0, 0.7)",
+};
+
+// The name itself, inside cardCreatorLinkStyle — truncates with an
+// ellipsis rather than overflowing into (or wrapping under) the badge,
+// the actual safety net once a very long display name meets a narrow
+// card or a wide badge (e.g. "● LIVE" + the Baddie badge together).
+const cardCreatorNameStyle: React.CSSProperties = {
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  minWidth: 0,
 };
 
 const cardCreatorAvatarStyle: React.CSSProperties = {
@@ -706,29 +730,29 @@ const cardCreatorAvatarStyle: React.CSSProperties = {
 // is flex column + justify-content: space-between, so these two land at
 // the edges) — the same "text over photo" pattern the reference used,
 // just with a scrim instead of a solid label background so it works over
-// any photo, light or dark. The byline is centered (not space-between)
-// so the creator's name reads as centered on the card; any status badge
-// (tier/live/verified) is pulled out of this flex row and pinned
-// top-right instead via cardTopScrimBadgeStyle, so centering the name
-// doesn't get skewed by badge width.
+// any photo, light or dark. The byline (cardCreatorLinkStyle, flex: 1)
+// and the status badge (cardTopScrimBadgeStyle, flex: 0) are real flex
+// siblings in this row, not one centered and the other absolutely
+// positioned over it — that's what actually prevents them from
+// overlapping when both are wide (e.g. a long name next to "● LIVE" +
+// the Baddie badge together), rather than just usually not colliding.
 const cardTopScrimStyle: React.CSSProperties = {
   position: "relative",
   zIndex: 1,
   display: "flex",
   alignItems: "flex-start",
-  justifyContent: "center",
+  gap: "0.5rem",
   padding: "0.9rem 1rem 2.5rem",
   background: "linear-gradient(to bottom, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0))",
 };
 
 const cardTopScrimBadgeStyle: React.CSSProperties = {
-  position: "absolute",
-  top: "0.9rem",
-  right: "1rem",
+  position: "relative",
   zIndex: 2,
   display: "flex",
   alignItems: "center",
   gap: "0.5rem",
+  flexShrink: 0,
 };
 
 const cardBottomScrimStyle: React.CSSProperties = {
