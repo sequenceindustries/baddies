@@ -23,7 +23,6 @@ export default function LandingPage() {
   const router = useRouter();
   const { user, loading } = useSession();
   const [topCreators, setTopCreators] = useState<CreatorCardData[]>([]);
-  const [newCreators, setNewCreators] = useState<CreatorCardData[]>([]);
 
   useEffect(() => {
     if (!loading && user) {
@@ -38,11 +37,6 @@ export default function LandingPage() {
       .then((body: DiscoveryResponse) => {
         if (!cancelled) setTopCreators(body.creators ?? []);
       });
-    fetch("/api/discovery/new-creators")
-      .then((r) => (r.ok ? r.json() : { creators: [] }))
-      .then((body: DiscoveryResponse) => {
-        if (!cancelled) setNewCreators(body.creators ?? []);
-      });
     return () => {
       cancelled = true;
     };
@@ -56,7 +50,6 @@ export default function LandingPage() {
   return (
     <main>
       <section style={heroStyle}>
-        <span style={kickerStyle}>South African-born · Global from day one</span>
         <h1 style={heroTitleStyle}>Baddies</h1>
         <p style={heroTaglineStyle}>Safe. Verified. Affordable.</p>
         <p style={heroSubStyle}>
@@ -73,15 +66,14 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Larger cards, one sliding row (CreatorCardRow's size="lg"
+          scroll) rather than several stacked rows — this is the one
+          creator row a signed-out visitor sees before joining, so it
+          gets more visual weight than the same row does elsewhere
+          (Discover, fan Home). */}
       {topCreators.length > 0 && (
         <section style={sectionStyle}>
-          <CreatorCardRow title="Top Baddies" creators={topCreators} />
-        </section>
-      )}
-
-      {newCreators.length > 0 && (
-        <section style={sectionStyle}>
-          <CreatorCardRow title="New Baddies" creators={newCreators} />
+          <CreatorCardRow title="Top Baddies" creators={topCreators} size="lg" scroll />
         </section>
       )}
 
@@ -105,19 +97,6 @@ const heroStyle: React.CSSProperties = {
   maxWidth: "760px",
   margin: "0 auto",
   textAlign: "center",
-};
-
-const kickerStyle: React.CSSProperties = {
-  display: "inline-block",
-  fontSize: "0.78rem",
-  fontWeight: 700,
-  letterSpacing: "0.04em",
-  color: "var(--accent)",
-  background: "var(--surface)",
-  border: "1px solid var(--border)",
-  borderRadius: "999px",
-  padding: "0.35rem 0.9rem",
-  marginBottom: "1.5rem",
 };
 
 const heroTitleStyle: React.CSSProperties = {

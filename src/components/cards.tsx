@@ -25,30 +25,38 @@ export interface CreatorCardData {
  * Same full-bleed treatment as ContentCard (contentCardStyle/
  * cardMediaLayerStyle/the two gradient scrims) so every card on the
  * platform — a post or a creator — reads as one visual system: the photo
- * fills the card, byline top-left, status top-right, everything else
- * (location, price) in the bottom scrim. Unlike ContentCard the whole
- * card is a single Link (there's no separate "expand" affordance to
- * protect from a click), so the byline here is a plain span, not a
- * nested Link. Fixed at 300px wide (contentCardStyle itself has no
- * width — its other users size it via their own grid/column) so rows of
- * these in creatorGridStyle wrap predictably.
+ * fills the card, byline centered top, status pinned top-right, location
+ * and a plain "Get Exclusive" CTA (no price — see priceRowStyle) in the
+ * bottom scrim. Unlike ContentCard the whole card is a single Link
+ * (there's no separate "expand" affordance to protect from a click), so
+ * the byline here is a plain span, not a nested Link.
+ *
+ * The background image falls back thumbnail -> avatar -> initial-letter
+ * box on a load error at each step, rather than ever showing a blank
+ * broken-image box — see the thumbFailed/avatarFailed state below.
  */
-export function CreatorCard({ creator }: { creator: CreatorCardData }) {
+export function CreatorCard({ creator, size = "md" }: { creator: CreatorCardData; size?: "md" | "lg" }) {
+  const [thumbFailed, setThumbFailed] = useState(false);
+  const [avatarFailed, setAvatarFailed] = useState(false);
   const initial = (creator.displayName ?? "?").trim().charAt(0).toUpperCase() || "?";
   const location = [creator.city, creator.country].filter(Boolean).join(", ");
+  const showThumb = Boolean(creator.thumbnailUrl) && !thumbFailed;
+  const showAvatarAsMedia = !showThumb && Boolean(creator.avatarUrl) && !avatarFailed;
+  const width = size === "lg" ? "380px" : "300px";
+
   return (
     <Link href={`/creators/${creator.creatorProfileId}`} style={cardLinkStyle}>
-      <div className="hover-lift" style={{ ...contentCardStyle, width: "300px" }}>
-        {creator.thumbnailUrl ? (
+      <div className="hover-lift" style={{ ...contentCardStyle, width }}>
+        {showThumb ? (
           creator.thumbnailMimeType?.startsWith("video/") ? (
-            <video src={creator.thumbnailUrl} muted style={cardMediaLayerStyle} />
+            <video src={creator.thumbnailUrl!} muted style={cardMediaLayerStyle} onError={() => setThumbFailed(true)} />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={creator.thumbnailUrl} alt="" style={cardMediaLayerStyle} />
+            <img src={creator.thumbnailUrl!} alt="" style={cardMediaLayerStyle} onError={() => setThumbFailed(true)} />
           )
-        ) : creator.avatarUrl ? (
+        ) : showAvatarAsMedia ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={creator.avatarUrl} alt="" style={cardMediaLayerStyle} />
+          <img src={creator.avatarUrl!} alt="" style={cardMediaLayerStyle} onError={() => setAvatarFailed(true)} />
         ) : (
           <div style={cardMediaFallbackStyle}>
             <span style={{ fontFamily: "var(--font-display)", fontSize: "2.4rem", color: "var(--accent)" }}>
@@ -59,17 +67,10 @@ export function CreatorCard({ creator }: { creator: CreatorCardData }) {
 
         <div style={cardTopScrimStyle}>
           <span style={cardCreatorLinkStyle}>
-            <span style={cardCreatorAvatarStyle}>
-              {creator.avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={creator.avatarUrl} alt="" style={avatarImgStyle} />
-              ) : (
-                initial
-              )}
-            </span>
+            <CardAvatar url={creator.avatarUrl} initial={initial} />
             {creator.displayName ?? "Unnamed creator"}
           </span>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <div style={cardTopScrimBadgeStyle}>
             {creator.isLive && <span style={liveBadgeStyle}>● LIVE</span>}
             <VerifiedBadge />
           </div>
@@ -78,7 +79,7 @@ export function CreatorCard({ creator }: { creator: CreatorCardData }) {
         <div style={cardBottomScrimStyle}>
           {location && <div style={cardTimeStyle}>{location}</div>}
           <div style={priceRowStyle}>
-            <span>Exclusive ${creator.vvipPriceUsd.toFixed(2)}/mo</span>
+            <span>Get Exclusive</span>
           </div>
         </div>
       </div>
@@ -86,7 +87,20 @@ export function CreatorCard({ creator }: { creator: CreatorCardData }) {
   );
 }
 
-export function CreatorCardRow({ title, creators }: { title?: string; creators: CreatorCardData[] }) {
+export function CreatorCardRow({
+  title,
+  creators,
+  size,
+  scroll,
+}: {
+  title?: string;
+  creators: CreatorCardData[];
+  size?: "md" | "lg";
+  // Horizontal-scrolling single row instead of a wrapped, centered grid —
+  // for a smaller/highlight row (e.g. the landing page) where sliding
+  // through cards reads better than several stacked rows.
+  scroll?: boolean;
+}) {
   if (creators.length === 0) return null;
   return (
     <section style={sectionStyle}>
@@ -95,9 +109,11 @@ export function CreatorCardRow({ title, creators }: { title?: string; creators: 
           centers every row including a partial last row (e.g. 1 card
           left over after 4 fit per row), which grid's justify-content
           only does for the whole block, not each wrapped row. */}
-      <div style={creatorGridStyle}>
+      <div style={scroll ? creatorScrollRowStyle : creatorGridStyle}>
         {creators.map((c) => (
-          <CreatorCard key={c.creatorProfileId} creator={c} />
+          <div key={c.creatorProfileId} style={scroll ? creatorScrollItemStyle : undefined}>
+            <CreatorCard creator={c} size={size} />
+          </div>
         ))}
       </div>
     </section>
@@ -219,7 +235,18 @@ export function ContentCard({ item }: { item: ContentCardData }) {
           gradient-scrimmed overlays, rather than the media being one
           element among several stacked in a padded card. */}
       {media ? (
-        <MediaPreview mimeType={media.mimeType} url={media.signedUrl} />
+        <MediaPreview
+          mimeType={media.mimeType}
+          url={media.signedUrl}
+          // A signed URL that 404s/403s once mounted (expired, or the
+          // underlying blob never actually existed) falls straight back
+          // to the same loading/denied UI below, Retry button included,
+          // instead of leaving a blank broken-image box on the card.
+          onError={() => {
+            setMedia(null);
+            setError("This media couldn't load.");
+          }}
+        />
       ) : (
         <div style={cardMediaFallbackStyle}>
           {loading ? (
@@ -243,26 +270,19 @@ export function ContentCard({ item }: { item: ContentCardData }) {
       )}
 
       <div style={cardTopScrimStyle}>
-        {item.creatorDisplayName && item.creatorProfileId ? (
+        {item.creatorDisplayName && item.creatorProfileId && (
           <Link
             href={`/creators/${item.creatorProfileId}`}
             style={cardCreatorLinkStyle}
             onClick={(e) => e.stopPropagation()}
           >
-            <span style={cardCreatorAvatarStyle}>
-              {item.creatorAvatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={item.creatorAvatarUrl} alt="" style={avatarImgStyle} />
-              ) : (
-                item.creatorDisplayName.charAt(0).toUpperCase()
-              )}
-            </span>
+            <CardAvatar url={item.creatorAvatarUrl} initial={item.creatorDisplayName.charAt(0).toUpperCase()} />
             {item.creatorDisplayName}
           </Link>
-        ) : (
-          <span />
         )}
-        <TierBadge accessLevel={item.accessLevel} />
+        <div style={cardTopScrimBadgeStyle}>
+          <TierBadge accessLevel={item.accessLevel} />
+        </div>
       </div>
 
       <div style={cardBottomScrimStyle}>
@@ -392,10 +412,11 @@ export function ContentTimeline({ items, vvipPriceUsd }: { items: ContentCardDat
 // Fills the card as its background layer (position: absolute, inset: 0 —
 // see cardMediaLayerStyle) so the photo/video reads as the whole card,
 // not one element stacked among several. Audio has no visual to bleed,
-// so it stays a normal in-flow control instead.
-function MediaPreview({ mimeType, url }: { mimeType: string; url: string }) {
+// so it stays a normal in-flow control instead (and never actually
+// fails silently the way an <img>/<video> can, so no onError there).
+function MediaPreview({ mimeType, url, onError }: { mimeType: string; url: string; onError: () => void }) {
   if (mimeType.startsWith("video/")) {
-    return <video src={url} controls style={cardMediaLayerStyle} />;
+    return <video src={url} controls style={cardMediaLayerStyle} onError={onError} />;
   }
   if (mimeType.startsWith("audio/")) {
     return (
@@ -405,7 +426,7 @@ function MediaPreview({ mimeType, url }: { mimeType: string; url: string }) {
     );
   }
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} alt="" style={cardMediaLayerStyle} />;
+  return <img src={url} alt="" style={cardMediaLayerStyle} onError={onError} />;
 }
 
 const REPORT_REASONS = [
@@ -544,6 +565,26 @@ const cardLinkStyle: React.CSSProperties = { textDecoration: "none", color: "inh
 
 const avatarImgStyle: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover" };
 
+/**
+ * The small circular byline avatar (26px) used in both cards' top scrim.
+ * Falls back to the initial-letter treatment on a broken/missing url
+ * instead of leaving a blank circle — same "always show something real,
+ * never an empty box" rule the full-bleed media itself follows.
+ */
+function CardAvatar({ url, initial }: { url?: string | null; initial: string }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <span style={cardCreatorAvatarStyle}>
+      {url && !failed ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" style={avatarImgStyle} onError={() => setFailed(true)} />
+      ) : (
+        initial
+      )}
+    </span>
+  );
+}
+
 // Inline now (sits in a flex row next to VerifiedBadge in the top scrim,
 // not absolutely positioned over the photo) — see CreatorCard.
 const liveBadgeStyle: React.CSSProperties = {
@@ -561,7 +602,7 @@ const priceRowStyle: React.CSSProperties = {
   position: "relative",
   zIndex: 2,
   display: "flex",
-  gap: "0.6rem",
+  justifyContent: "center",
   fontSize: "0.8rem",
   color: "var(--accent)",
   fontWeight: 600,
@@ -583,19 +624,37 @@ const sectionHeadingStyle: React.CSSProperties = {
 
 // Flexbox + wrap + justify-content: center — see CreatorCardRow's
 // comment: this centers every wrapped row, including a partial last one,
-// which CSS grid's justify-content does not. Cards are a fixed 300px
-// (set inline in CreatorCard) so rows wrap predictably.
+// which CSS grid's justify-content does not. Cards are a fixed width
+// (set inline in CreatorCard, by size) so rows wrap predictably.
 const creatorGridStyle: React.CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
-  gap: "1.25rem",
+  gap: "1.75rem",
   justifyContent: "center",
+};
+
+// Single row, no wrap — cards slide via native horizontal scroll instead
+// of stacking into further rows. flexShrink: 0 on each item (see
+// creatorScrollItemStyle) keeps every card at its full width rather than
+// the row trying to squeeze them all into view at once.
+const creatorScrollRowStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "nowrap",
+  gap: "1.75rem",
+  overflowX: "auto",
+  paddingBottom: "0.5rem",
+  scrollSnapType: "x proximity",
+};
+
+const creatorScrollItemStyle: React.CSSProperties = {
+  flexShrink: 0,
+  scrollSnapAlign: "start",
 };
 
 const gridStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(320px, 420px))",
-  gap: "1.25rem",
+  gap: "1.75rem",
   justifyContent: "center",
 };
 
@@ -647,16 +706,29 @@ const cardCreatorAvatarStyle: React.CSSProperties = {
 // is flex column + justify-content: space-between, so these two land at
 // the edges) — the same "text over photo" pattern the reference used,
 // just with a scrim instead of a solid label background so it works over
-// any photo, light or dark.
+// any photo, light or dark. The byline is centered (not space-between)
+// so the creator's name reads as centered on the card; any status badge
+// (tier/live/verified) is pulled out of this flex row and pinned
+// top-right instead via cardTopScrimBadgeStyle, so centering the name
+// doesn't get skewed by badge width.
 const cardTopScrimStyle: React.CSSProperties = {
   position: "relative",
   zIndex: 1,
   display: "flex",
   alignItems: "flex-start",
-  justifyContent: "space-between",
-  gap: "0.6rem",
+  justifyContent: "center",
   padding: "0.9rem 1rem 2.5rem",
   background: "linear-gradient(to bottom, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0))",
+};
+
+const cardTopScrimBadgeStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "0.9rem",
+  right: "1rem",
+  zIndex: 2,
+  display: "flex",
+  alignItems: "center",
+  gap: "0.5rem",
 };
 
 const cardBottomScrimStyle: React.CSSProperties = {

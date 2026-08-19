@@ -282,7 +282,7 @@ export function VerifiedBadge() {
           strokeLinejoin="round"
         />
       </svg>
-      Verified Baddie
+      Baddie
     </span>
   );
 }
