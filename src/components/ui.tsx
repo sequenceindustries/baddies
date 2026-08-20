@@ -640,10 +640,10 @@ export const displayHeadingStyle: React.CSSProperties = {
  * known to be done and there's no user (see each caller's own
  * `!loading && !user` check).
  */
-export function SignInGate({ message }: { message?: string }) {
+export function SignInGate({ heading, message }: { heading?: string; message?: string }) {
   return (
     <main style={pageWrapStyle}>
-      <h1 style={displayHeadingStyle}>Join to keep browsing</h1>
+      <h1 style={displayHeadingStyle}>{heading ?? "Join to keep browsing"}</h1>
       <p style={{ color: "var(--text-muted)", marginBottom: "1.75rem", fontSize: "0.92rem" }}>
         {message ?? "Create a free account or sign in to browse creators and their content."}
       </p>

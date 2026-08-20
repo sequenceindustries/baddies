@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession, displayHeadingStyle } from "@/components/ui";
+import { useSession, displayHeadingStyle, SignInGate } from "@/components/ui";
 
 interface CreatorApplication {
   creatorProfileId: string;
@@ -29,9 +29,10 @@ export default function AdminDashboardPage() {
 
   if (!user) {
     return (
-      <main style={mainStyle}>
-        <h1 style={displayHeadingStyle}>Sign in required</h1>
-      </main>
+      <SignInGate
+        heading="Sign in required"
+        message="This page is for admin accounts only. Sign in with an admin account to continue."
+      />
     );
   }
 
