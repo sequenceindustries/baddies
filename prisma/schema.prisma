@@ -37,6 +37,23 @@ enum CreatorStatus {
   BANNED
 }
 
+// The Founding Baddies recruitment campaign's own pipeline — separate
+// from CreatorStatus because an applicant here has no User account yet
+// (see FoundingApplication's own comment). REJECTED isn't in the
+// product brief's literal status list but is the minimum needed for
+// the admin queue to actually close out a "no" the same way
+// CreatorQueue's own Reject button does.
+enum FoundingApplicationStatus {
+  APPLIED
+  REVIEWED
+  APPROVED
+  VERIFICATION_PENDING
+  VERIFIED
+  ONBOARDING
+  LIVE
+  REJECTED
+}
+
 enum VerificationType {
   IDENTITY
   AGE
@@ -804,6 +821,58 @@ model Notification {
 
   @@index([userId, readAt])
   @@map("notifications")
+}
+
+// =========================================================================
+// FOUNDING BADDIES CAMPAIGN
+// =========================================================================
+
+// A prospective creator's application to the Founding Baddies launch
+// campaign — deliberately NOT tied to a User row. The whole point of
+// this form (see /founding-baddies) is that someone can apply before
+// they have any Baddies account at all; once approved, they go through
+// the existing /register -> /apply flow normally, with the same email.
+// Kept flat and mostly free-text on purpose — this is a recruitment
+// form, not a KYC form (no identity documents collected here; that
+// still only ever happens through the real VerificationSession flow
+// once they're a real creator).
+model FoundingApplication {
+  id String @id @default(cuid())
+
+  fullName  String
+  stageName String
+  email     String
+  phone     String
+  country   String
+  city      String
+
+  // [{ category: "social"|"creator", platform: string, handle: string,
+  //    link: string, followers: string }, ...] — one entry per platform
+  // the applicant checked, "platform" holding their own label when they
+  // picked "Other". A JSON column instead of a child table because this
+  // is a write-once submission, never queried or edited field-by-field.
+  platforms Json
+
+  audienceSize           String? // free-text total, e.g. "~50k across platforms"
+  monetisationExperience String?
+  creatingSince          String?
+  currentlyMonetising    Boolean?
+  whyJoinBaddies         String
+
+  confirmsAdult         Boolean
+  agreesToVerification  Boolean
+
+  status     FoundingApplicationStatus @default(APPLIED)
+  adminNotes String?
+  reviewedBy String? // admin User.id
+  reviewedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([email])
+  @@map("founding_applications")
 }
 
 // Append-only. Every sensitive admin / financial / moderation action

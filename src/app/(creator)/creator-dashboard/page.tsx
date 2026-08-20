@@ -101,6 +101,7 @@ export default function CreatorDashboardPage() {
 
           {tab === "overview" && (
             <>
+              <OnboardingChecklist />
               <StatsPanel />
               <WalletPanel />
             </>
@@ -212,6 +213,70 @@ const endLiveButtonStyle: React.CSSProperties = {
   cursor: "pointer",
   flexShrink: 0,
 };
+
+/**
+ * Phase 4's onboarding checklist — reuses three endpoints the rest of
+ * the dashboard already calls (no new backend needed): /api/profile for
+ * the picture/bio, /api/creator/settings for the featured image, and
+ * /api/creator/content for whether each tier has at least one post.
+ * Purely a progress nudge, not a gate — a creator can ignore it and
+ * everything else in the dashboard still works.
+ */
+function OnboardingChecklist() {
+  const [items, setItems] = useState<{ label: string; done: boolean }[] | null>(null);
+
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/profile").then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/creator/settings").then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/creator/content").then((r) => (r.ok ? r.json() : { items: [] })),
+    ]).then(([profile, settings, content]) => {
+      const tiers = new Set((content?.items ?? []).map((i: OwnContentItem) => i.accessLevel));
+      setItems([
+        { label: "Profile picture", done: Boolean(profile?.avatarUrl) },
+        { label: "Featured image", done: Boolean(settings?.coverImageUrl) },
+        { label: "Creator bio", done: Boolean(profile?.bio) },
+        { label: "Free content", done: tiers.has("FREE") },
+        { label: "VIP content", done: tiers.has("VIP") },
+        { label: "Exclusive content", done: tiers.has("VVIP") },
+      ]);
+    });
+  }, []);
+
+  if (!items) return null;
+  const doneCount = items.filter((i) => i.done).length;
+  if (doneCount === items.length) return null; // fully set up — no need to keep nudging
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: "2rem" }}>
+      <h2 style={{ ...sectionHeadingStyle, marginTop: 0, marginBottom: "0.3rem" }}>Get discovered</h2>
+      <p style={{ ...mutedSmallStyle, marginTop: 0, marginBottom: "1rem" }}>
+        {doneCount} of {items.length} set up — finish these to look your best to fans and other Founding Baddies.
+      </p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
+        {items.map((item) => (
+          <span key={item.label} style={checklistPillStyle(item.done)}>
+            {item.done ? "✓" : "○"} {item.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function checklistPillStyle(done: boolean): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "0.35rem",
+    fontSize: "0.8rem",
+    fontWeight: 600,
+    color: done ? "var(--success)" : "var(--text-muted)",
+    border: `1px solid ${done ? "var(--success)" : "var(--border)"}`,
+    borderRadius: "999px",
+    padding: "0.3rem 0.75rem",
+  };
+}
 
 interface CreatorStats {
   followerCount: number;

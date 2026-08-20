@@ -61,6 +61,14 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <section style={sectionStyle}>
+        <Link href="/founding-baddies" style={foundingBannerStyle} className="hover-lift">
+          <span style={foundingBannerKickerStyle}>Now recruiting</span>
+          <span style={foundingBannerTitleStyle}>Become a Founding Baddie</span>
+          <span style={foundingBannerArrowStyle}>Apply now →</span>
+        </Link>
+      </section>
+
       {/* Larger cards, one sliding row (CreatorCardRow's size="lg"
           scroll) rather than several stacked rows — this is the one
           creator row a signed-out visitor sees before joining, so it
@@ -153,6 +161,45 @@ const sectionHeadingStyle: React.CSSProperties = {
   fontWeight: 500,
   margin: "0 0 1.25rem",
   textAlign: "center",
+};
+
+const foundingBannerStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "0.6rem 1.25rem",
+  textDecoration: "none",
+  color: "var(--text)",
+  background: "var(--surface)",
+  border: "1px solid var(--accent)",
+  borderRadius: "16px",
+  padding: "1.5rem 2rem",
+  boxShadow: "var(--glow)",
+  textAlign: "center",
+};
+
+const foundingBannerKickerStyle: React.CSSProperties = {
+  fontSize: "0.72rem",
+  fontWeight: 700,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  color: "var(--accent)",
+  border: "1px solid var(--border)",
+  borderRadius: "999px",
+  padding: "0.25rem 0.75rem",
+};
+
+const foundingBannerTitleStyle: React.CSSProperties = {
+  fontFamily: "var(--font-display)",
+  fontSize: "1.15rem",
+  fontWeight: 600,
+};
+
+const foundingBannerArrowStyle: React.CSSProperties = {
+  color: "var(--accent)",
+  fontWeight: 700,
+  fontSize: "0.9rem",
 };
 
 const footerLineStyle: React.CSSProperties = {

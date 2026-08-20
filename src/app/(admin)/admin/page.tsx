@@ -47,12 +47,189 @@ export default function AdminDashboardPage() {
   return (
     <main style={mainStyle}>
       <h1 style={displayHeadingStyle}>Admin Dashboard</h1>
+      <FoundingApplicationsQueue />
       <CreatorQueue />
       <ContentQueue />
       <PayoutQueue />
       <UserActionsPanel />
       <AuditLogPanel />
     </main>
+  );
+}
+
+interface PlatformEntryView {
+  category: "social" | "creator";
+  platform: string;
+  handle: string;
+  link: string;
+  followers: string;
+}
+
+interface FoundingApplicationRow {
+  id: string;
+  fullName: string;
+  stageName: string;
+  email: string;
+  phone: string;
+  country: string;
+  city: string;
+  platforms: PlatformEntryView[];
+  audienceSize: string | null;
+  monetisationExperience: string | null;
+  creatingSince: string | null;
+  currentlyMonetising: boolean | null;
+  whyJoinBaddies: string;
+  status: string;
+  adminNotes: string | null;
+  createdAt: string;
+}
+
+const FOUNDING_STATUSES = [
+  "APPLIED",
+  "REVIEWED",
+  "APPROVED",
+  "VERIFICATION_PENDING",
+  "VERIFIED",
+  "ONBOARDING",
+  "LIVE",
+  "REJECTED",
+] as const;
+
+/**
+ * Founding Baddies campaign applications (§ Founding Baddies Sprint,
+ * Phase 5) — top of the admin page since recruiting the first cohort is
+ * this sprint's whole point. One generic status dropdown per row
+ * (FOUNDING_STATUSES) rather than approve/reject buttons — there are 8
+ * real pipeline stages here, not a binary decision.
+ */
+function FoundingApplicationsQueue() {
+  const [applications, setApplications] = useState<FoundingApplicationRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  function reload() {
+    setLoading(true);
+    fetch("/api/admin/founding-applications")
+      .then((r) => (r.ok ? r.json() : { applications: [] }))
+      .then((body) => setApplications(body.applications ?? []))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(reload, []);
+
+  async function changeStatus(id: string, status: string) {
+    setBusyId(id);
+    const res = await fetch(`/api/admin/founding-applications/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    setBusyId(null);
+    if (res.ok) reload();
+    else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error ?? "Update failed.");
+    }
+  }
+
+  return (
+    <section style={{ marginBottom: "3rem" }}>
+      <h2 style={sectionHeadingStyle}>Founding Baddies applications</h2>
+      {loading ? (
+        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+      ) : applications.length === 0 ? (
+        <p style={{ color: "var(--text-muted)" }}>No applications yet.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          {applications.map((app) => {
+            const expanded = expandedId === app.id;
+            return (
+              <div key={app.id} style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch" }}>
+                <div
+                  style={{ display: "flex", justifyContent: "space-between", gap: "1rem", cursor: "pointer" }}
+                  onClick={() => setExpandedId(expanded ? null : app.id)}
+                >
+                  <div>
+                    <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>
+                      {app.stageName} · {app.fullName}
+                    </div>
+                    <div style={mutedSmallStyle}>
+                      {app.email} · {app.city}, {app.country} · applied{" "}
+                      {new Date(app.createdAt).toLocaleDateString()}
+                    </div>
+                    <div style={mutedSmallStyle}>
+                      {app.platforms.length} platform{app.platforms.length === 1 ? "" : "s"}:{" "}
+                      {app.platforms.map((p) => p.platform).join(", ")}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
+                    <select
+                      value={app.status}
+                      disabled={busyId === app.id}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => changeStatus(app.id, e.target.value)}
+                      style={statusSelectStyle}
+                    >
+                      {FOUNDING_STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {s.replace(/_/g, " ")}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {expanded && (
+                  <div style={{ marginTop: "0.9rem", paddingTop: "0.9rem", borderTop: "1px solid var(--border)" }}>
+                    <div style={{ fontSize: "0.85rem", marginBottom: "0.5rem" }}>
+                      <strong>Phone:</strong> {app.phone}
+                    </div>
+                    {app.platforms.map((p, i) => (
+                      <div key={i} style={mutedSmallStyle}>
+                        {p.category === "creator" ? "Creator platform" : "Social"} · {p.platform}
+                        {p.handle ? ` · @${p.handle}` : ""}
+                        {p.followers ? ` · ${p.followers} followers` : ""}
+                        {p.link ? (
+                          <>
+                            {" · "}
+                            <a href={p.link} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
+                              link
+                            </a>
+                          </>
+                        ) : null}
+                      </div>
+                    ))}
+                    {app.audienceSize && (
+                      <div style={{ fontSize: "0.85rem", marginTop: "0.6rem" }}>
+                        <strong>Audience:</strong> {app.audienceSize}
+                      </div>
+                    )}
+                    {app.creatingSince && (
+                      <div style={{ fontSize: "0.85rem", marginTop: "0.3rem" }}>
+                        <strong>Creating since:</strong> {app.creatingSince}
+                      </div>
+                    )}
+                    {app.currentlyMonetising !== null && (
+                      <div style={{ fontSize: "0.85rem", marginTop: "0.3rem" }}>
+                        <strong>Currently monetising:</strong> {app.currentlyMonetising ? "Yes" : "Not yet"}
+                      </div>
+                    )}
+                    {app.monetisationExperience && (
+                      <div style={{ fontSize: "0.85rem", marginTop: "0.3rem" }}>
+                        <strong>Monetisation experience:</strong> {app.monetisationExperience}
+                      </div>
+                    )}
+                    <div style={{ fontSize: "0.85rem", marginTop: "0.6rem" }}>
+                      <strong>Why Baddies:</strong> {app.whyJoinBaddies}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -471,6 +648,18 @@ const rejectButtonStyle: React.CSSProperties = {
   fontSize: "0.82rem",
   fontWeight: 600,
   cursor: "pointer",
+};
+
+const statusSelectStyle: React.CSSProperties = {
+  background: "var(--surface-raised)",
+  border: "1px solid var(--border)",
+  color: "var(--text)",
+  borderRadius: "var(--radius)",
+  padding: "0.4rem 0.6rem",
+  fontSize: "0.78rem",
+  fontWeight: 600,
+  cursor: "pointer",
+  textTransform: "capitalize",
 };
 
 const auditRowStyle: React.CSSProperties = {
