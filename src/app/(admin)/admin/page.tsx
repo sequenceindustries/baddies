@@ -32,6 +32,8 @@ export default function AdminDashboardPage() {
       <SignInGate
         heading="Sign in required"
         message="This page is for admin accounts only. Sign in with an admin account to continue."
+        loginHref="/login?intent=admin"
+        showJoin={false}
       />
     );
   }

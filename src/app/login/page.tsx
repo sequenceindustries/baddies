@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   pageWrapStyle,
@@ -15,7 +15,7 @@ import {
   type SessionUser,
 } from "@/components/ui";
 
-type Intent = "FAN" | "CREATOR";
+type Intent = "FAN" | "CREATOR" | "ADMIN";
 
 const COPY: Record<Intent, { subtitle: string; cta: string; registerHint: string }> = {
   FAN: {
@@ -28,11 +28,22 @@ const COPY: Record<Intent, { subtitle: string; cta: string; registerHint: string
     cta: "Sign in",
     registerHint: "Become a creator",
   },
+  ADMIN: {
+    subtitle: "Sign in with your admin account.",
+    cta: "Sign in",
+    registerHint: "",
+  },
 };
 
 export default function LoginPage() {
   const router = useRouter();
-  const [intent, setIntent] = useState<Intent>("FAN");
+  // ?intent=admin (linked from the admin gate) drops straight into an
+  // admin-only view of this form -- no Fan/Creator picker, no "New
+  // here?" register link, since you can't register your way into
+  // admin. Sign-in itself is unchanged either way: one email/password
+  // form, role decides where you land (see roleHomePath below).
+  const isAdminIntent = useSearchParams().get("intent") === "admin";
+  const [intent, setIntent] = useState<Intent>(isAdminIntent ? "ADMIN" : "FAN");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -73,21 +84,25 @@ export default function LoginPage() {
           account's actual role decides where you land (see roleHomePath
           below). This tab just gets each kind of visitor to the right
           headspace and the right "new here?" link, matching /register's
-          fan/creator split. */}
-      <div style={intentRowStyle}>
-        <IntentOption
-          label="Fan"
-          hint="Browse, subscribe, tip."
-          active={intent === "FAN"}
-          onClick={() => setIntent("FAN")}
-        />
-        <IntentOption
-          label="Creator"
-          hint="Post content, get paid."
-          active={intent === "CREATOR"}
-          onClick={() => setIntent("CREATOR")}
-        />
-      </div>
+          fan/creator split. Arriving via ?intent=admin (the admin gate's
+          link) skips the picker entirely -- there's no "become an
+          admin" self-serve path, so Fan/Creator framing doesn't apply. */}
+      {!isAdminIntent && (
+        <div style={intentRowStyle}>
+          <IntentOption
+            label="Fan"
+            hint="Browse, subscribe, tip."
+            active={intent === "FAN"}
+            onClick={() => setIntent("FAN")}
+          />
+          <IntentOption
+            label="Creator"
+            hint="Post content, get paid."
+            active={intent === "CREATOR"}
+            onClick={() => setIntent("CREATOR")}
+          />
+        </div>
+      )}
 
       <div style={cardStyle}>
         <form onSubmit={handleSubmit}>
@@ -118,12 +133,14 @@ export default function LoginPage() {
           </button>
         </form>
       </div>
-      <p style={{ marginTop: "1.25rem", fontSize: "0.88rem", color: "var(--text-muted)" }}>
-        New here?{" "}
-        <Link href="/register" style={{ color: "var(--accent)" }}>
-          {COPY[intent].registerHint}
-        </Link>
-      </p>
+      {!isAdminIntent && (
+        <p style={{ marginTop: "1.25rem", fontSize: "0.88rem", color: "var(--text-muted)" }}>
+          New here?{" "}
+          <Link href="/register" style={{ color: "var(--accent)" }}>
+            {COPY[intent].registerHint}
+          </Link>
+        </p>
+      )}
     </main>
   );
 }

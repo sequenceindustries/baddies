@@ -640,7 +640,17 @@ export const displayHeadingStyle: React.CSSProperties = {
  * known to be done and there's no user (see each caller's own
  * `!loading && !user` check).
  */
-export function SignInGate({ heading, message }: { heading?: string; message?: string }) {
+export function SignInGate({
+  heading,
+  message,
+  loginHref = "/login",
+  showJoin = true,
+}: {
+  heading?: string;
+  message?: string;
+  loginHref?: string;
+  showJoin?: boolean;
+}) {
   return (
     <main style={pageWrapStyle}>
       <h1 style={displayHeadingStyle}>{heading ?? "Join to keep browsing"}</h1>
@@ -648,10 +658,12 @@ export function SignInGate({ heading, message }: { heading?: string; message?: s
         {message ?? "Create a free account or sign in to browse creators and their content."}
       </p>
       <div style={signInGateCtaRowStyle}>
-        <Link href="/register" style={signInGatePrimaryStyle}>
-          Join free
-        </Link>
-        <Link href="/login" style={signInGateSecondaryStyle}>
+        {showJoin && (
+          <Link href="/register" style={signInGatePrimaryStyle}>
+            Join free
+          </Link>
+        )}
+        <Link href={loginHref} style={showJoin ? signInGateSecondaryStyle : signInGatePrimaryStyle}>
           Sign in
         </Link>
       </div>
