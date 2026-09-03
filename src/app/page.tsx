@@ -70,7 +70,7 @@ export default function LandingPage() {
         <Countdown target={LAUNCH_DATE} label="Launching in" />
       </HeroBanner>
 
-      <section style={sectionStyle}>
+      <section style={foundingBannerSectionStyle}>
         <Link href="/founding-baddies" style={foundingBannerStyle} className="hover-lift">
           <span style={foundingBannerKickerStyle}>Now recruiting</span>
           <span style={foundingBannerTitleStyle}>Become a Founding baddie</span>
@@ -124,18 +124,29 @@ const sectionStyle: React.CSSProperties = {
   margin: "0 auto 1.5rem",
 };
 
+// Pulled up over HeroBanner's fading bottom edge so the banner reads as
+// a divider between the hero and the rest of the page, not just another
+// stacked section. position+zIndex keeps it painting above the hero.
+const foundingBannerSectionStyle: React.CSSProperties = {
+  padding: "0 1.75rem",
+  maxWidth: "1100px",
+  margin: "-5rem auto 2rem",
+  position: "relative",
+  zIndex: 2,
+};
+
 const foundingBannerStyle: React.CSSProperties = {
   display: "flex",
-  flexWrap: "wrap",
+  flexDirection: "column",
   alignItems: "center",
   justifyContent: "center",
-  gap: "0.6rem 1.25rem",
+  gap: "0.85rem",
   textDecoration: "none",
   color: "var(--text)",
   background: "var(--surface)",
   border: "1px solid var(--accent)",
-  borderRadius: "16px",
-  padding: "1.5rem 2rem",
+  borderRadius: "20px",
+  padding: "3rem 2rem",
   boxShadow: "var(--glow)",
   textAlign: "center",
 };
@@ -153,14 +164,14 @@ const foundingBannerKickerStyle: React.CSSProperties = {
 
 const foundingBannerTitleStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)",
-  fontSize: "1.15rem",
+  fontSize: "1.6rem",
   fontWeight: 600,
 };
 
 const foundingBannerArrowStyle: React.CSSProperties = {
   color: "var(--accent)",
   fontWeight: 700,
-  fontSize: "0.9rem",
+  fontSize: "1rem",
 };
 
 const footerLineStyle: React.CSSProperties = {
