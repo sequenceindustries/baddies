@@ -61,7 +61,10 @@ export default function LandingPage() {
   return (
     <main>
       <HeroBanner>
-        <h1 style={heroTitleStyle}>baddies</h1>
+        <h1 style={heroTitleStyle}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/baddies-wordmark-white.webp" alt="baddies" style={heroLogoStyle} />
+        </h1>
         <p style={heroSubStyle}>
           A premium platform where verified South African creators publish exclusive content and
           get paid directly by the fans who support them. Browse free previews with no card
@@ -98,16 +101,18 @@ export default function LandingPage() {
   );
 }
 
+// Wraps the logo image rather than styling text directly now — h1 stays
+// for the page's heading semantics/accessible name (the img's alt covers
+// that), margin/line-height carried over from the old text treatment so
+// the layout rhythm below it (subhead, countdown) doesn't shift.
 const heroTitleStyle: React.CSSProperties = {
-  fontFamily: "var(--font-display)",
-  fontSize: "clamp(3.2rem, 8vw, 5.5rem)",
-  fontWeight: 600,
   margin: "0 0 0.6rem",
   lineHeight: 1,
-  background: "linear-gradient(135deg, var(--text) 30%, var(--accent) 100%)",
-  WebkitBackgroundClip: "text",
-  backgroundClip: "text",
-  color: "transparent",
+};
+
+const heroLogoStyle: React.CSSProperties = {
+  width: "clamp(220px, 24vw, 420px)",
+  height: "auto",
 };
 
 const heroSubStyle: React.CSSProperties = {
