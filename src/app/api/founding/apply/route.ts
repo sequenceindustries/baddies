@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db/client";
+import { getRequestCountry, isSouthAfrica, NOT_SOUTH_AFRICA_MESSAGE } from "@/lib/security/geo";
 
 // Always dynamic: this route writes live data and must never be
 // statically prerendered or cached at build time.
@@ -62,9 +63,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ applicationId: "ok" }, { status: 201 });
   }
 
+  // South African creators only, no exceptions — checked against the
+  // request's actual network origin, not the free-text "Country" field
+  // above (which is stored for the application record, but proves
+  // nothing on its own — see getRequestCountry's comment).
+  const country = await getRequestCountry(req);
+  if (!isSouthAfrica(country)) {
+    return NextResponse.json({ error: NOT_SOUTH_AFRICA_MESSAGE }, { status: 403 });
+  }
+
   const application = await db.foundingApplication.create({
     data: { ...data, platforms },
   });
 
   return NextResponse.json({ applicationId: application.id }, { status: 201 });
+}
+
+/**
+ * Lets the application page check eligibility up front (see
+ * EligibilityBanner) instead of only ever finding out after filling in
+ * the whole form — the real, unbypassable enforcement is still the POST
+ * handler above; this is purely so a non-South-African visitor sees the
+ * "no exceptions" message immediately rather than at the very end.
+ */
+export async function GET(req: NextRequest) {
+  const country = await getRequestCountry(req);
+  return NextResponse.json({ eligible: isSouthAfrica(country), country });
 }

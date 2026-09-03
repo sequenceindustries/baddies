@@ -107,8 +107,12 @@ export default function ApplyPage() {
   return (
     <main style={pageWrapStyle}>
       <h1 style={displayHeadingStyle}>Apply to become a creator</h1>
-      <p style={{ color: "var(--text-muted)", marginBottom: "1.75rem", fontSize: "0.92rem" }}>
+      <p style={{ color: "var(--text-muted)", marginBottom: "0.5rem", fontSize: "0.92rem" }}>
         Your legal name is encrypted and never shown publicly. Your stage name is what fans see.
+      </p>
+      <p style={{ color: "var(--text-muted)", marginBottom: "1.75rem", fontSize: "0.92rem" }}>
+        Open to South African creators only, no exceptions — this is checked automatically when
+        you submit.
       </p>
       <div style={cardStyle}>
         <form onSubmit={handleSubmit}>

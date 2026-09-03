@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { NOT_SOUTH_AFRICA_MESSAGE } from "@/lib/security/geo";
 
 /**
  * The Founding Baddies recruitment campaign — landing page + application
@@ -44,7 +45,7 @@ function WhatIsBaddies() {
     "A premium platform built for female adult creators",
     "Creators monetise their own content, on their own terms",
     "Fans subscribe directly to the creators they support",
-    "African creators, built for a global audience",
+    "Open exclusively to South African creators, no exceptions — built here first, for a global audience",
   ];
   return (
     <Section title="What is Baddies?">
@@ -92,14 +93,12 @@ function Monetisation() {
       <div style={tierGridStyle}>
         <div className="hover-lift" style={tierCardStyle}>
           <div style={tierNameStyle}>Free</div>
-          <div style={tierPriceStyle}>R0/month</div>
           <p style={tierDescStyle}>
             Fans discover you here first — public previews, no cost, no card required.
           </p>
         </div>
         <div className="hover-lift" style={tierCardStyle}>
           <div style={tierNameStyle}>VIP</div>
-          <div style={tierPriceStyle}>R99/month</div>
           <p style={tierDescStyle}>
             One platform-wide membership unlocks selected VIP content from every participating
             creator. You decide what content goes into VIP.
@@ -107,38 +106,11 @@ function Monetisation() {
         </div>
         <div className="hover-lift" style={{ ...tierCardStyle, borderColor: "var(--accent)" }}>
           <div style={tierNameStyle}>Exclusive</div>
-          <div style={tierPriceStyle}>Your price</div>
           <p style={tierDescStyle}>
             Fans subscribe directly to you, at the price you set — subscriber-only posts, direct
             messaging, and more.
           </p>
         </div>
-      </div>
-
-      <div style={pricingRowWrapStyle}>
-        <h3 style={subHeadingStyle}>Suggested Exclusive pricing</h3>
-        <div style={pricingRowStyle}>
-          <div style={pricingCardStyle}>
-            <div style={pricingLabelStyle}>Starter</div>
-            <div style={pricingAmountStyle}>R99/month</div>
-          </div>
-          <div style={pricingCardStyle}>
-            <div style={pricingLabelStyle}>Premium</div>
-            <div style={pricingAmountStyle}>R150/month</div>
-          </div>
-          <div style={pricingCardStyle}>
-            <div style={pricingLabelStyle}>Elite</div>
-            <div style={pricingAmountStyle}>R249/month</div>
-          </div>
-        </div>
-      </div>
-
-      <div style={comingSoonStyle}>
-        <h3 style={subHeadingStyle}>Coming soon</h3>
-        <p style={tierDescStyle}>
-          Direct messaging, live video, one-on-one video experiences, and other premium
-          interactions — all part of the Exclusive tier as the platform grows.
-        </p>
       </div>
     </Section>
   );
@@ -147,6 +119,7 @@ function Monetisation() {
 function TrustAndSafety() {
   const points = [
     "18+ only, no exceptions",
+    "South African creators only, no exceptions — geo-verified at application",
     "Identity verification required for every creator",
     "Every creator on Baddies is verified before they can publish",
     "Your privacy is protected — your data is never sold",
@@ -227,6 +200,32 @@ function ApplicationForm() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Client-side heads-up only, not the enforcement — fails open (assumes
+  // eligible) on a slow/failed check so a network hiccup never blocks a
+  // real South African applicant; the actual "no exceptions" lock is the
+  // POST handler's own getRequestCountry check, which can't be bypassed
+  // by skipping this fetch or editing state in devtools.
+  const [eligible, setEligible] = useState(true);
+  const [checkingEligibility, setCheckingEligibility] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/founding/apply")
+      .then((r) => (r.ok ? r.json() : { eligible: true }))
+      .then((body: { eligible?: boolean }) => {
+        if (!cancelled) setEligible(body.eligible !== false);
+      })
+      .catch(() => {
+        if (!cancelled) setEligible(true);
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingEligibility(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   function buildPlatforms() {
     const fromRecord = (record: PlatformState, category: "social" | "creator") =>
       Object.entries(record).map(([option, entry]) => ({
@@ -300,6 +299,20 @@ function ApplicationForm() {
     );
   }
 
+  // Don't show the (unusable) form to a visitor we already know is
+  // ineligible — checkingEligibility guards against a flash of this
+  // message before the fetch above has even resolved.
+  if (!checkingEligibility && !eligible) {
+    return (
+      <section id="apply" style={{ ...sectionStyle, ...formSectionStyle }}>
+        <div style={successCardStyle}>
+          <h2 style={sectionHeadingStyle}>South African creators only</h2>
+          <p style={tierDescStyle}>{NOT_SOUTH_AFRICA_MESSAGE}</p>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section id="apply" style={{ ...sectionStyle, ...formSectionStyle }}>
       <h2 style={sectionHeadingStyle}>Apply to Become a Founding Baddie</h2>
@@ -332,7 +345,7 @@ function ApplicationForm() {
             </FormField>
           </FormRow>
           <FormRow>
-            <FormField label="Country">
+            <FormField label="Country" hint="South Africa only — this cohort has no exceptions.">
               <input style={inputStyle} value={country} onChange={(e) => setCountry(e.target.value)} required />
             </FormField>
             <FormField label="City">
@@ -722,65 +735,11 @@ const tierNameStyle: React.CSSProperties = {
   marginBottom: "0.35rem",
 };
 
-const tierPriceStyle: React.CSSProperties = {
-  color: "var(--accent)",
-  fontWeight: 700,
-  fontSize: "0.95rem",
-  marginBottom: "0.75rem",
-};
-
 const tierDescStyle: React.CSSProperties = {
   color: "var(--text-muted)",
   fontSize: "0.88rem",
   lineHeight: 1.55,
   margin: 0,
-};
-
-const subHeadingStyle: React.CSSProperties = {
-  fontFamily: "var(--font-display)",
-  fontSize: "1.1rem",
-  fontWeight: 500,
-  margin: "0 0 0.85rem",
-  textAlign: "center",
-};
-
-const pricingRowWrapStyle: React.CSSProperties = { marginTop: "2.75rem" };
-
-const pricingRowStyle: React.CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: "1rem",
-  justifyContent: "center",
-};
-
-const pricingCardStyle: React.CSSProperties = {
-  background: "var(--surface)",
-  border: "1px solid var(--border)",
-  borderRadius: "14px",
-  padding: "1.25rem 2rem",
-  textAlign: "center",
-  minWidth: "160px",
-};
-
-const pricingLabelStyle: React.CSSProperties = {
-  fontSize: "0.82rem",
-  color: "var(--text-muted)",
-  marginBottom: "0.35rem",
-};
-
-const pricingAmountStyle: React.CSSProperties = {
-  fontFamily: "var(--font-display)",
-  fontSize: "1.3rem",
-  fontWeight: 600,
-  color: "var(--accent)",
-};
-
-const comingSoonStyle: React.CSSProperties = {
-  marginTop: "2.75rem",
-  textAlign: "center",
-  maxWidth: "560px",
-  marginLeft: "auto",
-  marginRight: "auto",
 };
 
 const formSectionStyle: React.CSSProperties = { maxWidth: "720px" };

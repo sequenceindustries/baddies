@@ -5,11 +5,17 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession, roleHomePath } from "@/components/ui";
 import { CreatorCardRow, type CreatorCardData } from "@/components/cards";
-import { HowItWorks } from "@/components/how-it-works";
+import { HowItWorks, HowItWorksForCreators } from "@/components/how-it-works";
+import { Countdown } from "@/components/countdown";
 
 interface DiscoveryResponse {
   creators: CreatorCardData[];
 }
+
+// Fixed launch target, not "35 days from whenever someone loads this
+// page" — see Countdown's own comment on why that has to be a real date,
+// not a rolling duration. 35 days out from the day this went in.
+const LAUNCH_DATE = new Date("2026-10-08T00:00:00Z");
 
 /**
  * The real landing page (Sprint 0's placeholder replaced) — an anonymous
@@ -55,6 +61,12 @@ export default function LandingPage() {
     <main>
       <section style={heroStyle}>
         <h1 style={heroTitleStyle}>baddies</h1>
+        <p style={heroSubStyle}>
+          A premium platform where verified South African creators publish exclusive content and
+          get paid directly by the fans who support them. Browse free previews with no card
+          required, or subscribe to unlock more.
+        </p>
+        <Countdown target={LAUNCH_DATE} label="Launching in" />
       </section>
 
       <section style={sectionStyle}>
@@ -78,6 +90,8 @@ export default function LandingPage() {
 
       <HowItWorks />
 
+      <HowItWorksForCreators />
+
       <p style={footerLineStyle}>South Africa to the World!</p>
     </main>
   );
@@ -100,6 +114,14 @@ const heroTitleStyle: React.CSSProperties = {
   WebkitBackgroundClip: "text",
   backgroundClip: "text",
   color: "transparent",
+};
+
+const heroSubStyle: React.CSSProperties = {
+  color: "var(--text-muted)",
+  fontSize: "1.05rem",
+  lineHeight: 1.6,
+  maxWidth: "560px",
+  margin: "0 auto",
 };
 
 const sectionStyle: React.CSSProperties = {

@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
 import { encryptField } from "@/lib/security/field-encryption";
+import { getRequestCountry, isSouthAfrica, NOT_SOUTH_AFRICA_MESSAGE } from "@/lib/security/geo";
 import type { Prisma } from "@prisma/client";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
@@ -49,6 +50,14 @@ export async function POST(req: NextRequest) {
             { status: 409 }
                 );
     }
+
+  // South African creators only, no exceptions — same request-origin
+  // check as /api/founding/apply (see its comment); Profile.country isn't
+  // trusted here either, since it's a fan's own self-reported field.
+  const country = await getRequestCountry(req);
+  if (!isSouthAfrica(country)) {
+    return NextResponse.json({ error: NOT_SOUTH_AFRICA_MESSAGE }, { status: 403 });
+  }
 
   const json = await req.json().catch(() => null);
     const parsed = ApplySchema.safeParse(json);
