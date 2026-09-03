@@ -110,6 +110,64 @@ a[href]:hover {
     box-shadow: 0 18px 44px -16px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--accent-soft);
 }
 
+/* Point/benefit card grids: explicit, breakpoint-specific column counts
+   (not auto-fit, which packs columns purely by pixel width and leaves
+   whatever's left over stranded alone on the last row). Each breakpoint
+   here divides evenly for the counts these grids actually hold today —
+   4 and 6 items never orphan. Where a count doesn't divide evenly at a
+   given breakpoint (e.g. 7 benefits in 3 or 2 columns), the lone
+   leftover card spans the full row instead of sitting off to one side —
+   :last-child + :nth-child keyed to that breakpoint's column count is
+   what detects "this is the one alone on the last row". */
+.grid-cols-2,
+.grid-cols-3 {
+    display: grid;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.grid-cols-2 {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.grid-cols-2 > *:last-child:nth-child(2n+1) {
+    grid-column: 1 / -1;
+}
+
+.grid-cols-3 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.grid-cols-3 > *:last-child:nth-child(3n+1) {
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 860px) {
+    .grid-cols-3 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .grid-cols-3 > *:last-child:nth-child(3n+1) {
+        grid-column: auto;
+    }
+
+    .grid-cols-3 > *:last-child:nth-child(2n+1) {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 560px) {
+    .grid-cols-2,
+    .grid-cols-3 {
+        grid-template-columns: 1fr;
+    }
+
+    .grid-cols-2 > *:last-child,
+    .grid-cols-3 > *:last-child {
+        grid-column: auto;
+    }
+}
+
 ::selection {
     background: var(--accent);
     color: var(--bg);

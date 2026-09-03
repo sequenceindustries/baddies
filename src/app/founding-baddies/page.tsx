@@ -49,11 +49,11 @@ function WhatIsBaddies() {
   ];
   return (
     <Section title="What is baddies?">
-      <div style={pointsGridStyle}>
+      <div className="grid-cols-2">
         {points.map((p) => (
           <div key={p} style={pointCardStyle}>
             <span style={pointBulletStyle} aria-hidden="true" />
-            <span>{p}</span>
+            <span style={pointTextStyle}>{p}</span>
           </div>
         ))}
       </div>
@@ -73,13 +73,13 @@ function Benefits() {
   ];
   return (
     <Section title="Founding baddie benefits" subtitle="What you get for being one of the first.">
-      <div style={benefitsGridStyle}>
+      <div className="grid-cols-3">
         {benefits.map((b) => (
           <div key={b} style={benefitCardStyle} className="hover-lift">
             <span style={checkGlyphStyle} aria-hidden="true">
               ✓
             </span>
-            <span>{b}</span>
+            <span style={pointTextStyle}>{b}</span>
           </div>
         ))}
       </div>
@@ -127,11 +127,11 @@ function TrustAndSafety() {
   ];
   return (
     <Section title="Trust & Safety">
-      <div style={pointsGridStyle}>
+      <div className="grid-cols-3">
         {points.map((p) => (
           <div key={p} style={pointCardStyle}>
             <span style={pointBulletStyle} aria-hidden="true" />
-            <span>{p}</span>
+            <span style={pointTextStyle}>{p}</span>
           </div>
         ))}
       </div>
@@ -642,13 +642,6 @@ const sectionSubStyle: React.CSSProperties = {
   maxWidth: "520px",
 };
 
-const pointsGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-  gap: "1rem",
-  marginTop: "1.5rem",
-};
-
 const pointCardStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "flex-start",
@@ -658,6 +651,16 @@ const pointCardStyle: React.CSSProperties = {
   lineHeight: 1.5,
 };
 
+// main {text-align: center} (globals.css) inherits down into these card
+// spans by default — fine for a single short line, but once text wraps
+// onto 2-3 lines it visually detaches the wrapped lines from the bullet
+// sitting at the left. textWrap: "balance" also keeps a wrapped line from
+// ending in a single stranded word.
+const pointTextStyle: React.CSSProperties = {
+  textAlign: "left",
+  textWrap: "balance",
+};
+
 const pointBulletStyle: React.CSSProperties = {
   width: "8px",
   height: "8px",
@@ -665,13 +668,6 @@ const pointBulletStyle: React.CSSProperties = {
   background: "var(--accent)",
   marginTop: "0.5rem",
   flexShrink: 0,
-};
-
-const benefitsGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-  gap: "1rem",
-  marginTop: "1.5rem",
 };
 
 const benefitCardStyle: React.CSSProperties = {
