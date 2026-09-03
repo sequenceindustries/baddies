@@ -228,7 +228,12 @@ export default function AdminDashboardPage() {
           <CreatorQueue />
         </>
       )}
-      {tab === "Content" && <ContentQueue />}
+      {tab === "Content" && (
+        <>
+          <ContentQueue />
+          <ContentLibrary />
+        </>
+      )}
       {tab === "Payouts" && <PayoutQueue />}
       {tab === "Audit Log" && <AuditLogPanel />}
     </main>
@@ -1492,7 +1497,10 @@ function ContentQueue() {
       {loading ? (
         <p style={{ color: "var(--text-muted)" }}>Loading...</p>
       ) : queue.length === 0 ? (
-        <p style={{ color: "var(--text-muted)" }}>Nothing pending.</p>
+        <p style={{ color: "var(--text-muted)" }}>
+          Nothing pending — uploads don&apos;t require review before going live by default; this fills only when a
+          report pulls something back for a re-review.
+        </p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
           {queue.map((item) => (
@@ -1515,6 +1523,337 @@ function ContentQueue() {
             </div>
           ))}
         </div>
+      )}
+    </section>
+  );
+}
+
+interface ContentLibraryItem {
+  contentId: string;
+  mediaType: string;
+  accessLevel: string;
+  status: string;
+  caption: string | null;
+  createdAt: string;
+  creatorProfileId: string;
+  creatorEmail: string;
+}
+
+interface ContentStatusCounts {
+  total: number;
+  DRAFT: number;
+  UPLOADED: number;
+  PROCESSING: number;
+  PENDING_REVIEW: number;
+  APPROVED: number;
+  REJECTED: number;
+  REMOVED: number;
+}
+
+const CONTENT_STATUSES = ["DRAFT", "UPLOADED", "PROCESSING", "PENDING_REVIEW", "APPROVED", "REJECTED", "REMOVED"] as const;
+const MEDIA_TYPES = ["IMAGE", "VIDEO", "AUDIO"] as const;
+const ACCESS_LEVELS = ["FREE", "VIP", "VVIP", "PPV"] as const;
+
+/**
+ * The full content directory — every item regardless of status,
+ * alongside ContentQueue's focused "needs review right now" list
+ * (unchanged, above this). Same shape as Members-vs-Creators in Phase
+ * 2: a queue + a searchable library, not a rebuild of the queue.
+ */
+function ContentLibrary() {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
+  const [mediaType, setMediaType] = useState("");
+  const [accessLevel, setAccessLevel] = useState("");
+  const [items, setItems] = useState<ContentLibraryItem[]>([]);
+  const [statusCounts, setStatusCounts] = useState<ContentStatusCounts | null>(null);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  function buildParams(cursorValue?: string) {
+    const params = new URLSearchParams();
+    params.set("status", status || "all");
+    if (query.trim()) params.set("query", query.trim());
+    if (mediaType) params.set("mediaType", mediaType);
+    if (accessLevel) params.set("accessLevel", accessLevel);
+    if (cursorValue) params.set("cursor", cursorValue);
+    return params.toString();
+  }
+
+  function reload() {
+    setLoading(true);
+    setError(null);
+    fetch(`/api/admin/content?${buildParams()}`)
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null);
+          throw new Error(body?.error ?? "Failed to load content.");
+        }
+        return r.json();
+      })
+      .then((body) => {
+        setItems(body.items ?? []);
+        setCursor(body.nextCursor ?? null);
+        setStatusCounts(body.statusCounts ?? null);
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }
+
+  async function loadMore() {
+    if (!cursor) return;
+    setLoadingMore(true);
+    const res = await fetch(`/api/admin/content?${buildParams(cursor)}`);
+    setLoadingMore(false);
+    if (!res.ok) return;
+    const body = await res.json();
+    setItems((prev) => [...prev, ...(body.items ?? [])]);
+    setCursor(body.nextCursor ?? null);
+  }
+
+  useEffect(reload, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (selectedId) {
+    return (
+      <ContentDetailView
+        contentId={selectedId}
+        onBack={() => {
+          setSelectedId(null);
+          reload();
+        }}
+      />
+    );
+  }
+
+  return (
+    <section>
+      <h2 style={sectionHeadingStyle}>Content library</h2>
+      {statusCounts && (
+        <div style={{ ...statGridStyle, marginBottom: "1.25rem" }}>
+          <Stat label="Total" value={statusCounts.total} />
+          {CONTENT_STATUSES.map((s) => (
+            <Stat key={s} label={humanizeKey(s)} value={statusCounts[s]} alert={s === "PENDING_REVIEW" && statusCounts[s] > 0} />
+          ))}
+        </div>
+      )}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          reload();
+        }}
+        style={memberFilterBarStyle}
+      >
+        <input
+          style={memberSearchInputStyle}
+          placeholder="Search caption or creator email..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <select style={statusSelectStyle} value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="all">All statuses</option>
+          {CONTENT_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {humanizeKey(s)}
+            </option>
+          ))}
+        </select>
+        <select style={statusSelectStyle} value={mediaType} onChange={(e) => setMediaType(e.target.value)}>
+          <option value="">All media types</option>
+          {MEDIA_TYPES.map((m) => (
+            <option key={m} value={m}>
+              {humanizeKey(m)}
+            </option>
+          ))}
+        </select>
+        <select style={statusSelectStyle} value={accessLevel} onChange={(e) => setAccessLevel(e.target.value)}>
+          <option value="">All access levels</option>
+          {ACCESS_LEVELS.map((a) => (
+            <option key={a} value={a}>
+              {humanizeKey(a)}
+            </option>
+          ))}
+        </select>
+        <button type="submit" style={approveButtonStyle}>
+          Search
+        </button>
+      </form>
+
+      {error && <p style={{ color: "var(--danger)", fontSize: "0.85rem" }}>{error}</p>}
+
+      {loading ? (
+        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+      ) : items.length === 0 ? (
+        <p style={{ color: "var(--text-muted)" }}>No content matches.</p>
+      ) : (
+        <>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+            {items.map((item) => (
+              <div key={item.contentId} style={rowCardStyle}>
+                <div style={{ cursor: "pointer", flex: 1 }} onClick={() => setSelectedId(item.contentId)} role="button">
+                  <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>{item.caption || "(no caption)"}</div>
+                  <div style={mutedSmallStyle}>
+                    {item.creatorEmail} · {humanizeKey(item.mediaType)} · {humanizeKey(item.accessLevel)} ·{" "}
+                    {humanizeKey(item.status)} · {new Date(item.createdAt).toLocaleDateString()}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          {cursor && (
+            <button onClick={loadMore} disabled={loadingMore} style={{ ...approveButtonStyle, marginTop: "1rem" }}>
+              {loadingMore ? "Loading..." : "Load more"}
+            </button>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+interface ContentDetailData {
+  contentId: string;
+  mediaType: string;
+  accessLevel: string;
+  priceUsd: string | null;
+  caption: string | null;
+  status: string;
+  moderationStatus: string;
+  contentHash: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+  creatorProfileId: string;
+  creatorEmail: string;
+  participantCount: number;
+  likeCount: number;
+  purchaseCount: number;
+  moderationHistory: { id: string; action: string; actorEmail: string; metadata: unknown; createdAt: string }[];
+  reports: { id: string; reason: string; details: string | null; createdAt: string }[];
+}
+
+function ContentDetailView({ contentId, onBack }: { contentId: string; onBack: () => void }) {
+  const [data, setData] = useState<ContentDetailData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/admin/content/${contentId}`)
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null);
+          throw new Error(body?.error ?? "Failed to load content.");
+        }
+        return r.json();
+      })
+      .then((body) => {
+        if (!cancelled) setData(body);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [contentId]);
+
+  async function remove() {
+    if (!data) return;
+    const reason = window.prompt("Reason for removing this content?");
+    if (!reason) return;
+    setBusy(true);
+    const res = await fetch(`/api/admin/content/${data.contentId}/remove`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    });
+    setBusy(false);
+    if (res.ok) {
+      setData({ ...data, status: "REMOVED", moderationStatus: "REMOVED" });
+    } else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error ?? "Remove failed.");
+    }
+  }
+
+  return (
+    <section>
+      <button onClick={onBack} style={{ ...tabButtonStyle, marginBottom: "1.25rem" }}>
+        ← Back to list
+      </button>
+
+      {loading && <p style={{ color: "var(--text-muted)" }}>Loading...</p>}
+      {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
+
+      {data && (
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem" }}>
+            <div>
+              <h2 style={{ ...sectionHeadingStyle, margin: "0 0 0.3rem" }}>{data.caption || "(no caption)"}</h2>
+              <div style={mutedSmallStyle}>
+                {data.creatorEmail} · {humanizeKey(data.mediaType)} · {humanizeKey(data.accessLevel)} · uploaded{" "}
+                {new Date(data.createdAt).toLocaleString()}
+              </div>
+              {data.publishedAt && <div style={mutedSmallStyle}>Published {new Date(data.publishedAt).toLocaleString()}</div>}
+            </div>
+            {data.status === "APPROVED" && (
+              <button onClick={remove} disabled={busy} style={rejectButtonStyle}>
+                Remove
+              </button>
+            )}
+          </div>
+
+          <StatGroup title="Status">
+            <Stat label="Status" value={humanizeKey(data.status)} />
+            <Stat label="Moderation status" value={humanizeKey(data.moderationStatus)} />
+            <Stat label="Participants" value={data.participantCount} />
+            <Stat label="Likes" value={data.likeCount} />
+            <Stat label="Purchases" value={data.purchaseCount} />
+            {data.priceUsd && <Stat label="Price" value={money(data.priceUsd)} />}
+          </StatGroup>
+
+          {data.reports.length > 0 && (
+            <div style={{ marginBottom: "2rem" }}>
+              <h3 style={statGroupHeadingStyle}>Reports</h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                {data.reports.map((r) => (
+                  <div key={r.id} style={{ ...auditRowStyle, borderColor: "var(--danger)" }}>
+                    <span style={{ fontWeight: 600, color: "var(--danger)" }}>{humanizeKey(r.reason)}</span>
+                    <span style={mutedSmallStyle}>
+                      {r.details ? `${r.details} · ` : ""}
+                      {new Date(r.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <h3 style={statGroupHeadingStyle}>Moderation history</h3>
+            {data.moderationHistory.length === 0 ? (
+              <p style={{ color: "var(--text-muted)" }}>No moderation actions on this item yet.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                {data.moderationHistory.map((a) => (
+                  <div key={a.id} style={auditRowStyle}>
+                    <span style={{ fontWeight: 600, textTransform: "capitalize" }}>{a.action.replace(/[._]/g, " ")}</span>
+                    <span style={mutedSmallStyle}>
+                      {a.actorEmail} · {new Date(a.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
       )}
     </section>
   );
