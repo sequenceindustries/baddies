@@ -23,7 +23,7 @@ interface ContentQueueItem {
   participantCount: number;
 }
 
-const TABS = ["Overview", "Members", "Creators", "Applications", "Content", "Payouts", "Audit Log"] as const;
+const TABS = ["Overview", "Members", "Creators", "Applications", "Content", "Revenue", "Payouts", "Audit Log"] as const;
 type Tab = (typeof TABS)[number];
 
 type RangeKey = "today" | "7d" | "30d" | "90d" | "all";
@@ -97,7 +97,7 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   { label: "Content", items: [{ label: "Content", tab: "Content", badgeKey: "content" }] },
-  { label: "Business", items: [{ label: "Payouts", tab: "Payouts", badgeKey: "payouts" }, { label: "Revenue" }] },
+  { label: "Business", items: [{ label: "Revenue", tab: "Revenue" }, { label: "Payouts", tab: "Payouts", badgeKey: "payouts" }] },
   { label: "Insights", items: [{ label: "Audit Log", tab: "Audit Log" }] },
   { label: "System", items: [{ label: "System Health" }] },
 ];
@@ -234,6 +234,7 @@ export default function AdminDashboardPage() {
           <ContentLibrary />
         </>
       )}
+      {tab === "Revenue" && <RevenuePanel onNavigate={setTab} />}
       {tab === "Payouts" && <PayoutQueue />}
       {tab === "Audit Log" && <AuditLogPanel />}
     </main>
@@ -1195,6 +1196,155 @@ function FoundingApplicationsQueue({
             );
           })}
         </div>
+      )}
+    </section>
+  );
+}
+
+interface RevenueData {
+  range: string;
+  summary: {
+    grossAllTimeUsd: string;
+    grossInRangeUsd: string;
+    grossDeltaPct: number | null;
+    creatorShareAllTimeUsd: string;
+    platformShareAllTimeUsd: string;
+    mrrUsd: string;
+    refundsAllTimeUsd: string;
+  };
+  subscriptions: {
+    activeCreatorSubs: number;
+    activeVipPass: number;
+    newInRange: number;
+    cancelledInRange: number;
+    churnRatePct: number | null;
+    failedPayments: number;
+  };
+  payouts: { pendingCount: number; pendingAmountUsd: string; paidCount: number; paidAmountUsd: string };
+  revenueByCreator: { creatorProfileId: string; email: string; displayName: string | null; revenueUsd: string }[];
+  chart: { date: string; gross: number }[];
+}
+
+/**
+ * Spec §11 — subscriptions/revenue overview. Production is genuinely
+ * all zeros right now (no subscriptions/payments have happened yet),
+ * so this reads mostly as $0.00/— today; every figure is still a real
+ * query (GET /api/admin/revenue), not a placeholder. Reuses KpiCard/
+ * StatGroup/Stat/GrowthChart/RANGE_OPTIONS from Overview rather than
+ * building parallel versions.
+ */
+function RevenuePanel({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
+  const [range, setRange] = useState<RangeKey>("7d");
+  const [data, setData] = useState<RevenueData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/admin/revenue?range=${range}`)
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null);
+          throw new Error(body?.error ?? "Failed to load revenue.");
+        }
+        return r.json();
+      })
+      .then((body) => {
+        if (!cancelled) {
+          setData(body);
+          setError(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [range]);
+
+  return (
+    <section>
+      <div style={commandCentreHeaderStyle}>
+        <h2 style={{ ...sectionHeadingStyle, margin: 0 }}>Revenue</h2>
+        <div style={rangeSelectorStyle}>
+          {RANGE_OPTIONS.map((opt) => (
+            <button key={opt.key} onClick={() => setRange(opt.key)} style={opt.key === range ? tabButtonActiveStyle : tabButtonStyle}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading && <p style={{ color: "var(--text-muted)" }}>Loading...</p>}
+      {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
+
+      {data && (
+        <>
+          <div style={heroStatGridStyle}>
+            <KpiCard label="Revenue (period)" value={money(data.summary.grossInRangeUsd)} deltaPct={data.summary.grossDeltaPct} caption={`${money(data.summary.grossAllTimeUsd)} all-time`} />
+            <KpiCard label="MRR" value={money(data.summary.mrrUsd)} />
+            <KpiCard label="Active subscriptions" value={(data.subscriptions.activeCreatorSubs + data.subscriptions.activeVipPass).toLocaleString()} />
+            <KpiCard
+              label="Failed payments"
+              value={data.subscriptions.failedPayments.toLocaleString()}
+              alert={data.subscriptions.failedPayments > 0}
+            />
+          </div>
+
+          <StatGroup title="Subscriptions">
+            <Stat label="Active creator subscriptions" value={data.subscriptions.activeCreatorSubs} />
+            <Stat label="Active VIP pass" value={data.subscriptions.activeVipPass} />
+            <Stat label="New (period)" value={data.subscriptions.newInRange} />
+            <Stat label="Cancelled (period)" value={data.subscriptions.cancelledInRange} />
+            <Stat label="Churn (period)" value={data.subscriptions.churnRatePct !== null ? `${data.subscriptions.churnRatePct}%` : "—"} />
+          </StatGroup>
+
+          <StatGroup title="Revenue split (all-time)">
+            <Stat label="Gross" value={money(data.summary.grossAllTimeUsd)} />
+            <Stat label="Creator share" value={money(data.summary.creatorShareAllTimeUsd)} />
+            <Stat label="Platform share" value={money(data.summary.platformShareAllTimeUsd)} />
+            <Stat label="Refunds" value={money(data.summary.refundsAllTimeUsd)} />
+          </StatGroup>
+
+          <div style={{ marginBottom: "2rem" }}>
+            <h3 style={statGroupHeadingStyle}>Payouts</h3>
+            <div style={statGridStyle}>
+              <Stat label="Pending" value={data.payouts.pendingCount} alert={data.payouts.pendingCount > 0} />
+              <Stat label="Pending amount" value={money(data.payouts.pendingAmountUsd)} />
+              <Stat label="Paid (all-time)" value={data.payouts.paidCount} />
+              <Stat label="Paid amount (all-time)" value={money(data.payouts.paidAmountUsd)} />
+            </div>
+            <button onClick={() => onNavigate("Payouts")} style={{ ...approveButtonStyle, marginTop: "0.75rem" }}>
+              Go to Payouts →
+            </button>
+          </div>
+
+          <div style={{ marginBottom: "2rem" }}>
+            <h3 style={statGroupHeadingStyle}>Revenue over time</h3>
+            <GrowthChart title="Gross revenue" data={data.chart.map((c) => ({ date: c.date, count: c.gross }))} />
+          </div>
+
+          <div>
+            <h3 style={statGroupHeadingStyle}>Revenue by creator</h3>
+            {data.revenueByCreator.length === 0 ? (
+              <p style={{ color: "var(--text-muted)" }}>No revenue yet.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                {data.revenueByCreator.map((c) => (
+                  <div key={c.creatorProfileId} style={rowCardStyle}>
+                    <span>{c.displayName ?? c.email}</span>
+                    <span style={{ fontWeight: 700 }}>{money(c.revenueUsd)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
       )}
     </section>
   );

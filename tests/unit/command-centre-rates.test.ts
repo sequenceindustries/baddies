@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pctChange, ratePercent } from "@/lib/analytics/rates";
+import { pctChange, ratePercent, rangeBounds } from "@/lib/analytics/rates";
 
 describe("pctChange", () => {
   it("returns null (not Infinity/NaN) when the previous period was zero", () => {
@@ -31,5 +31,30 @@ describe("ratePercent (funnel conversion rates)", () => {
 
   it("rounds to one decimal place", () => {
     expect(ratePercent(1, 3)).toBe(33.3);
+  });
+});
+
+describe("rangeBounds", () => {
+  const now = new Date("2026-09-04T12:00:00.000Z");
+
+  it("'all' has no since and no comparison window", () => {
+    expect(rangeBounds("all", now)).toEqual({ since: null, prevSince: null, prevUntil: null });
+  });
+
+  it("'today' starts at UTC midnight of the given day", () => {
+    const { since } = rangeBounds("today", now);
+    expect(since?.toISOString()).toBe("2026-09-04T00:00:00.000Z");
+  });
+
+  it("7d/30d/90d each cover the right span, ending now", () => {
+    expect(now.getTime() - rangeBounds("7d", now).since!.getTime()).toBe(7 * 24 * 60 * 60 * 1000);
+    expect(now.getTime() - rangeBounds("30d", now).since!.getTime()).toBe(30 * 24 * 60 * 60 * 1000);
+    expect(now.getTime() - rangeBounds("90d", now).since!.getTime()).toBe(90 * 24 * 60 * 60 * 1000);
+  });
+
+  it("the previous window is an equal-length span immediately before the current one, with no gap or overlap", () => {
+    const { since, prevSince, prevUntil } = rangeBounds("7d", now);
+    expect(prevUntil).toEqual(since);
+    expect(since!.getTime() - prevSince!.getTime()).toBe(now.getTime() - since!.getTime());
   });
 });

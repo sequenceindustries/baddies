@@ -5,14 +5,11 @@ import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
 import { getPlatformSetting } from "@/lib/config/settings";
 import { BUSINESS_CONFIG_KEYS } from "@/lib/config/business";
-import { pctChange, ratePercent } from "@/lib/analytics/rates";
+import { pctChange, ratePercent, rangeBounds, RANGES, type Range } from "@/lib/analytics/rates";
 
 // Always dynamic: this route reads live data and must never be
 // statically prerendered or cached at build time.
 export const dynamic = "force-dynamic";
-
-const RANGES = ["today", "7d", "30d", "90d", "all"] as const;
-type Range = (typeof RANGES)[number];
 
 const FOUNDING_STAGE_ORDER = [
   "APPLIED",
@@ -25,24 +22,6 @@ const FOUNDING_STAGE_ORDER = [
   "LIVE",
   "REJECTED",
 ] as const;
-
-/** [since, until, prevSince, prevUntil] — prev bounds are the immediately
- * preceding window of equal length, null for "all" (no meaningful
- * comparison window when there's no lower bound to begin with). */
-function rangeBounds(range: Range, now: Date) {
-  if (range === "all") return { since: null as Date | null, prevSince: null as Date | null, prevUntil: null as Date | null };
-
-  const since =
-    range === "today"
-      ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
-      : new Date(now.getTime() - { "7d": 7, "30d": 30, "90d": 90 }[range] * 24 * 60 * 60 * 1000);
-
-  const spanMs = now.getTime() - since.getTime();
-  const prevUntil = since;
-  const prevSince = new Date(since.getTime() - spanMs);
-
-  return { since, prevSince, prevUntil };
-}
 
 function countsByStatus<Row extends { _count: { _all: number } }, K extends string>(
   rows: Row[],
