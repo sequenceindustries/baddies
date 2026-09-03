@@ -33,7 +33,11 @@ export default function LandingPage() {
   useEffect(() => {
     let cancelled = false;
     fetch("/api/discovery/top-creators")
-      .then((r) => (r.ok ? r.json() : { creators: [] }))
+      .then((r) =>
+        r.ok && r.headers.get("content-type")?.includes("application/json")
+          ? r.json()
+          : { creators: [] },
+      )
       .then((body: DiscoveryResponse) => {
         if (!cancelled) setTopCreators(body.creators ?? []);
       });
