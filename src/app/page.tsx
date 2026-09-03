@@ -89,9 +89,9 @@ export default function LandingPage() {
         </section>
       )}
 
-      <HowItWorks />
-
       <HowItWorksForCreators />
+
+      <HowItWorks />
 
       <p style={footerLineStyle}>South Africa to the World!</p>
     </main>

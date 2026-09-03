@@ -13,18 +13,18 @@ export function HowItWorks() {
     <section style={sectionStyle}>
       <h2 style={sectionHeadingStyle}>How it works for fans</h2>
       <div style={tierGridStyle}>
-        <div className="hover-lift" style={{ ...tierCardStyle, borderColor: "var(--accent)" }}>
+        <div className="hover-lift" style={fansTierCardStyle}>
           <div style={tierNameStyle}>Free</div>
           <p style={tierDescStyle}>Browse public previews from every verified creator. No cost, no card required.</p>
         </div>
-        <div className="hover-lift" style={{ ...tierCardStyle, borderColor: "var(--accent)" }}>
+        <div className="hover-lift" style={fansTierCardStyle}>
           <div style={tierNameStyle}>VIP</div>
           <p style={tierDescStyle}>
             One subscription, unlocks VIP-tier content from every participating creator on the
             platform.
           </p>
         </div>
-        <div className="hover-lift" style={{ ...tierCardStyle, borderColor: "var(--accent)" }}>
+        <div className="hover-lift" style={fansTierCardStyle}>
           <div style={tierNameStyle}>Exclusive</div>
           <p style={tierDescStyle}>
             Subscribe directly to a creator, at the price they set: subscriber-only posts, direct
@@ -101,6 +101,15 @@ const tierCardStyle: React.CSSProperties = {
   borderRadius: "16px",
   padding: "1.75rem",
   boxShadow: "var(--glow)",
+};
+
+// A visibly different shade from the creator steps above (var(--surface),
+// darker) so the two sections read as distinct at a glance while
+// scrolling past both, not just distinguished by their headings.
+const fansTierCardStyle: React.CSSProperties = {
+  ...tierCardStyle,
+  background: "var(--surface-raised)",
+  borderColor: "var(--accent)",
 };
 
 const tierNameStyle: React.CSSProperties = {

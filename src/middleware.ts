@@ -76,5 +76,12 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // The trailing extension exclusion covers static files served straight
+  // out of public/ (hero-banner.jpg and anything added there later) —
+  // without it, the gate redirects those requests too (found via
+  // /hero-banner.jpg 307-ing to "/" on the live coming-soon site, which
+  // is exactly why the hero banner's background image wasn't showing).
+  matcher: [
+    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:jpg|jpeg|png|gif|webp|avif|svg|ico|css|js|woff|woff2|ttf|map)$).*)",
+  ],
 };
