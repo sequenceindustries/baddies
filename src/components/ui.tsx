@@ -131,6 +131,10 @@ export function roleHomePath(role: SessionUser["role"]): string {
 
 export function Nav() {
   const { user, loading, refresh } = useSession();
+  // The landing page keeps only its Founding Baddies "Apply" CTA — no
+  // Sign in/Join here either, or a signed-out visitor would still have a
+  // second way in past that one deliberate button.
+  const isLandingPage = usePathname() === "/";
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -195,14 +199,16 @@ export function Nav() {
           // comment), so linking to them for a signed-out visitor would
           // just be a dead end. The landing page's own Top Baddies row
           // is the one thing they get to browse first.
-          <>
-            <Link href="/login" style={linkStyle}>
-              Sign in
-            </Link>
-            <Link href="/register" style={primaryLinkStyle}>
-              Join
-            </Link>
-          </>
+          !isLandingPage && (
+            <>
+              <Link href="/login" style={linkStyle}>
+                Sign in
+              </Link>
+              <Link href="/register" style={primaryLinkStyle}>
+                Join
+              </Link>
+            </>
+          )
         )}
       </div>
     </nav>

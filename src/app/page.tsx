@@ -15,9 +15,9 @@ interface DiscoveryResponse {
  * The real landing page (Sprint 0's placeholder replaced) — an anonymous
  * visitor's actual entry point. Logged-in visitors skip straight to their
  * role's home (roleHomePath — a creator lands on their Dashboard, not a
- * fan-oriented feed); this is purely for signed-out discovery + sign-up,
- * OnlyFans-style: content and creators front and center, tiers explained
- * at the bottom, join/sign-in CTAs everywhere that matters.
+ * fan-oriented feed). Per product decision, the only CTA on this page (and
+ * in Nav when it's showing) is the Founding Baddies "Apply now" banner —
+ * no separate Join/Sign in buttons here.
  */
 export default function LandingPage() {
   const router = useRouter();
@@ -55,14 +55,6 @@ export default function LandingPage() {
     <main>
       <section style={heroStyle}>
         <h1 style={heroTitleStyle}>baddies</h1>
-        <div style={heroCtaRowStyle}>
-          <Link href="/register" style={primaryCtaStyle}>
-            Join free
-          </Link>
-          <Link href="/login" style={secondaryCtaStyle}>
-            Sign in
-          </Link>
-        </div>
       </section>
 
       <section style={sectionStyle}>
@@ -85,16 +77,6 @@ export default function LandingPage() {
       )}
 
       <HowItWorks />
-
-      <section style={{ ...sectionStyle, textAlign: "center", paddingBottom: "5rem" }}>
-        <h2 style={sectionHeadingStyle}>Ready to join?</h2>
-        <p style={{ color: "var(--text-muted)", marginBottom: "1.5rem" }}>
-          Free to browse. 18+ only. Verified creators, real payouts, no surprises.
-        </p>
-        <Link href="/register" style={primaryCtaStyle}>
-          Create your account
-        </Link>
-      </section>
 
       <p style={footerLineStyle}>South Africa to the World!</p>
     </main>
@@ -120,51 +102,10 @@ const heroTitleStyle: React.CSSProperties = {
   color: "transparent",
 };
 
-const heroCtaRowStyle: React.CSSProperties = {
-  display: "flex",
-  gap: "0.85rem",
-  justifyContent: "center",
-  flexWrap: "wrap",
-  marginTop: "1.75rem",
-};
-
-const primaryCtaStyle: React.CSSProperties = {
-  background: "linear-gradient(135deg, var(--accent) 0%, var(--accent-dim) 100%)",
-  color: "var(--bg)",
-  border: "none",
-  borderRadius: "999px",
-  padding: "0.95rem 2rem",
-  fontWeight: 700,
-  fontSize: "1rem",
-  textDecoration: "none",
-  display: "inline-block",
-  boxShadow: "0 8px 30px -8px rgba(59, 130, 246, 0.55)",
-};
-
-const secondaryCtaStyle: React.CSSProperties = {
-  background: "transparent",
-  color: "var(--text)",
-  border: "1px solid var(--border)",
-  borderRadius: "999px",
-  padding: "0.95rem 2rem",
-  fontWeight: 700,
-  fontSize: "1rem",
-  textDecoration: "none",
-  display: "inline-block",
-};
-
 const sectionStyle: React.CSSProperties = {
   padding: "1.5rem 1.75rem",
   maxWidth: "1100px",
   margin: "0 auto 1.5rem",
-};
-
-const sectionHeadingStyle: React.CSSProperties = {
-  fontFamily: "var(--font-display)",
-  fontSize: "1.7rem",
-  fontWeight: 500,
-  margin: "0 0 1.25rem",
-  textAlign: "center",
 };
 
 const foundingBannerStyle: React.CSSProperties = {
