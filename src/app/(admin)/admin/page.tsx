@@ -23,7 +23,7 @@ interface ContentQueueItem {
   participantCount: number;
 }
 
-const TABS = ["Overview", "Members", "Creators", "Applications", "Content", "Revenue", "Payouts", "Audit Log"] as const;
+const TABS = ["Overview", "Members", "Creators", "Applications", "Content", "Revenue", "Payouts", "Trust & Safety", "Audit Log"] as const;
 type Tab = (typeof TABS)[number];
 
 type RangeKey = "today" | "7d" | "30d" | "90d" | "all";
@@ -65,7 +65,7 @@ interface CommandCentreData {
     readyForLaunch: number;
   };
   actionRequired: { id: string; label: string; count: number; linkTab: Tab | null }[];
-  badges: { applications: number; content: number; payouts: number };
+  badges: { applications: number; content: number; payouts: number; trustSafety: number };
   charts: { newUsers: DayCount[]; newCreators: DayCount[]; newApplications: DayCount[]; newContent: DayCount[] };
   recentActivity: { id: string; kind: string; label: string; actor: string | null; timestamp: string }[];
 }
@@ -98,7 +98,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   { label: "Content", items: [{ label: "Content", tab: "Content", badgeKey: "content" }] },
   { label: "Business", items: [{ label: "Revenue", tab: "Revenue" }, { label: "Payouts", tab: "Payouts", badgeKey: "payouts" }] },
-  { label: "Insights", items: [{ label: "Audit Log", tab: "Audit Log" }] },
+  { label: "Insights", items: [{ label: "Trust & Safety", tab: "Trust & Safety", badgeKey: "trustSafety" }, { label: "Audit Log", tab: "Audit Log" }] },
   { label: "System", items: [{ label: "System Health" }] },
 ];
 
@@ -235,7 +235,13 @@ export default function AdminDashboardPage() {
         </>
       )}
       {tab === "Revenue" && <RevenuePanel onNavigate={setTab} />}
-      {tab === "Payouts" && <PayoutQueue />}
+      {tab === "Payouts" && (
+        <>
+          <PayoutQueue />
+          <PayoutHistory />
+        </>
+      )}
+      {tab === "Trust & Safety" && <TrustAndSafetyPanel />}
       {tab === "Audit Log" && <AuditLogPanel />}
     </main>
   );
@@ -1411,6 +1417,434 @@ function PayoutQueue() {
   );
 }
 
+interface PayoutHistoryItem {
+  payoutId: string;
+  creatorEmail: string;
+  amountUsd: string;
+  status: string;
+  requestedAt: string;
+  processedAt: string | null;
+  failureReason: string | null;
+}
+
+interface PayoutStatusCounts {
+  REQUESTED: number;
+  APPROVED: number;
+  PROCESSING: number;
+  PAID: number;
+  FAILED: number;
+  REVERSED: number;
+  totalPaidUsd: string;
+}
+
+const PAYOUT_STATUSES = ["REQUESTED", "APPROVED", "PROCESSING", "PAID", "FAILED", "REVERSED"] as const;
+
+/**
+ * Every payout regardless of status, alongside PayoutQueue's focused
+ * "needs approval now" list (unchanged, above this) — same queue +
+ * history split as Content (Phase 3) and Members/Creators (Phase 2).
+ */
+function PayoutHistory() {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
+  const [items, setItems] = useState<PayoutHistoryItem[]>([]);
+  const [statusCounts, setStatusCounts] = useState<PayoutStatusCounts | null>(null);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function buildParams(cursorValue?: string) {
+    const params = new URLSearchParams();
+    params.set("status", status || "all");
+    if (query.trim()) params.set("query", query.trim());
+    if (cursorValue) params.set("cursor", cursorValue);
+    return params.toString();
+  }
+
+  function reload() {
+    setLoading(true);
+    setError(null);
+    fetch(`/api/admin/payouts?${buildParams()}`)
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null);
+          throw new Error(body?.error ?? "Failed to load payouts.");
+        }
+        return r.json();
+      })
+      .then((body) => {
+        setItems(body.items ?? []);
+        setCursor(body.nextCursor ?? null);
+        setStatusCounts(body.statusCounts ?? null);
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }
+
+  async function loadMore() {
+    if (!cursor) return;
+    setLoadingMore(true);
+    const res = await fetch(`/api/admin/payouts?${buildParams(cursor)}`);
+    setLoadingMore(false);
+    if (!res.ok) return;
+    const body = await res.json();
+    setItems((prev) => [...prev, ...(body.items ?? [])]);
+    setCursor(body.nextCursor ?? null);
+  }
+
+  useEffect(reload, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function changeStatus(id: string, newStatus: string) {
+    setBusyId(id);
+    const res = await fetch(`/api/admin/payouts/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    setBusyId(null);
+    if (res.ok) reload();
+    else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error ?? "Update failed.");
+    }
+  }
+
+  return (
+    <section>
+      <h2 style={sectionHeadingStyle}>Payout history</h2>
+      {statusCounts && (
+        <div style={{ ...statGridStyle, marginBottom: "1.25rem" }}>
+          <Stat label="Requested" value={statusCounts.REQUESTED} alert={statusCounts.REQUESTED > 0} />
+          <Stat label="Approved" value={statusCounts.APPROVED} />
+          <Stat label="Processing" value={statusCounts.PROCESSING} />
+          <Stat label="Paid" value={statusCounts.PAID} />
+          <Stat label="Failed" value={statusCounts.FAILED} alert={statusCounts.FAILED > 0} />
+          <Stat label="Reversed" value={statusCounts.REVERSED} />
+          <Stat label="Total paid" value={money(statusCounts.totalPaidUsd)} />
+        </div>
+      )}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          reload();
+        }}
+        style={memberFilterBarStyle}
+      >
+        <input
+          style={memberSearchInputStyle}
+          placeholder="Search creator email..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <select style={statusSelectStyle} value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="all">All statuses</option>
+          {PAYOUT_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {humanizeKey(s)}
+            </option>
+          ))}
+        </select>
+        <button type="submit" style={approveButtonStyle}>
+          Search
+        </button>
+      </form>
+
+      {error && <p style={{ color: "var(--danger)", fontSize: "0.85rem" }}>{error}</p>}
+
+      {loading ? (
+        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+      ) : items.length === 0 ? (
+        <p style={{ color: "var(--text-muted)" }}>No payouts match.</p>
+      ) : (
+        <>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+            {items.map((p) => (
+              <div key={p.payoutId} style={rowCardStyle}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>
+                    {p.creatorEmail} · {money(p.amountUsd)}
+                  </div>
+                  <div style={mutedSmallStyle}>
+                    requested {new Date(p.requestedAt).toLocaleDateString()}
+                    {p.processedAt ? ` · processed ${new Date(p.processedAt).toLocaleDateString()}` : ""}
+                    {p.failureReason ? ` · ${p.failureReason}` : ""}
+                  </div>
+                </div>
+                <select
+                  value={p.status}
+                  disabled={busyId === p.payoutId}
+                  onChange={(e) => changeStatus(p.payoutId, e.target.value)}
+                  style={statusSelectStyle}
+                >
+                  {PAYOUT_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {humanizeKey(s)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+          {cursor && (
+            <button onClick={loadMore} disabled={loadingMore} style={{ ...approveButtonStyle, marginTop: "1rem" }}>
+              {loadingMore ? "Loading..." : "Load more"}
+            </button>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+interface ModerationCaseRow {
+  caseId: string;
+  status: string;
+  escalated: boolean;
+  resolutionNotes: string | null;
+  assignedToAdminEmail: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  report: { reportId: string; reason: string; details: string | null; reporterEmail: string } | null;
+  target:
+    | { type: "content"; contentId: string; caption: string | null; creatorEmail: string }
+    | { type: "user"; userId: string; email: string }
+    | { type: "unknown" };
+}
+
+interface ModerationSummary {
+  openCases: number;
+  totalReports: number;
+  pendingReports: number;
+  resolvedReports: number;
+  suspendedAccounts: number;
+  bannedAccounts: number;
+  flaggedContent: number;
+}
+
+const CASE_STATUSES = ["OPEN", "IN_REVIEW", "ESCALATED", "UPHELD", "APPEALED", "RESOLVED", "DISMISSED"] as const;
+
+/**
+ * Trust & Safety (spec §13) — every Report opens exactly one
+ * ModerationCase (see src/app/api/reports/route.ts's own transaction),
+ * so this is one queue rather than reconciling reports and cases
+ * separately. Suspended/banned account counts blend two real sources
+ * (CreatorProfile.status for creators, latest audit-log action for
+ * everyone else) — see this session's plan file for why.
+ */
+function TrustAndSafetyPanel() {
+  const [status, setStatus] = useState("");
+  const [cases, setCases] = useState<ModerationCaseRow[]>([]);
+  const [summary, setSummary] = useState<ModerationSummary | null>(null);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedCase, setSelectedCase] = useState<ModerationCaseRow | null>(null);
+
+  function buildParams(cursorValue?: string) {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    if (cursorValue) params.set("cursor", cursorValue);
+    return params.toString();
+  }
+
+  function reload() {
+    setLoading(true);
+    setError(null);
+    fetch(`/api/admin/moderation?${buildParams()}`)
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null);
+          throw new Error(body?.error ?? "Failed to load moderation cases.");
+        }
+        return r.json();
+      })
+      .then((body) => {
+        setCases(body.cases ?? []);
+        setCursor(body.nextCursor ?? null);
+        setSummary(body.summary ?? null);
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }
+
+  async function loadMore() {
+    if (!cursor) return;
+    setLoadingMore(true);
+    const res = await fetch(`/api/admin/moderation?${buildParams(cursor)}`);
+    setLoadingMore(false);
+    if (!res.ok) return;
+    const body = await res.json();
+    setCases((prev) => [...prev, ...(body.cases ?? [])]);
+    setCursor(body.nextCursor ?? null);
+  }
+
+  useEffect(reload, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (selectedCase) {
+    return (
+      <ModerationCaseDetailView
+        caseRow={selectedCase}
+        onBack={() => {
+          setSelectedCase(null);
+          reload();
+        }}
+      />
+    );
+  }
+
+  return (
+    <section>
+      <h2 style={sectionHeadingStyle}>Trust &amp; Safety</h2>
+      {summary && (
+        <div style={{ ...statGridStyle, marginBottom: "1.25rem" }}>
+          <Stat label="Open cases" value={summary.openCases} alert={summary.openCases > 0} />
+          <Stat label="Total reports" value={summary.totalReports} />
+          <Stat label="Pending reports" value={summary.pendingReports} alert={summary.pendingReports > 0} />
+          <Stat label="Resolved reports" value={summary.resolvedReports} />
+          <Stat label="Suspended accounts" value={summary.suspendedAccounts} />
+          <Stat label="Banned accounts" value={summary.bannedAccounts} />
+          <Stat label="Flagged content" value={summary.flaggedContent} />
+        </div>
+      )}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          reload();
+        }}
+        style={memberFilterBarStyle}
+      >
+        <select style={statusSelectStyle} value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="">All statuses</option>
+          {CASE_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {humanizeKey(s)}
+            </option>
+          ))}
+        </select>
+        <button type="submit" style={approveButtonStyle}>
+          Filter
+        </button>
+      </form>
+
+      {error && <p style={{ color: "var(--danger)", fontSize: "0.85rem" }}>{error}</p>}
+
+      {loading ? (
+        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+      ) : cases.length === 0 ? (
+        <p style={{ color: "var(--success)", fontWeight: 600 }}>No cases match — you&apos;re all caught up.</p>
+      ) : (
+        <>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+            {cases.map((c) => (
+              <div key={c.caseId} style={rowCardStyle}>
+                <div style={{ cursor: "pointer", flex: 1 }} onClick={() => setSelectedCase(c)} role="button">
+                  <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>
+                    {c.report ? humanizeKey(c.report.reason) : "Unknown reason"} ·{" "}
+                    {c.target.type === "content" ? c.target.creatorEmail : c.target.type === "user" ? c.target.email : "unknown target"}
+                  </div>
+                  <div style={mutedSmallStyle}>
+                    reported by {c.report?.reporterEmail ?? "unknown"} · {new Date(c.createdAt).toLocaleDateString()}
+                    {c.assignedToAdminEmail ? ` · assigned: ${c.assignedToAdminEmail}` : ""}
+                  </div>
+                </div>
+                <span style={filterChipStyle}>{humanizeKey(c.status)}</span>
+              </div>
+            ))}
+          </div>
+          {cursor && (
+            <button onClick={loadMore} disabled={loadingMore} style={{ ...approveButtonStyle, marginTop: "1rem" }}>
+              {loadingMore ? "Loading..." : "Load more"}
+            </button>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function ModerationCaseDetailView({ caseRow, onBack }: { caseRow: ModerationCaseRow; onBack: () => void }) {
+  const [status, setStatus] = useState(caseRow.status);
+  const [notes, setNotes] = useState(caseRow.resolutionNotes ?? "");
+  const [assignedToAdminEmail, setAssignedToAdminEmail] = useState(caseRow.assignedToAdminEmail);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function save(extra?: { assignToSelf?: boolean }) {
+    setBusy(true);
+    setSaved(false);
+    const res = await fetch(`/api/admin/moderation/${caseRow.caseId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, resolutionNotes: notes || null, ...(extra ?? {}) }),
+    });
+    setBusy(false);
+    if (res.ok) {
+      setSaved(true);
+      if (extra?.assignToSelf) setAssignedToAdminEmail("you");
+    } else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error ?? "Save failed.");
+    }
+  }
+
+  return (
+    <section>
+      <button onClick={onBack} style={{ ...tabButtonStyle, marginBottom: "1.25rem" }}>
+        ← Back to list
+      </button>
+
+      <div style={{ marginBottom: "1.5rem" }}>
+        <h2 style={{ ...sectionHeadingStyle, margin: "0 0 0.3rem" }}>{caseRow.report ? humanizeKey(caseRow.report.reason) : "Unknown reason"}</h2>
+        <div style={mutedSmallStyle}>
+          Reported by {caseRow.report?.reporterEmail ?? "unknown"} · {new Date(caseRow.createdAt).toLocaleString()}
+        </div>
+        {caseRow.report?.details && <p style={{ fontSize: "0.85rem", marginTop: "0.5rem", maxWidth: "480px" }}>{caseRow.report.details}</p>}
+      </div>
+
+      <StatGroup title="Target">
+        {caseRow.target.type === "content" && (
+          <>
+            <Stat label="Creator" value={caseRow.target.creatorEmail} />
+            <Stat label="Caption" value={caseRow.target.caption || "(no caption)"} />
+          </>
+        )}
+        {caseRow.target.type === "user" && <Stat label="Reported user" value={caseRow.target.email} />}
+        {caseRow.target.type === "unknown" && <Stat label="Target" value="Unknown" />}
+      </StatGroup>
+
+      <div style={{ marginBottom: "1.5rem" }}>
+        <h3 style={statGroupHeadingStyle}>Resolve</h3>
+        <select value={status} disabled={busy} onChange={(e) => setStatus(e.target.value)} style={statusSelectStyle}>
+          {CASE_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {humanizeKey(s)}
+            </option>
+          ))}
+        </select>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Resolution notes..."
+          style={resolutionTextareaStyle}
+        />
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <button onClick={() => save()} disabled={busy} style={approveButtonStyle}>
+            Save
+          </button>
+          <button onClick={() => save({ assignToSelf: true })} disabled={busy} style={rejectButtonStyle}>
+            Assign to me
+          </button>
+          {saved && <span style={{ color: "var(--success)", fontSize: "0.82rem" }}>Saved.</span>}
+        </div>
+        {assignedToAdminEmail && <p style={mutedSmallStyle}>Assigned: {assignedToAdminEmail}</p>}
+      </div>
+    </section>
+  );
+}
+
 interface AuditLogEntry {
   id: string;
   action: string;
@@ -2362,4 +2796,21 @@ const foundingBadgeStyle: React.CSSProperties = {
   fontSize: "0.68rem",
   fontWeight: 700,
   verticalAlign: "middle",
+};
+
+const resolutionTextareaStyle: React.CSSProperties = {
+  display: "block",
+  width: "100%",
+  maxWidth: "480px",
+  minHeight: "80px",
+  marginTop: "0.75rem",
+  marginBottom: "0.75rem",
+  padding: "0.6rem 0.7rem",
+  background: "var(--surface-raised)",
+  border: "1px solid var(--border)",
+  borderRadius: "var(--radius)",
+  color: "var(--text)",
+  fontSize: "0.85rem",
+  fontFamily: "inherit",
+  resize: "vertical",
 };

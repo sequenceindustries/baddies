@@ -177,11 +177,7 @@ export async function GET(req: NextRequest) {
     { id: "creator-review", label: "Creator application(s) awaiting review", count: pendingCreatorReview, linkTab: "Applications" as const },
     { id: "content-moderation", label: "Content item(s) pending moderation", count: pendingContentModeration, linkTab: "Content" as const },
     { id: "payouts", label: "Payout request(s) pending", count: pendingPayouts, linkTab: "Payouts" as const },
-    // No moderation-case queue UI exists yet (Trust & Safety is a later
-    // phase) — shown with a real count, but linkTab null so the UI
-    // renders it as informational rather than a link to a page that
-    // doesn't exist.
-    { id: "moderation", label: "Open moderation case(s)", count: openModerationCases, linkTab: null },
+    { id: "moderation", label: "Open moderation case(s)", count: openModerationCases, linkTab: "Trust & Safety" as const },
   ].filter((item) => item.count > 0);
 
   const recentActivity = [
@@ -270,6 +266,7 @@ export async function GET(req: NextRequest) {
       applications: pendingFoundingReview + pendingCreatorReview,
       content: pendingContentModeration,
       payouts: pendingPayouts,
+      trustSafety: openModerationCases,
     },
     charts: {
       newUsers: usersByDay,
