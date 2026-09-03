@@ -7,7 +7,7 @@ import { useSession, roleHomePath } from "@/components/ui";
 import { CreatorCardRow, type CreatorCardData } from "@/components/cards";
 import { HowItWorks, HowItWorksForCreators } from "@/components/how-it-works";
 import { Countdown } from "@/components/countdown";
-import { HeroVisual } from "@/components/hero-visual";
+import { HeroBanner } from "@/components/hero-visual";
 
 interface DiscoveryResponse {
   creators: CreatorCardData[];
@@ -60,8 +60,7 @@ export default function LandingPage() {
 
   return (
     <main>
-      <section style={heroStyle}>
-        <HeroVisual />
+      <HeroBanner>
         <h1 style={heroTitleStyle}>baddies</h1>
         <p style={heroSubStyle}>
           A premium platform where verified South African creators publish exclusive content and
@@ -69,7 +68,7 @@ export default function LandingPage() {
           required, or subscribe to unlock more.
         </p>
         <Countdown target={LAUNCH_DATE} label="Launching in" />
-      </section>
+      </HeroBanner>
 
       <section style={sectionStyle}>
         <Link href="/founding-baddies" style={foundingBannerStyle} className="hover-lift">
@@ -98,13 +97,6 @@ export default function LandingPage() {
     </main>
   );
 }
-
-const heroStyle: React.CSSProperties = {
-  padding: "6rem 1.75rem 4.5rem",
-  maxWidth: "760px",
-  margin: "0 auto",
-  textAlign: "center",
-};
 
 const heroTitleStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)",

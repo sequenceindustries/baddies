@@ -139,130 +139,77 @@ a[href]:hover {
     }
 }
 
-/* Landing page hero's interactive visual (see components/hero-visual.tsx
-   for the mousemove handler that drives --px/--py/--spot-x/--spot-y).
-   Kept as real CSS, not inline styles, for the same reason .hover-lift
-   is: :hover and pseudo-elements can't be expressed inline. */
-.hero-visual {
+/* Landing page's full-width hero banner (see components/hero-visual.tsx,
+   HeroBanner, for the mousemove handler that drives
+   --px/--py/--spot-x/--spot-y). Kept as real CSS, not inline styles,
+   for the same reason .hover-lift is: :hover and pseudo-elements can't
+   be expressed inline.
+
+   The left/right/margin trick breaks the banner out of whatever
+   max-width container it's rendered inside (this app's pages don't use
+   a single shared shell, each page sets its own per-section maxWidth —
+   see page.tsx's sectionStyle) so it spans the full viewport edge to
+   edge without needing a special page-level layout just for this one
+   section. */
+.hero-banner {
     --px: 0;
     --py: 0;
     --spot-x: 50%;
     --spot-y: 50%;
     position: relative;
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+    min-height: min(64vh, 560px);
     overflow: hidden;
-    width: min(320px, 78vw);
-    aspect-ratio: 1;
-    margin: 0 auto 2rem;
-    border-radius: 28px;
-    border: 1px solid var(--border);
-    background:
-        radial-gradient(140% 140% at 20% 15%, rgba(59, 130, 246, 0.35), transparent 60%),
-        radial-gradient(120% 120% at 85% 90%, rgba(208, 70, 106, 0.22), transparent 55%),
-        var(--surface);
-    box-shadow: var(--glow);
-    cursor: default;
-    transform: perspective(900px) rotateX(calc(var(--py) * -14deg)) rotateY(calc(var(--px) * 14deg))
-        scale(1);
-    transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.4s ease, border-color 0.4s ease;
-}
-
-.hero-visual:hover {
-    border-color: var(--accent);
-    box-shadow: 0 30px 80px -24px rgba(59, 130, 246, 0.5), var(--glow);
-    transform: perspective(900px) rotateX(calc(var(--py) * -14deg)) rotateY(calc(var(--px) * 14deg))
-        scale(1.03);
-}
-
-.hero-visual-orb {
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(2px);
-    opacity: 0.5;
-    transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.hero-visual-orb-a {
-    width: 130px;
-    height: 130px;
-    top: -30px;
-    right: -30px;
-    background: radial-gradient(circle, var(--accent), transparent 70%);
-    transform: translate(calc(var(--px) * 22px), calc(var(--py) * 22px));
-}
-
-.hero-visual-orb-b {
-    width: 110px;
-    height: 110px;
-    bottom: -25px;
-    left: -25px;
-    background: radial-gradient(circle, var(--accent-wine), transparent 70%);
-    transform: translate(calc(var(--px) * -30px), calc(var(--py) * -30px));
-}
-
-.hero-visual-ring-wrap {
-    position: absolute;
-    inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    transform: translate(calc(var(--px) * 10px), calc(var(--py) * 10px));
-    transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.hero-visual-ring {
+.hero-banner-img {
     position: absolute;
-    width: 62%;
-    aspect-ratio: 1;
-    border-radius: 50%;
-    border: 1.5px solid rgba(245, 242, 236, 0.28);
-    animation: hero-visual-spin 22s linear infinite;
+    top: -4%;
+    left: -4%;
+    width: 108%;
+    height: 108%;
+    object-fit: cover;
+    filter: brightness(0.6) saturate(1.05);
+    transform: scale(1) translate(calc(var(--px) * -16px), calc(var(--py) * -16px));
+    transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), filter 0.5s ease;
 }
 
-.hero-visual-ring-inner {
-    width: 46%;
-    border-color: rgba(59, 130, 246, 0.55);
-    animation-direction: reverse;
-    animation-duration: 16s;
+.hero-banner:hover .hero-banner-img {
+    filter: brightness(0.72) saturate(1.1);
+    transform: scale(1.06) translate(calc(var(--px) * -24px), calc(var(--py) * -24px));
 }
 
-.hero-visual-mark {
-    position: relative;
-    font-family: var(--font-display);
-    font-weight: 700;
-    font-size: 3.2rem;
-    background: linear-gradient(135deg, var(--text) 20%, var(--accent) 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-}
-
-.hero-visual-spotlight {
+.hero-banner-scrim {
     position: absolute;
     inset: 0;
-    background: radial-gradient(220px 220px at var(--spot-x) var(--spot-y), rgba(255, 255, 255, 0.16), transparent 70%);
-    opacity: 0;
-    transition: opacity 0.3s ease;
+    background:
+        radial-gradient(700px 500px at var(--spot-x) var(--spot-y), rgba(59, 130, 246, 0.18), transparent 60%),
+        linear-gradient(180deg, rgba(11, 11, 16, 0.25) 0%, rgba(11, 11, 16, 0.45) 55%, var(--bg) 100%);
+    opacity: 0.7;
+    transition: opacity 0.4s ease;
     pointer-events: none;
 }
 
-.hero-visual:hover .hero-visual-spotlight {
+.hero-banner:hover .hero-banner-scrim {
     opacity: 1;
 }
 
-@keyframes hero-visual-spin {
-    to {
-        transform: rotate(360deg);
-    }
+.hero-banner-content {
+    position: relative;
+    z-index: 1;
+    padding: 5rem 1.75rem 4rem;
+    max-width: 760px;
+    margin: 0 auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .hero-visual,
-    .hero-visual:hover,
-    .hero-visual-orb,
-    .hero-visual-ring-wrap {
+    .hero-banner-img,
+    .hero-banner:hover .hero-banner-img {
         transform: none !important;
-    }
-    .hero-visual-ring {
-        animation: none;
     }
 }
