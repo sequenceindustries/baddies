@@ -149,7 +149,8 @@ export function Nav() {
     <div style={navWrapStyle}>
     <nav style={navStyle}>
       <Link href="/" style={{ ...brandStyle, textDecoration: "none" }}>
-        baddies
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/baddies-wordmark-white.webp" alt="baddies" style={brandLogoStyle} />
       </Link>
       <div style={{ display: "flex", gap: "1.25rem", alignItems: "center" }}>
         {loading ? null : user ? (
@@ -747,6 +748,15 @@ const brandStyle: React.CSSProperties = {
   fontSize: "1.3rem",
   fontWeight: 600,
   color: "var(--text)",
+};
+
+// The white wordmark file — nav's background is dark in both themes
+// (rgba(11, 11, 16, ...) in navStyle), so there's no light variant to
+// switch to here the way the black wordmark would need one.
+const brandLogoStyle: React.CSSProperties = {
+  height: "1.4rem",
+  width: "auto",
+  display: "block",
 };
 
 const linkStyle: React.CSSProperties = {

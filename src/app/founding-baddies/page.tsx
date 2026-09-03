@@ -63,10 +63,10 @@ function WhatIsBaddies() {
 
 function Benefits() {
   const benefits = [
-    "0% baddies platform fees for 12 months",
+    "0% platform commission fees for 6 months, you keep all your income",
     "A Founding baddie badge on your profile",
     "Featured placement across the platform",
-    "Priority promotion during launch campaigns",
+    "Priority promotion during campaigns",
     "Dedicated onboarding support",
     "Professional profile & content setup support",
     "Referral opportunity for creators you bring in",
