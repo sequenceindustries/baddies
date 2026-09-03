@@ -42,7 +42,10 @@ enum CreatorStatus {
 // (see FoundingApplication's own comment). REJECTED isn't in the
 // product brief's literal status list but is the minimum needed for
 // the admin queue to actually close out a "no" the same way
-// CreatorQueue's own Reject button does.
+// CreatorQueue's own Reject button does. CONTENT_READY sits between
+// ONBOARDING and LIVE — onboarded and verified, content prepared, just
+// waiting to flip live (see the Command Centre's Founding Baddies
+// funnel, which reads "ready for launch" as this stage).
 enum FoundingApplicationStatus {
   APPLIED
   REVIEWED
@@ -50,6 +53,7 @@ enum FoundingApplicationStatus {
   VERIFICATION_PENDING
   VERIFIED
   ONBOARDING
+  CONTENT_READY
   LIVE
   REJECTED
 }

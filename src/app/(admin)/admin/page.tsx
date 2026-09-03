@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useSession, displayHeadingStyle, SignInGate } from "@/components/ui";
 
 interface CreatorApplication {
@@ -25,16 +26,160 @@ interface ContentQueueItem {
 const TABS = ["Overview", "Members", "Applications", "Content", "Payouts", "Audit Log"] as const;
 type Tab = (typeof TABS)[number];
 
+type RangeKey = "today" | "7d" | "30d" | "90d" | "all";
+
+const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
+  { key: "today", label: "Today" },
+  { key: "7d", label: "7 Days" },
+  { key: "30d", label: "30 Days" },
+  { key: "90d", label: "90 Days" },
+  { key: "all", label: "All Time" },
+];
+
+interface DayCount {
+  date: string;
+  count: number;
+}
+
+interface CommandCentreData {
+  kpis: {
+    totalUsers: { value: number; newInRange: number; deltaPct: number | null };
+    activeAccounts: { value: number };
+    creators: { value: number; newInRange: number; deltaPct: number | null };
+    fans: { value: number };
+    activeSubscriptions: { value: number };
+    revenue: { inRangeUsd: string; allTimeUsd: string; deltaPct: number | null };
+    mrrUsd: string;
+    content: { value: number; newInRange: number; deltaPct: number | null };
+    openIssues: number;
+  };
+  foundingBaddies: {
+    target: number;
+    current: number;
+    percent: number | null;
+    funnel: Record<string, number>;
+    conversion: { appliedToApproved: number | null; approvedToVerified: number | null; verifiedToLive: number | null };
+    newInRange: number;
+    awaitingReview: number;
+    onboarding: number;
+    readyForLaunch: number;
+  };
+  actionRequired: { id: string; label: string; count: number; linkTab: Tab | null }[];
+  badges: { applications: number; content: number; payouts: number };
+  charts: { newUsers: DayCount[]; newCreators: DayCount[]; newApplications: DayCount[]; newContent: DayCount[] };
+  recentActivity: { id: string; kind: string; label: string; actor: string | null; timestamp: string }[];
+}
+
+// Reorganizes the flat tab bar into the grouped nav a "command centre"
+// calls for — but only the tabs that actually exist this phase are
+// clickable (no `tab` field). The rest render as a visibly disabled
+// "soon" pill rather than linking to a page that isn't built yet
+// (Creators/Founding Baddies get their own page in a later phase; today
+// they live inside Applications — Revenue and System Health likewise).
+interface NavLeaf {
+  label: string;
+  tab?: Tab;
+  badgeKey?: keyof CommandCentreData["badges"];
+}
+interface NavGroup {
+  label: string;
+  items: NavLeaf[];
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  { label: "Command Centre", items: [{ label: "Overview", tab: "Overview" }] },
+  {
+    label: "People",
+    items: [
+      { label: "Members", tab: "Members" },
+      { label: "Applications", tab: "Applications", badgeKey: "applications" },
+    ],
+  },
+  { label: "Content", items: [{ label: "Content", tab: "Content", badgeKey: "content" }] },
+  { label: "Business", items: [{ label: "Payouts", tab: "Payouts", badgeKey: "payouts" }, { label: "Revenue" }] },
+  { label: "Insights", items: [{ label: "Audit Log", tab: "Audit Log" }] },
+  { label: "System", items: [{ label: "System Health" }] },
+];
+
+function NavGroups({ tab, onSelect, badges }: { tab: Tab; onSelect: (t: Tab) => void; badges?: CommandCentreData["badges"] }) {
+  return (
+    <div style={navGroupsWrapStyle}>
+      {NAV_GROUPS.map((group) => (
+        <div key={group.label} style={navGroupRowStyle}>
+          <span style={navGroupLabelStyle}>{group.label}</span>
+          {group.items.map((item) => {
+            if (!item.tab) {
+              return (
+                <span key={item.label} style={tabButtonDisabledStyle}>
+                  {item.label} · soon
+                </span>
+              );
+            }
+            const count = item.badgeKey && badges ? badges[item.badgeKey] : 0;
+            return (
+              <button key={item.label} onClick={() => onSelect(item.tab!)} style={item.tab === tab ? tabButtonActiveStyle : tabButtonStyle}>
+                {item.label}
+                {count > 0 && <span style={navBadgeStyle}>{count}</span>}
+              </button>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
- * Tabbed rather than one long scroll (that's what this page was until
- * the admin dashboard overhaul — see the sprint's own memory) — an
- * Overview stat grid up front so "what's happening on the platform"
- * doesn't require reading through six separate queues, plus a real
- * Members directory replacing the old exact-email-only lookup box.
+ * Tabbed rather than one long scroll — grouped nav (People/Content/
+ * Business/Insights/System) with a real Command Centre Overview up
+ * front: KPIs, the Founding Baddies funnel (the current priority — see
+ * this session's plan file), Action Required, growth charts, and recent
+ * activity, all from one GET /api/admin/command-centre call. Every
+ * number there is a real query — a metric with nothing behind it reads
+ * as 0 or "—", never an invented figure.
  */
 export default function AdminDashboardPage() {
   const { user, loading } = useSession();
   const [tab, setTab] = useState<Tab>("Overview");
+  const [range, setRange] = useState<RangeKey>("7d");
+  const [ccData, setCcData] = useState<CommandCentreData | null>(null);
+  const [ccLoading, setCcLoading] = useState(true);
+  const [ccError, setCcError] = useState<string | null>(null);
+  const [foundingFilter, setFoundingFilter] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user || user.role !== "ADMIN") return;
+    let cancelled = false;
+    setCcLoading(true);
+    fetch(`/api/admin/command-centre?range=${range}`)
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null);
+          throw new Error(body?.error ?? "Failed to load the command centre.");
+        }
+        return r.json();
+      })
+      .then((body) => {
+        if (!cancelled) {
+          setCcData(body);
+          setCcError(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setCcError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setCcLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [range, user]);
+
+  function goToFoundingStage(status: string) {
+    setFoundingFilter(status);
+    setTab("Applications");
+  }
 
   if (loading) return <main style={mainStyle} />;
 
@@ -60,20 +205,24 @@ export default function AdminDashboardPage() {
 
   return (
     <main style={mainStyle}>
-      <h1 style={displayHeadingStyle}>Admin Dashboard</h1>
-      <div style={tabBarStyle}>
-        {TABS.map((t) => (
-          <button key={t} onClick={() => setTab(t)} style={t === tab ? tabButtonActiveStyle : tabButtonStyle}>
-            {t}
-          </button>
-        ))}
-      </div>
+      <h1 style={displayHeadingStyle}>Baddies Command Centre</h1>
+      <NavGroups tab={tab} onSelect={setTab} badges={ccData?.badges} />
 
-      {tab === "Overview" && <OverviewPanel />}
+      {tab === "Overview" && (
+        <OverviewPanel
+          data={ccData}
+          loading={ccLoading}
+          error={ccError}
+          range={range}
+          onRangeChange={setRange}
+          onNavigate={setTab}
+          onDrillFounding={goToFoundingStage}
+        />
+      )}
       {tab === "Members" && <MembersPanel />}
       {tab === "Applications" && (
         <>
-          <FoundingApplicationsQueue />
+          <FoundingApplicationsQueue statusFilter={foundingFilter} onClearFilter={() => setFoundingFilter(null)} />
           <CreatorQueue />
         </>
       )}
@@ -88,28 +237,6 @@ export default function AdminDashboardPage() {
 // Overview — stat grid
 // =========================================================================
 
-interface StatsResponse {
-  users: {
-    total: number;
-    byRole: Record<string, number>;
-    active: number;
-    suspended: number;
-    new7d: number;
-    new30d: number;
-  };
-  creators: { byStatus: Record<string, number> };
-  foundingApplications: { total: number; byStatus: Record<string, number> };
-  content: { total: number; pendingModeration: number; byModerationStatus: Record<string, number> };
-  trustAndSafety: { openModerationCases: number; totalReports: number };
-  payouts: { pendingCount: number; pendingAmountUsd: string; paidAllTimeUsd: string };
-  revenue: {
-    grossAllTimeUsd: string;
-    platformShareAllTimeUsd: string;
-    creatorShareAllTimeUsd: string;
-    gross7dUsd: string;
-  };
-}
-
 function money(usd: string): string {
   const n = Number(usd);
   return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -122,110 +249,287 @@ function humanizeKey(key: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function OverviewPanel() {
-  const [stats, setStats] = useState<StatsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+// Same 9 stages as the API's FOUNDING_STAGE_ORDER (kept in sync by
+// hand — small, stable list) and FOUNDING_STATUSES below (the status
+// dropdown) — CONTENT_READY sits between ONBOARDING and LIVE.
+const FOUNDING_FUNNEL_STAGES = [
+  "APPLIED",
+  "REVIEWED",
+  "APPROVED",
+  "VERIFICATION_PENDING",
+  "VERIFIED",
+  "ONBOARDING",
+  "CONTENT_READY",
+  "LIVE",
+  "REJECTED",
+] as const;
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/admin/stats")
-      .then(async (r) => {
-        if (!r.ok) {
-          const body = await r.json().catch(() => null);
-          throw new Error(body?.error ?? "Failed to load stats.");
-        }
-        return r.json();
-      })
-      .then((body) => {
-        if (!cancelled) setStats(body);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (loading) return <p style={{ color: "var(--text-muted)" }}>Loading...</p>;
-  if (error) return <p style={{ color: "var(--danger)" }}>{error}</p>;
-  if (!stats) return null;
-
+function OverviewPanel({
+  data,
+  loading,
+  error,
+  range,
+  onRangeChange,
+  onNavigate,
+  onDrillFounding,
+}: {
+  data: CommandCentreData | null;
+  loading: boolean;
+  error: string | null;
+  range: RangeKey;
+  onRangeChange: (r: RangeKey) => void;
+  onNavigate: (tab: Tab) => void;
+  onDrillFounding: (status: string) => void;
+}) {
   return (
     <section>
-      {/* Headline row — the four numbers an admin checks first. */}
-      <div style={heroStatGridStyle}>
-        <HeroStat label="Total users" value={stats.users.total.toLocaleString()} />
-        <HeroStat label="Revenue (all-time)" value={money(stats.revenue.grossAllTimeUsd)} />
-        <HeroStat label="Founding applications" value={stats.foundingApplications.total.toLocaleString()} />
-        <HeroStat
-          label="Open moderation cases"
-          value={stats.trustAndSafety.openModerationCases.toLocaleString()}
-          alert={stats.trustAndSafety.openModerationCases > 0}
-        />
+      <div style={commandCentreHeaderStyle}>
+        <p style={mutedSmallStyle}>What&apos;s happening across the platform, right now.</p>
+        <div style={rangeSelectorStyle}>
+          {RANGE_OPTIONS.map((opt) => (
+            <button key={opt.key} onClick={() => onRangeChange(opt.key)} style={opt.key === range ? tabButtonActiveStyle : tabButtonStyle}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <StatGroup title="Users">
-        <Stat label="Fans" value={stats.users.byRole.FAN ?? 0} />
-        <Stat label="Creators" value={stats.users.byRole.CREATOR ?? 0} />
-        <Stat label="Admins" value={stats.users.byRole.ADMIN ?? 0} />
-        <Stat label="Active" value={stats.users.active} />
-        <Stat label="Suspended" value={stats.users.suspended} />
-        <Stat label="New (7d)" value={stats.users.new7d} />
-        <Stat label="New (30d)" value={stats.users.new30d} />
-      </StatGroup>
+      {loading && <p style={{ color: "var(--text-muted)" }}>Loading...</p>}
+      {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
 
-      <StatGroup title="Creator verification funnel">
-        {Object.entries(stats.creators.byStatus).map(([status, count]) => (
-          <Stat key={status} label={humanizeKey(status)} value={count} />
-        ))}
-      </StatGroup>
+      {data && (
+        <>
+          {/* Headline row — the numbers an admin checks first. Fewer,
+              larger cards than a wall of equally-weighted stats;
+              clickable where a real destination exists. */}
+          <div style={heroStatGridStyle}>
+            <KpiCard
+              label="Total users"
+              value={data.kpis.totalUsers.value.toLocaleString()}
+              newInRange={data.kpis.totalUsers.newInRange}
+              deltaPct={data.kpis.totalUsers.deltaPct}
+              onClick={() => onNavigate("Members")}
+            />
+            <KpiCard
+              label="Creators"
+              value={data.kpis.creators.value.toLocaleString()}
+              newInRange={data.kpis.creators.newInRange}
+              deltaPct={data.kpis.creators.deltaPct}
+              onClick={() => onNavigate("Members")}
+            />
+            <KpiCard label="Active subscriptions" value={data.kpis.activeSubscriptions.value.toLocaleString()} />
+            <KpiCard
+              label="Revenue"
+              value={money(data.kpis.revenue.inRangeUsd)}
+              caption={`${money(data.kpis.revenue.allTimeUsd)} all-time`}
+            />
+            <KpiCard
+              label="Content"
+              value={data.kpis.content.value.toLocaleString()}
+              newInRange={data.kpis.content.newInRange}
+              deltaPct={data.kpis.content.deltaPct}
+              onClick={() => onNavigate("Content")}
+            />
+            <KpiCard label="Open issues" value={data.kpis.openIssues.toLocaleString()} alert={data.kpis.openIssues > 0} />
+          </div>
 
-      <StatGroup title="Founding baddies funnel">
-        {Object.entries(stats.foundingApplications.byStatus).map(([status, count]) => (
-          <Stat key={status} label={humanizeKey(status)} value={count} />
-        ))}
-      </StatGroup>
+          <FoundingBaddiesSection data={data.foundingBaddies} onDrill={onDrillFounding} />
+          <ActionRequiredSection items={data.actionRequired} onNavigate={onNavigate} />
 
-      <StatGroup title="Content">
-        <Stat label="Total" value={stats.content.total} />
-        <Stat label="Pending moderation" value={stats.content.pendingModeration} alert={stats.content.pendingModeration > 0} />
-        {Object.entries(stats.content.byModerationStatus).map(([status, count]) => (
-          <Stat key={status} label={humanizeKey(status)} value={count} />
-        ))}
-      </StatGroup>
+          <section style={{ marginBottom: "2.5rem" }}>
+            <h2 style={sectionHeadingStyle}>Growth</h2>
+            <div style={chartGridStyle}>
+              <GrowthChart title="New users" data={data.charts.newUsers} />
+              <GrowthChart title="New creators" data={data.charts.newCreators} />
+              <GrowthChart title="Founding Baddie applications" data={data.charts.newApplications} />
+              <GrowthChart title="New content" data={data.charts.newContent} />
+            </div>
+            {/* No revenue chart — nothing to chart yet (see the Revenue
+                KPI card above). It appears here on its own once there's
+                real ledger activity to plot. */}
+            <p style={mutedSmallStyle}>Revenue: {money(data.kpis.revenue.allTimeUsd)} all-time.</p>
+          </section>
 
-      <StatGroup title="Trust & safety">
-        <Stat label="Open moderation cases" value={stats.trustAndSafety.openModerationCases} />
-        <Stat label="Total reports filed" value={stats.trustAndSafety.totalReports} />
-      </StatGroup>
+          <RecentActivitySection items={data.recentActivity} />
+        </>
+      )}
+    </section>
+  );
+}
 
-      <StatGroup title="Payouts">
-        <Stat label="Pending requests" value={stats.payouts.pendingCount} />
-        <Stat label="Pending amount" value={money(stats.payouts.pendingAmountUsd)} />
-        <Stat label="Paid (all-time)" value={money(stats.payouts.paidAllTimeUsd)} />
-      </StatGroup>
+function KpiCard({
+  label,
+  value,
+  caption,
+  newInRange,
+  deltaPct,
+  onClick,
+  alert,
+}: {
+  label: string;
+  value: string;
+  caption?: string;
+  newInRange?: number;
+  deltaPct?: number | null;
+  onClick?: () => void;
+  alert?: boolean;
+}) {
+  const hasDelta = newInRange !== undefined || (deltaPct !== undefined && deltaPct !== null);
+  return (
+    <div
+      style={{ ...heroStatCardStyle, borderColor: alert ? "var(--danger)" : "var(--border)", cursor: onClick ? "pointer" : "default" }}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+    >
+      <div style={heroStatValueStyle}>{value}</div>
+      <div style={mutedSmallStyle}>{label}</div>
+      {caption && <div style={mutedSmallStyle}>{caption}</div>}
+      {hasDelta && (
+        <div style={{ ...mutedSmallStyle, color: "var(--text)" }}>
+          {newInRange !== undefined && `+${newInRange} this period `}
+          {deltaPct !== undefined && deltaPct !== null && (
+            <span style={{ color: deltaPct >= 0 ? "var(--success)" : "var(--danger)" }}>
+              {deltaPct >= 0 ? "↑" : "↓"} {Math.abs(deltaPct)}%
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
-      <StatGroup title="Revenue">
-        <Stat label="Gross (all-time)" value={money(stats.revenue.grossAllTimeUsd)} />
-        <Stat label="Platform share (all-time)" value={money(stats.revenue.platformShareAllTimeUsd)} />
-        <Stat label="Creator share (all-time)" value={money(stats.revenue.creatorShareAllTimeUsd)} />
-        <Stat label="Gross (7d)" value={money(stats.revenue.gross7dUsd)} />
+function FoundingBaddiesSection({
+  data,
+  onDrill,
+}: {
+  data: CommandCentreData["foundingBaddies"];
+  onDrill: (status: string) => void;
+}) {
+  const maxCount = Math.max(1, ...FOUNDING_FUNNEL_STAGES.map((s) => data.funnel[s] ?? 0));
+  const pct = data.percent ?? 0;
+
+  return (
+    <section style={{ marginBottom: "2.5rem" }}>
+      <h2 style={sectionHeadingStyle}>Founding Baddies Command Centre</h2>
+
+      <div style={foundingProgressWrapStyle}>
+        <div style={foundingProgressBarOuterStyle}>
+          <div style={{ ...foundingProgressBarInnerStyle, width: `${Math.min(100, pct)}%` }} />
+        </div>
+        <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>
+          {data.current} / {data.target}{" "}
+          <span style={{ color: "var(--accent)" }}>{data.percent !== null ? `${data.percent}%` : "—"}</span>
+          <span style={{ ...mutedSmallStyle, display: "inline" }}> toward target</span>
+        </div>
+      </div>
+
+      <div style={funnelWrapStyle}>
+        {FOUNDING_FUNNEL_STAGES.map((stage) => {
+          const count = data.funnel[stage] ?? 0;
+          return (
+            <div key={stage} style={funnelRowStyle} onClick={() => onDrill(stage)} role="button">
+              <span style={funnelLabelStyle}>{humanizeKey(stage)}</span>
+              <div style={funnelBarOuterStyle}>
+                <div
+                  style={{
+                    ...funnelBarInnerStyle,
+                    width: `${(count / maxCount) * 100}%`,
+                    background: stage === "REJECTED" ? "#f0685c" : "#3b82f6",
+                  }}
+                />
+              </div>
+              <span style={funnelCountStyle}>{count}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <StatGroup title="Recruitment funnel">
+        <Stat label="Applied → Approved" value={data.conversion.appliedToApproved !== null ? `${data.conversion.appliedToApproved}%` : "—"} />
+        <Stat label="Approved → Verified" value={data.conversion.approvedToVerified !== null ? `${data.conversion.approvedToVerified}%` : "—"} />
+        <Stat label="Verified → Live" value={data.conversion.verifiedToLive !== null ? `${data.conversion.verifiedToLive}%` : "—"} />
+        <Stat label="New applications" value={data.newInRange} />
+        <Stat label="Awaiting review" value={data.awaitingReview} alert={data.awaitingReview > 0} />
+        <Stat label="Onboarding" value={data.onboarding} />
+        <Stat label="Ready for launch" value={data.readyForLaunch} />
       </StatGroup>
     </section>
   );
 }
 
-function HeroStat({ label, value, alert }: { label: string; value: string; alert?: boolean }) {
+function ActionRequiredSection({
+  items,
+  onNavigate,
+}: {
+  items: CommandCentreData["actionRequired"];
+  onNavigate: (tab: Tab) => void;
+}) {
   return (
-    <div style={{ ...heroStatCardStyle, borderColor: alert ? "var(--danger)" : "var(--border)" }}>
-      <div style={heroStatValueStyle}>{value}</div>
-      <div style={mutedSmallStyle}>{label}</div>
+    <section style={{ marginBottom: "2.5rem" }}>
+      <h2 style={sectionHeadingStyle}>Action required</h2>
+      {items.length === 0 ? (
+        <p style={{ color: "var(--success)", fontWeight: 600 }}>You&apos;re all caught up.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+          {items.map((item) => (
+            <div
+              key={item.id}
+              style={{ ...actionItemStyle, cursor: item.linkTab ? "pointer" : "default" }}
+              onClick={item.linkTab ? () => onNavigate(item.linkTab!) : undefined}
+              role={item.linkTab ? "button" : undefined}
+            >
+              <span style={actionCountStyle}>{item.count}</span>
+              <span>{item.label}</span>
+              {item.linkTab && <span style={{ marginLeft: "auto", color: "var(--accent)" }}>→</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function GrowthChart({ title, data }: { title: string; data: DayCount[] }) {
+  const hasData = data.some((d) => d.count > 0);
+  return (
+    <div style={chartCardStyle}>
+      <div style={statGroupHeadingStyle}>{title}</div>
+      {!hasData ? (
+        <p style={mutedSmallStyle}>No data yet for this range.</p>
+      ) : (
+        <ResponsiveContainer width="100%" height={160}>
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#2c2c36" />
+            <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#a19dab" }} tickFormatter={(d: string) => d.slice(5)} />
+            <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: "#a19dab" }} width={28} />
+            <Tooltip contentStyle={{ background: "#212129", border: "1px solid #2c2c36", fontSize: "0.78rem", color: "#f5f2ec" }} />
+            <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
     </div>
+  );
+}
+
+function RecentActivitySection({ items }: { items: CommandCentreData["recentActivity"] }) {
+  return (
+    <section>
+      <h2 style={sectionHeadingStyle}>Recent activity</h2>
+      {items.length === 0 ? (
+        <p style={{ color: "var(--text-muted)" }}>Nothing yet.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          {items.map((item) => (
+            <div key={item.id} style={auditRowStyle}>
+              <span style={{ fontWeight: 600, textTransform: "capitalize" }}>{item.label}</span>
+              <span style={mutedSmallStyle}>
+                {item.actor ?? "system"} · {new Date(item.timestamp).toLocaleString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -441,6 +745,7 @@ const FOUNDING_STATUSES = [
   "VERIFICATION_PENDING",
   "VERIFIED",
   "ONBOARDING",
+  "CONTENT_READY",
   "LIVE",
   "REJECTED",
 ] as const;
@@ -450,9 +755,20 @@ const FOUNDING_STATUSES = [
  * Phase 5) — top of the Applications tab since recruiting the first
  * cohort is this sprint's whole point. One generic status dropdown per
  * row (FOUNDING_STATUSES) rather than approve/reject buttons — there
- * are 8 real pipeline stages here, not a binary decision.
+ * are 9 real pipeline stages here, not a binary decision.
+ *
+ * statusFilter/onClearFilter let the Command Centre's funnel drill
+ * through to "just this stage" — filtered client-side (the queue
+ * already loads every application, no need for a server round trip
+ * for what's ultimately a small list at this stage of the business).
  */
-function FoundingApplicationsQueue() {
+function FoundingApplicationsQueue({
+  statusFilter,
+  onClearFilter,
+}: {
+  statusFilter?: string | null;
+  onClearFilter?: () => void;
+}) {
   const [applications, setApplications] = useState<FoundingApplicationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -467,6 +783,8 @@ function FoundingApplicationsQueue() {
   }
 
   useEffect(reload, []);
+
+  const visibleApplications = statusFilter ? applications.filter((a) => a.status === statusFilter) : applications;
 
   async function changeStatus(id: string, status: string) {
     setBusyId(id);
@@ -485,14 +803,21 @@ function FoundingApplicationsQueue() {
 
   return (
     <section style={{ marginBottom: "3rem" }}>
-      <h2 style={sectionHeadingStyle}>Founding baddies applications</h2>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
+        <h2 style={{ ...sectionHeadingStyle, margin: 0 }}>Founding baddies applications</h2>
+        {statusFilter && (
+          <button onClick={onClearFilter} style={filterChipStyle}>
+            {humanizeKey(statusFilter)} × clear
+          </button>
+        )}
+      </div>
       {loading ? (
         <p style={{ color: "var(--text-muted)" }}>Loading...</p>
-      ) : applications.length === 0 ? (
-        <p style={{ color: "var(--text-muted)" }}>No applications yet.</p>
+      ) : visibleApplications.length === 0 ? (
+        <p style={{ color: "var(--text-muted)" }}>{statusFilter ? "None at this stage." : "No applications yet."}</p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          {applications.map((app) => {
+          {visibleApplications.map((app) => {
             const expanded = expandedId === app.id;
             return (
               <div key={app.id} style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch" }}>
@@ -917,13 +1242,52 @@ function ContentQueue() {
 
 const mainStyle: React.CSSProperties = { padding: "2.5rem 1.75rem", maxWidth: "1100px", margin: "0 auto" };
 
-const tabBarStyle: React.CSSProperties = {
+const navGroupsWrapStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.6rem",
+  margin: "1.5rem 0 2rem",
+  paddingBottom: "1rem",
+  borderBottom: "1px solid var(--border)",
+};
+
+const navGroupRowStyle: React.CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
+  alignItems: "center",
   gap: "0.4rem",
-  margin: "1.5rem 0 2rem",
-  borderBottom: "1px solid var(--border)",
-  paddingBottom: "0.75rem",
+};
+
+const navGroupLabelStyle: React.CSSProperties = {
+  fontSize: "0.68rem",
+  fontWeight: 700,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  color: "var(--text-muted)",
+  minWidth: "6.5rem",
+};
+
+const tabButtonDisabledStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "1px dashed var(--border)",
+  color: "var(--text-muted)",
+  borderRadius: "999px",
+  padding: "0.4rem 0.95rem",
+  fontSize: "0.82rem",
+  fontWeight: 600,
+  opacity: 0.5,
+  cursor: "default",
+};
+
+const navBadgeStyle: React.CSSProperties = {
+  display: "inline-block",
+  marginLeft: "0.4rem",
+  background: "var(--danger)",
+  color: "#fff",
+  borderRadius: "999px",
+  padding: "0.05rem 0.4rem",
+  fontSize: "0.72rem",
+  fontWeight: 700,
 };
 
 const tabButtonStyle: React.CSSProperties = {
@@ -1081,4 +1445,130 @@ const memberSearchInputStyle: React.CSSProperties = {
   borderRadius: "var(--radius)",
   color: "var(--text)",
   fontSize: "0.85rem",
+};
+
+const commandCentreHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: "0.75rem",
+  marginBottom: "1.5rem",
+};
+
+const rangeSelectorStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "0.4rem",
+};
+
+const chartGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  gap: "1rem",
+  marginBottom: "0.75rem",
+};
+
+const chartCardStyle: React.CSSProperties = {
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: "12px",
+  padding: "0.9rem 1rem 0.5rem",
+};
+
+const foundingProgressWrapStyle: React.CSSProperties = {
+  marginBottom: "1.5rem",
+};
+
+const foundingProgressBarOuterStyle: React.CSSProperties = {
+  height: "10px",
+  borderRadius: "999px",
+  background: "var(--surface-raised)",
+  border: "1px solid var(--border)",
+  overflow: "hidden",
+  marginBottom: "0.5rem",
+};
+
+const foundingProgressBarInnerStyle: React.CSSProperties = {
+  height: "100%",
+  borderRadius: "999px",
+  background: "linear-gradient(90deg, var(--accent-dim), var(--accent))",
+  transition: "width 0.3s ease",
+};
+
+const funnelWrapStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.4rem",
+  marginBottom: "1.5rem",
+};
+
+const funnelRowStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "9rem 1fr 2.5rem",
+  alignItems: "center",
+  gap: "0.6rem",
+  cursor: "pointer",
+  padding: "0.15rem 0",
+};
+
+const funnelLabelStyle: React.CSSProperties = {
+  fontSize: "0.78rem",
+  color: "var(--text-muted)",
+};
+
+const funnelBarOuterStyle: React.CSSProperties = {
+  height: "10px",
+  borderRadius: "999px",
+  background: "var(--surface-raised)",
+  overflow: "hidden",
+};
+
+const funnelBarInnerStyle: React.CSSProperties = {
+  height: "100%",
+  borderRadius: "999px",
+  minWidth: "2px",
+  transition: "width 0.3s ease",
+};
+
+const funnelCountStyle: React.CSSProperties = {
+  fontSize: "0.82rem",
+  fontWeight: 700,
+  textAlign: "right",
+};
+
+const actionItemStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.75rem",
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: "12px",
+  padding: "0.75rem 1rem",
+  fontSize: "0.85rem",
+};
+
+const actionCountStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minWidth: "1.6rem",
+  height: "1.6rem",
+  borderRadius: "999px",
+  background: "var(--accent)",
+  color: "var(--bg)",
+  fontWeight: 700,
+  fontSize: "0.8rem",
+};
+
+const filterChipStyle: React.CSSProperties = {
+  background: "var(--accent-soft)",
+  border: "1px solid var(--accent)",
+  color: "var(--accent)",
+  borderRadius: "999px",
+  padding: "0.2rem 0.7rem",
+  fontSize: "0.72rem",
+  fontWeight: 600,
+  cursor: "pointer",
+  textTransform: "capitalize",
 };

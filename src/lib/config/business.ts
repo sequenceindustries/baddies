@@ -23,6 +23,11 @@ export const BUSINESS_CONFIG_KEYS = {
   CREATOR_SHARE: "revenue.creator_share",
   PLATFORM_SHARE: "revenue.platform_share",
   UNLIMITED_ALLOCATION_MODEL: "unlimited.allocation_model",
+  // How many Founding Baddies this cohort is recruiting for — the admin
+  // Command Centre's progress bar ("current / target"). A headcount
+  // goal, not a pricing/revenue rule, but the same "don't hard-code
+  // business numbers in dashboard code" reasoning applies.
+  FOUNDING_BADDIES_TARGET: "founding_baddies.target",
 } as const;
 
 export type BusinessConfigKey =
@@ -40,6 +45,7 @@ export const DEFAULT_BUSINESS_CONFIG: Record<BusinessConfigKey, string> = {
   // See src/lib/entitlements/unlimited.ts — "consumption" is the initial
   // allocation model per build brief §2, but the engine is pluggable.
   [BUSINESS_CONFIG_KEYS.UNLIMITED_ALLOCATION_MODEL]: "consumption",
+  [BUSINESS_CONFIG_KEYS.FOUNDING_BADDIES_TARGET]: "50",
 };
 
 export type UnlimitedAllocationModel =
