@@ -16,6 +16,7 @@ const UpdateSchema = z.object({
     "VERIFICATION_PENDING",
     "VERIFIED",
     "ONBOARDING",
+    "CONTENT_READY",
     "LIVE",
     "REJECTED",
   ]),

@@ -23,7 +23,7 @@ interface ContentQueueItem {
   participantCount: number;
 }
 
-const TABS = ["Overview", "Members", "Applications", "Content", "Payouts", "Audit Log"] as const;
+const TABS = ["Overview", "Members", "Creators", "Applications", "Content", "Payouts", "Audit Log"] as const;
 type Tab = (typeof TABS)[number];
 
 type RangeKey = "today" | "7d" | "30d" | "90d" | "all";
@@ -92,6 +92,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "People",
     items: [
       { label: "Members", tab: "Members" },
+      { label: "Creators", tab: "Creators" },
       { label: "Applications", tab: "Applications", badgeKey: "applications" },
     ],
   },
@@ -220,6 +221,7 @@ export default function AdminDashboardPage() {
         />
       )}
       {tab === "Members" && <MembersPanel />}
+      {tab === "Creators" && <MembersPanel lockedRole="CREATOR" />}
       {tab === "Applications" && (
         <>
           <FoundingApplicationsQueue statusFilter={foundingFilter} onClearFilter={() => setFoundingFilter(null)} />
@@ -315,7 +317,7 @@ function OverviewPanel({
               value={data.kpis.creators.value.toLocaleString()}
               newInRange={data.kpis.creators.newInRange}
               deltaPct={data.kpis.creators.deltaPct}
-              onClick={() => onNavigate("Members")}
+              onClick={() => onNavigate("Creators")}
             />
             <KpiCard label="Active subscriptions" value={data.kpis.activeSubscriptions.value.toLocaleString()} />
             <KpiCard
@@ -565,24 +567,44 @@ interface MemberRow {
   suspendedAt: string | null;
   creatorProfileStatus: string | null;
   createdAt: string;
+  lastSessionAt: string | null;
+  foundingBaddie: boolean;
+  creatorStats: { contentCount: number; activeSubscribers: number; revenueUsd: string } | null;
+  fanStats: { purchasesUsd: string; tipsUsd: string } | null;
 }
 
-function MembersPanel() {
+/**
+ * Members and Creators are the same list — a creator is just a User
+ * row with a creatorProfile. `lockedRole="CREATOR"` (the Creators tab)
+ * hides the role dropdown, forces the filter, and always shows the
+ * creator performance columns; the Members tab shows those columns
+ * only for rows that happen to be creators. Both open the same
+ * MemberDetailView for a clicked row — no separate Creators UI.
+ */
+function MembersPanel({ lockedRole }: { lockedRole?: "CREATOR" }) {
   const [query, setQuery] = useState("");
-  const [role, setRole] = useState("");
+  const [role, setRole] = useState(lockedRole ?? "");
   const [status, setStatus] = useState("");
+  const [founding, setFounding] = useState(false);
+  const [verified, setVerified] = useState(false);
+  const [newDays, setNewDays] = useState("");
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   function buildParams(cursorValue?: string) {
     const params = new URLSearchParams();
     if (query.trim()) params.set("query", query.trim());
-    if (role) params.set("role", role);
+    if (lockedRole) params.set("role", lockedRole);
+    else if (role) params.set("role", role);
     if (status) params.set("status", status);
+    if (founding) params.set("founding", "true");
+    if (verified) params.set("verified", "true");
+    if (newDays) params.set("newDays", newDays);
     if (cursorValue) params.set("cursor", cursorValue);
     return params.toString();
   }
@@ -617,7 +639,8 @@ function MembersPanel() {
     setCursor(body.nextCursor ?? null);
   }
 
-  useEffect(reload, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(reload, [lockedRole]);
 
   async function act(userId: string, action: "suspend" | "ban") {
     const target = members.find((m) => m.userId === userId);
@@ -634,9 +657,13 @@ function MembersPanel() {
     }
   }
 
+  if (selectedUserId) {
+    return <MemberDetailView userId={selectedUserId} onBack={() => setSelectedUserId(null)} onChanged={reload} />;
+  }
+
   return (
     <section>
-      <h2 style={sectionHeadingStyle}>Members</h2>
+      <h2 style={sectionHeadingStyle}>{lockedRole === "CREATOR" ? "Creators" : "Members"}</h2>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -650,17 +677,32 @@ function MembersPanel() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <select style={statusSelectStyle} value={role} onChange={(e) => setRole(e.target.value)}>
-          <option value="">All roles</option>
-          <option value="FAN">Fan</option>
-          <option value="CREATOR">Creator</option>
-          <option value="ADMIN">Admin</option>
-        </select>
+        {!lockedRole && (
+          <select style={statusSelectStyle} value={role} onChange={(e) => setRole(e.target.value)}>
+            <option value="">All roles</option>
+            <option value="FAN">Fan</option>
+            <option value="CREATOR">Creator</option>
+            <option value="ADMIN">Admin</option>
+          </select>
+        )}
         <select style={statusSelectStyle} value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">Active + suspended</option>
           <option value="active">Active only</option>
           <option value="suspended">Suspended only</option>
         </select>
+        <select style={statusSelectStyle} value={newDays} onChange={(e) => setNewDays(e.target.value)}>
+          <option value="">Any join date</option>
+          <option value="7">New (7d)</option>
+          <option value="30">New (30d)</option>
+        </select>
+        <label style={filterCheckboxLabelStyle}>
+          <input type="checkbox" checked={founding} onChange={(e) => setFounding(e.target.checked)} /> Founding Baddie
+        </label>
+        {(lockedRole === "CREATOR" || role === "CREATOR") && (
+          <label style={filterCheckboxLabelStyle}>
+            <input type="checkbox" checked={verified} onChange={(e) => setVerified(e.target.checked)} /> Verified only
+          </label>
+        )}
         <button type="submit" style={approveButtonStyle}>
           Search
         </button>
@@ -671,21 +713,34 @@ function MembersPanel() {
       {loading ? (
         <p style={{ color: "var(--text-muted)" }}>Loading...</p>
       ) : members.length === 0 ? (
-        <p style={{ color: "var(--text-muted)" }}>No members match.</p>
+        <p style={{ color: "var(--text-muted)" }}>No {lockedRole === "CREATOR" ? "creators" : "members"} match.</p>
       ) : (
         <>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
             {members.map((m) => (
               <div key={m.userId} style={rowCardStyle}>
-                <div>
+                <div style={{ cursor: "pointer", flex: 1 }} onClick={() => setSelectedUserId(m.userId)} role="button">
                   <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>
                     {m.displayName ?? m.email} · {humanizeKey(m.role)}
+                    {m.foundingBaddie && <span style={foundingBadgeStyle}>Founding Baddie</span>}
                   </div>
                   <div style={mutedSmallStyle}>
                     {m.email} · {m.isActive ? "active" : "inactive"}
                     {m.creatorProfileStatus ? ` · creator: ${humanizeKey(m.creatorProfileStatus)}` : ""} · joined{" "}
                     {new Date(m.createdAt).toLocaleDateString()}
+                    {m.lastSessionAt ? ` · last session ${new Date(m.lastSessionAt).toLocaleDateString()}` : " · never signed in"}
                   </div>
+                  {m.creatorStats && (
+                    <div style={mutedSmallStyle}>
+                      {m.creatorStats.contentCount} content · {m.creatorStats.activeSubscribers} subscribers ·{" "}
+                      {money(m.creatorStats.revenueUsd)} earned
+                    </div>
+                  )}
+                  {m.fanStats && (Number(m.fanStats.purchasesUsd) > 0 || Number(m.fanStats.tipsUsd) > 0) && (
+                    <div style={mutedSmallStyle}>
+                      {money(m.fanStats.purchasesUsd)} purchases · {money(m.fanStats.tipsUsd)} tips
+                    </div>
+                  )}
                 </div>
                 {m.role !== "ADMIN" && m.isActive && (
                   <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
@@ -705,6 +760,231 @@ function MembersPanel() {
               {loadingMore ? "Loading..." : "Load more"}
             </button>
           )}
+        </>
+      )}
+    </section>
+  );
+}
+
+interface MemberDetailData {
+  userId: string;
+  email: string;
+  role: string;
+  displayName: string | null;
+  bio: string | null;
+  country: string | null;
+  city: string | null;
+  isActive: boolean;
+  suspendedAt: string | null;
+  ageVerified: boolean;
+  createdAt: string;
+  lastSession: { at: string; ipAddress: string | null } | null;
+  foundingApplication: { id: string; status: string; appliedAt: string } | null;
+  creatorProfile: {
+    status: string;
+    appliedAt: string;
+    approvedAt: string | null;
+    vvipPriceOverride: string | null;
+    isLive: boolean;
+    contentCount: number;
+    activeSubscribers: number;
+    revenueUsd: string;
+    recentContent: { id: string; mediaType: string; accessLevel: string; status: string; createdAt: string }[];
+  } | null;
+  fanFinancials: {
+    purchasesUsd: string;
+    tipsUsd: string;
+    activeCreatorSubscriptions: number;
+    activeVipPass: { priceUsd: string; currentPeriodEnd: string } | null;
+  } | null;
+  recentActivity: {
+    id: string;
+    action: string;
+    actorEmail: string;
+    isActor: boolean;
+    targetType: string | null;
+    targetId: string | null;
+    createdAt: string;
+  }[];
+  moderation: {
+    reportsFiled: { id: string; reason: string; createdAt: string }[];
+    reportsAgainst: { id: string; reason: string; createdAt: string }[];
+  };
+}
+
+function MemberDetailView({ userId, onBack, onChanged }: { userId: string; onBack: () => void; onChanged: () => void }) {
+  const [data, setData] = useState<MemberDetailData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/admin/members/${userId}`)
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null);
+          throw new Error(body?.error ?? "Failed to load member.");
+        }
+        return r.json();
+      })
+      .then((body) => {
+        if (!cancelled) setData(body);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  async function act(action: "suspend" | "ban") {
+    if (!data) return;
+    if (!window.confirm(`${action === "ban" ? "Ban" : "Suspend"} ${data.email}?`)) return;
+    setBusy(true);
+    const res = await fetch(`/api/admin/users/${data.userId}/${action}`, { method: "POST" });
+    setBusy(false);
+    if (res.ok) {
+      setData({ ...data, isActive: false });
+      onChanged();
+    } else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error ?? `${action} failed.`);
+    }
+  }
+
+  return (
+    <section>
+      <button onClick={onBack} style={{ ...tabButtonStyle, marginBottom: "1.25rem" }}>
+        ← Back to list
+      </button>
+
+      {loading && <p style={{ color: "var(--text-muted)" }}>Loading...</p>}
+      {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
+
+      {data && (
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem" }}>
+            <div>
+              <h2 style={{ ...sectionHeadingStyle, margin: "0 0 0.3rem" }}>
+                {data.displayName ?? data.email}
+                {data.foundingApplication && <span style={foundingBadgeStyle}>Founding Baddie</span>}
+              </h2>
+              <div style={mutedSmallStyle}>
+                {data.email} · {humanizeKey(data.role)} · {data.isActive ? "active" : "inactive"} · joined{" "}
+                {new Date(data.createdAt).toLocaleDateString()}
+                {data.city || data.country ? ` · ${[data.city, data.country].filter(Boolean).join(", ")}` : ""}
+              </div>
+              <div style={mutedSmallStyle}>
+                {data.lastSession
+                  ? `Last session ${new Date(data.lastSession.at).toLocaleString()}${data.lastSession.ipAddress ? ` from ${data.lastSession.ipAddress}` : ""}`
+                  : "Never signed in"}
+              </div>
+              {data.bio && <p style={{ fontSize: "0.85rem", marginTop: "0.5rem", maxWidth: "480px" }}>{data.bio}</p>}
+            </div>
+            {data.role !== "ADMIN" && data.isActive && (
+              <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
+                <button onClick={() => act("suspend")} disabled={busy} style={rejectButtonStyle}>
+                  Suspend
+                </button>
+                <button onClick={() => act("ban")} disabled={busy} style={rejectButtonStyle}>
+                  Ban
+                </button>
+              </div>
+            )}
+          </div>
+
+          {data.foundingApplication && (
+            <StatGroup title="Founding Baddie application">
+              <Stat label="Status" value={humanizeKey(data.foundingApplication.status)} />
+              <Stat label="Applied" value={new Date(data.foundingApplication.appliedAt).toLocaleDateString()} />
+            </StatGroup>
+          )}
+
+          {data.creatorProfile && (
+            <>
+              <StatGroup title="Creator performance">
+                <Stat label="Status" value={humanizeKey(data.creatorProfile.status)} />
+                <Stat label="Content" value={data.creatorProfile.contentCount} />
+                <Stat label="Active subscribers" value={data.creatorProfile.activeSubscribers} />
+                <Stat label="Revenue (earned)" value={money(data.creatorProfile.revenueUsd)} />
+                <Stat label="Live now" value={data.creatorProfile.isLive ? "Yes" : "No"} />
+                {data.creatorProfile.approvedAt && (
+                  <Stat label="Approved" value={new Date(data.creatorProfile.approvedAt).toLocaleDateString()} />
+                )}
+              </StatGroup>
+              {data.creatorProfile.recentContent.length > 0 && (
+                <div style={{ marginBottom: "2rem" }}>
+                  <h3 style={statGroupHeadingStyle}>Recent content</h3>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                    {data.creatorProfile.recentContent.map((c) => (
+                      <div key={c.id} style={auditRowStyle}>
+                        <span style={{ fontWeight: 600 }}>
+                          {humanizeKey(c.mediaType)} · {humanizeKey(c.accessLevel)}
+                        </span>
+                        <span style={mutedSmallStyle}>
+                          {humanizeKey(c.status)} · {new Date(c.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {data.fanFinancials && (
+            <StatGroup title="Financials">
+              <Stat label="Purchases" value={money(data.fanFinancials.purchasesUsd)} />
+              <Stat label="Tips" value={money(data.fanFinancials.tipsUsd)} />
+              <Stat label="Active creator subscriptions" value={data.fanFinancials.activeCreatorSubscriptions} />
+              <Stat label="VIP pass" value={data.fanFinancials.activeVipPass ? money(data.fanFinancials.activeVipPass.priceUsd) + "/mo" : "None"} />
+            </StatGroup>
+          )}
+
+          {(data.moderation.reportsFiled.length > 0 || data.moderation.reportsAgainst.length > 0) && (
+            <div style={{ marginBottom: "2rem" }}>
+              <h3 style={statGroupHeadingStyle}>Moderation flags</h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                {data.moderation.reportsAgainst.map((r) => (
+                  <div key={r.id} style={{ ...auditRowStyle, borderColor: "var(--danger)" }}>
+                    <span style={{ fontWeight: 600, color: "var(--danger)" }}>Reported: {humanizeKey(r.reason)}</span>
+                    <span style={mutedSmallStyle}>{new Date(r.createdAt).toLocaleString()}</span>
+                  </div>
+                ))}
+                {data.moderation.reportsFiled.map((r) => (
+                  <div key={r.id} style={auditRowStyle}>
+                    <span style={{ fontWeight: 600 }}>Filed a report: {humanizeKey(r.reason)}</span>
+                    <span style={mutedSmallStyle}>{new Date(r.createdAt).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <h3 style={statGroupHeadingStyle}>Recent activity</h3>
+            {data.recentActivity.length === 0 ? (
+              <p style={{ color: "var(--text-muted)" }}>Nothing yet.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                {data.recentActivity.map((a) => (
+                  <div key={a.id} style={auditRowStyle}>
+                    <span style={{ fontWeight: 600, textTransform: "capitalize" }}>{a.action.replace(/[._]/g, " ")}</span>
+                    <span style={mutedSmallStyle}>
+                      {a.isActor ? "by this member" : `on this member (by ${a.actorEmail})`} ·{" "}
+                      {new Date(a.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </>
       )}
     </section>
@@ -1571,4 +1851,26 @@ const filterChipStyle: React.CSSProperties = {
   fontWeight: 600,
   cursor: "pointer",
   textTransform: "capitalize",
+};
+
+const filterCheckboxLabelStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.35rem",
+  fontSize: "0.82rem",
+  color: "var(--text-muted)",
+  cursor: "pointer",
+};
+
+const foundingBadgeStyle: React.CSSProperties = {
+  display: "inline-block",
+  marginLeft: "0.5rem",
+  background: "var(--accent-soft)",
+  color: "var(--accent)",
+  border: "1px solid var(--accent)",
+  borderRadius: "999px",
+  padding: "0.05rem 0.5rem",
+  fontSize: "0.68rem",
+  fontWeight: 700,
+  verticalAlign: "middle",
 };
