@@ -28,7 +28,7 @@ export default function FoundingBaddiesPage() {
 function Hero() {
   return (
     <section style={heroStyle}>
-      <span style={kickerStyle}>Founding baddies · Limited Cohort</span>
+      <span style={kickerStyle}>Founding baddie/Founding baddies · Limited Cohort</span>
       <h1 style={heroTitleStyle}>Become a Founding baddie</h1>
       <p style={heroSubStyle}>
         Join the first generation of African creators building the future of the creator economy.
