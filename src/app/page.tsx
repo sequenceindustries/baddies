@@ -7,6 +7,7 @@ import { useSession, roleHomePath } from "@/components/ui";
 import { CreatorCardRow, type CreatorCardData } from "@/components/cards";
 import { HowItWorks, HowItWorksForCreators } from "@/components/how-it-works";
 import { Countdown } from "@/components/countdown";
+import { HeroVisual } from "@/components/hero-visual";
 
 interface DiscoveryResponse {
   creators: CreatorCardData[];
@@ -60,6 +61,7 @@ export default function LandingPage() {
   return (
     <main>
       <section style={heroStyle}>
+        <HeroVisual />
         <h1 style={heroTitleStyle}>baddies</h1>
         <p style={heroSubStyle}>
           A premium platform where verified South African creators publish exclusive content and
