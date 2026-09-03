@@ -138,7 +138,7 @@ function FoundingApplicationsQueue() {
 
   return (
     <section style={{ marginBottom: "3rem" }}>
-      <h2 style={sectionHeadingStyle}>Founding Baddies applications</h2>
+      <h2 style={sectionHeadingStyle}>Founding baddies applications</h2>
       {loading ? (
         <p style={{ color: "var(--text-muted)" }}>Loading...</p>
       ) : applications.length === 0 ? (
@@ -222,9 +222,16 @@ function FoundingApplicationsQueue() {
                         <strong>Monetisation experience:</strong> {app.monetisationExperience}
                       </div>
                     )}
-                    <div style={{ fontSize: "0.85rem", marginTop: "0.6rem" }}>
-                      <strong>Why Baddies:</strong> {app.whyJoinBaddies}
-                    </div>
+                    {/* whyJoinBaddies is no longer a form question (see
+                        founding-baddies/page.tsx) — this stays conditional
+                        so it still shows for applications submitted before
+                        that question was removed, without an empty "Why
+                        baddies:" line on every application after. */}
+                    {app.whyJoinBaddies && (
+                      <div style={{ fontSize: "0.85rem", marginTop: "0.6rem" }}>
+                        <strong>Why baddies:</strong> {app.whyJoinBaddies}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -129,12 +129,15 @@ export function roleHomePath(role: SessionUser["role"]): string {
   return "/fan-home";
 }
 
+const NO_AUTH_LINKS_PATHS = new Set(["/", "/founding-baddies"]);
+
 export function Nav() {
   const { user, loading, refresh } = useSession();
-  // The landing page keeps only its Founding Baddies "Apply" CTA — no
-  // Sign in/Join here either, or a signed-out visitor would still have a
-  // second way in past that one deliberate button.
-  const isLandingPage = usePathname() === "/";
+  // Both the landing page and the Founding Baddies campaign page keep
+  // only their own single "Apply"/"Apply now" CTA — no Sign in/Join
+  // here either, or a signed-out visitor would have a second way in
+  // past that one deliberate button.
+  const hideAuthLinks = NO_AUTH_LINKS_PATHS.has(usePathname());
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -199,7 +202,7 @@ export function Nav() {
           // comment), so linking to them for a signed-out visitor would
           // just be a dead end. The landing page's own Top Baddies row
           // is the one thing they get to browse first.
-          !isLandingPage && (
+          !hideAuthLinks && (
             <>
               <Link href="/login" style={linkStyle}>
                 Sign in

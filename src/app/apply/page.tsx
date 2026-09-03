@@ -158,7 +158,7 @@ export default function ApplyPage() {
 
           <ImageUploadField
             label="Featured image"
-            hint="What shows on Top Baddies, Baddies Near You, and other discovery cards. Optional now — add or change it later from your Dashboard's Content tab. Keep it non-explicit."
+            hint="What shows on Top baddies, baddies near you, and other discovery cards. Optional now — add or change it later from your Dashboard's Content tab. Keep it non-explicit."
             value={featuredImageUrl}
             onChange={setFeaturedImageUrl}
             shape="rect"

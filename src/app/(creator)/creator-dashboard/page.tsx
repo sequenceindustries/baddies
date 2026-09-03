@@ -251,7 +251,7 @@ function OnboardingChecklist() {
     <div style={{ ...cardStyle, marginBottom: "2rem" }}>
       <h2 style={{ ...sectionHeadingStyle, marginTop: 0, marginBottom: "0.3rem" }}>Get discovered</h2>
       <p style={{ ...mutedSmallStyle, marginTop: 0, marginBottom: "1rem" }}>
-        {doneCount} of {items.length} set up — finish these to look your best to fans and other Founding Baddies.
+        {doneCount} of {items.length} set up — finish these to look your best to fans and other Founding baddies.
       </p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
         {items.map((item) => (
@@ -606,7 +606,7 @@ function FeaturedImagePanel() {
     <div style={{ ...cardStyle, marginBottom: "2rem" }}>
       <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Featured image</h2>
       <p style={{ ...mutedSmallStyle, marginTop: "-0.6rem", marginBottom: "1.1rem" }}>
-        What shows on Top Baddies, Baddies Near You, and other discovery cards. Keep it
+        What shows on Top baddies, baddies near you, and other discovery cards. Keep it
         non-explicit. Leave blank to use your latest Free post instead.
       </p>
       <ImageUploadField label="Featured image" value={featuredImageUrl} onChange={save} shape="rect" />

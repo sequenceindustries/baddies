@@ -27,7 +27,6 @@ const ApplySchema = z.object({
   monetisationExperience: z.string().max(2000).optional(),
   creatingSince: z.string().max(200).optional(),
   currentlyMonetising: z.boolean().optional(),
-  whyJoinBaddies: z.string().min(10, "Tell us a little more — a sentence or two is fine.").max(4000),
   confirmsAdult: z.literal(true, {
     errorMap: () => ({ message: "You must confirm you are 18 or older to apply." }),
   }),
@@ -73,7 +72,12 @@ export async function POST(req: NextRequest) {
   }
 
   const application = await db.foundingApplication.create({
-    data: { ...data, platforms },
+    // whyJoinBaddies is a required, non-null column (see the Prisma
+    // schema) from when this was still a form question. It no longer
+    // is — see the form's own removal of that field — so this writes an
+    // empty string rather than needing a migration to make the column
+    // nullable for a field nothing populates anymore.
+    data: { ...data, whyJoinBaddies: "", platforms },
   });
 
   return NextResponse.json({ applicationId: application.id }, { status: 201 });

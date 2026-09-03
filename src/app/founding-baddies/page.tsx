@@ -28,8 +28,8 @@ export default function FoundingBaddiesPage() {
 function Hero() {
   return (
     <section style={heroStyle}>
-      <span style={kickerStyle}>Founding Baddies · Limited Cohort</span>
-      <h1 style={heroTitleStyle}>Become a Founding Baddie</h1>
+      <span style={kickerStyle}>Founding baddies · Limited Cohort</span>
+      <h1 style={heroTitleStyle}>Become a Founding baddie</h1>
       <p style={heroSubStyle}>
         Join the first generation of African creators building the future of the creator economy.
       </p>
@@ -48,7 +48,7 @@ function WhatIsBaddies() {
     "Open exclusively to South African creators, no exceptions — built here first, for a global audience",
   ];
   return (
-    <Section title="What is Baddies?">
+    <Section title="What is baddies?">
       <div style={pointsGridStyle}>
         {points.map((p) => (
           <div key={p} style={pointCardStyle}>
@@ -63,8 +63,8 @@ function WhatIsBaddies() {
 
 function Benefits() {
   const benefits = [
-    "0% Baddies platform fees for 12 months",
-    "A Founding Baddie badge on your profile",
+    "0% baddies platform fees for 12 months",
+    "A Founding baddie badge on your profile",
     "Featured placement across the platform",
     "Priority promotion during launch campaigns",
     "Dedicated onboarding support",
@@ -72,7 +72,7 @@ function Benefits() {
     "Referral opportunity for creators you bring in",
   ];
   return (
-    <Section title="Founding Baddie Benefits" subtitle="What you get for being one of the first.">
+    <Section title="Founding baddie benefits" subtitle="What you get for being one of the first.">
       <div style={benefitsGridStyle}>
         {benefits.map((b) => (
           <div key={b} style={benefitCardStyle} className="hover-lift">
@@ -121,7 +121,7 @@ function TrustAndSafety() {
     "18+ only, no exceptions",
     "South African creators only, no exceptions — geo-verified at application",
     "Identity verification required for every creator",
-    "Every creator on Baddies is verified before they can publish",
+    "Every creator on baddies is verified before they can publish",
     "Your privacy is protected — your data is never sold",
     "Clear safety standards for creators and fans alike",
   ];
@@ -187,10 +187,8 @@ function ApplicationForm() {
   const [creatorPlats, setCreatorPlats] = useState<PlatformState>({});
 
   const [audienceSize, setAudienceSize] = useState("");
-  const [monetisationExperience, setMonetisationExperience] = useState("");
   const [creatingSince, setCreatingSince] = useState("");
   const [currentlyMonetising, setCurrentlyMonetising] = useState("");
-  const [whyJoinBaddies, setWhyJoinBaddies] = useState("");
 
   const [confirmsAdult, setConfirmsAdult] = useState(false);
   const [agreesToVerification, setAgreesToVerification] = useState(false);
@@ -265,10 +263,8 @@ function ApplicationForm() {
         city,
         platforms,
         audienceSize: audienceSize || undefined,
-        monetisationExperience: monetisationExperience || undefined,
         creatingSince: creatingSince || undefined,
         currentlyMonetising: currentlyMonetising ? currentlyMonetising === "yes" : undefined,
-        whyJoinBaddies,
         confirmsAdult,
         agreesToVerification,
         website,
@@ -291,7 +287,7 @@ function ApplicationForm() {
         <div style={successCardStyle}>
           <h2 style={sectionHeadingStyle}>Application received</h2>
           <p style={tierDescStyle}>
-            Thank you for applying to become a Founding Baddie. Our team reviews every application
+            Thank you for applying to become a Founding baddie. Our team reviews every application
             personally — we&apos;ll reach out by email or WhatsApp once yours has been reviewed.
           </p>
         </div>
@@ -315,7 +311,7 @@ function ApplicationForm() {
 
   return (
     <section id="apply" style={{ ...sectionStyle, ...formSectionStyle }}>
-      <h2 style={sectionHeadingStyle}>Apply to Become a Founding Baddie</h2>
+      <h2 style={sectionHeadingStyle}>Apply to become a founding baddie</h2>
       <p style={sectionSubStyle}>Takes about five minutes. No documents required at this stage.</p>
 
       <form onSubmit={handleSubmit} style={formStyle}>
@@ -373,14 +369,6 @@ function ApplicationForm() {
               placeholder="e.g. ~50k across platforms"
             />
           </FormField>
-          <FormField label="Current monetisation experience" hint="Optional.">
-            <textarea
-              style={{ ...inputStyle, minHeight: "70px", resize: "vertical" }}
-              value={monetisationExperience}
-              onChange={(e) => setMonetisationExperience(e.target.value)}
-              maxLength={2000}
-            />
-          </FormField>
         </FormFieldset>
 
         <FormFieldset legend="About you">
@@ -398,15 +386,6 @@ function ApplicationForm() {
               <option value="yes">Yes</option>
               <option value="no">Not yet</option>
             </select>
-          </FormField>
-          <FormField label="Why are you interested in joining Baddies?">
-            <textarea
-              style={{ ...inputStyle, minHeight: "100px", resize: "vertical" }}
-              value={whyJoinBaddies}
-              onChange={(e) => setWhyJoinBaddies(e.target.value)}
-              maxLength={4000}
-              required
-            />
           </FormField>
         </FormFieldset>
 
@@ -429,7 +408,7 @@ function ApplicationForm() {
               required
               style={{ marginTop: "0.15rem" }}
             />
-            I understand identity verification is required before I can publish on Baddies.
+            I understand identity verification is required before I can publish on baddies.
           </label>
         </FormFieldset>
 
@@ -450,7 +429,7 @@ function ApplicationForm() {
         </div>
 
         <button type="submit" style={submitButtonStyle} disabled={submitting}>
-          {submitting ? "Submitting..." : "Submit application"}
+          {submitting ? "Submitting..." : "Become a founding baddie"}
         </button>
       </form>
     </section>

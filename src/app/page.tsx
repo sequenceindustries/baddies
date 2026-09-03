@@ -72,7 +72,7 @@ export default function LandingPage() {
       <section style={sectionStyle}>
         <Link href="/founding-baddies" style={foundingBannerStyle} className="hover-lift">
           <span style={foundingBannerKickerStyle}>Now recruiting</span>
-          <span style={foundingBannerTitleStyle}>Become a Founding Baddie</span>
+          <span style={foundingBannerTitleStyle}>Become a Founding baddie</span>
           <span style={foundingBannerArrowStyle}>Apply now →</span>
         </Link>
       </section>
