@@ -65,7 +65,7 @@ export function HowItWorksForCreators() {
       <h2 style={sectionHeadingStyle}>How it works for creators</h2>
       <div style={tierGridStyle}>
         {steps.map((step) => (
-          <div key={step.name} className="hover-lift" style={{ ...tierCardStyle, borderColor: "var(--accent)" }}>
+          <div key={step.name} className="hover-lift" style={creatorsTierCardStyle}>
             <div style={tierNameStyle}>{step.name}</div>
             <p style={tierDescStyle}>{step.desc}</p>
           </div>
@@ -103,13 +103,22 @@ const tierCardStyle: React.CSSProperties = {
   boxShadow: "var(--glow)",
 };
 
-// A visibly different shade from the creator steps above (var(--surface),
+// A visibly different shade from the creator steps below (var(--surface),
 // darker) so the two sections read as distinct at a glance while
 // scrolling past both, not just distinguished by their headings.
 const fansTierCardStyle: React.CSSProperties = {
   ...tierCardStyle,
   background: "var(--surface-raised)",
   borderColor: "var(--accent)",
+};
+
+// The app's one other defined brand color (see globals.css's own
+// comment on --accent-wine) — used here, not per-role theming, just to
+// give the creator steps a different color from the fans tiers above,
+// as asked.
+const creatorsTierCardStyle: React.CSSProperties = {
+  ...tierCardStyle,
+  borderColor: "var(--accent-wine)",
 };
 
 const tierNameStyle: React.CSSProperties = {
