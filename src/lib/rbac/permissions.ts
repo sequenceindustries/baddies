@@ -23,7 +23,8 @@ export type Permission =
   | "ledger:view_own"
   | "ledger:view_any"
   | "settings:write"
-  | "audit:view";
+  | "audit:view"
+  | "dashboard:view"; // admin-only: aggregate stats + the member directory
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   FAN: ["creator:apply", "report:file", "ledger:view_own"],
@@ -47,6 +48,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "ledger:view_any",
     "settings:write",
     "audit:view",
+    "dashboard:view",
   ],
 };
 

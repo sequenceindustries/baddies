@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
+import type { Prisma } from "@prisma/client";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -13,6 +14,11 @@ const PAGE_SIZE = 50;
  * Admin-only view of the append-only AuditLog (§23: "Every sensitive
  * admin action should be logged."). Read-only — nothing here may ever
  * update or delete a row, matching the ledger's own append-only rule.
+ *
+ * Optional filters (all combinable, all backward-compatible — an empty
+ * query string behaves exactly as before): `action` matches a prefix
+ * (e.g. "creator." to see every creator.* event), `actor` matches the
+ * actor's email substring, `since`/`until` bound createdAt.
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -29,9 +35,28 @@ export async function GET(req: NextRequest) {
     throw err;
   }
 
-  const cursor = req.nextUrl.searchParams.get("cursor") ?? undefined;
+  const params = req.nextUrl.searchParams;
+  const cursor = params.get("cursor") ?? undefined;
+  const actionPrefix = params.get("action")?.trim();
+  const actorQuery = params.get("actor")?.trim();
+  const since = params.get("since");
+  const until = params.get("until");
+
+  const where: Prisma.AuditLogWhereInput = {
+    ...(actionPrefix ? { action: { startsWith: actionPrefix, mode: "insensitive" } } : {}),
+    ...(actorQuery ? { actor: { email: { contains: actorQuery, mode: "insensitive" } } } : {}),
+    ...(since || until
+      ? {
+          createdAt: {
+            ...(since ? { gte: new Date(since) } : {}),
+            ...(until ? { lte: new Date(until) } : {}),
+          },
+        }
+      : {}),
+  };
 
   const entries = await db.auditLog.findMany({
+    where,
     orderBy: { createdAt: "desc" },
     take: PAGE_SIZE + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
