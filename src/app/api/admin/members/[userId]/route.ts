@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
+import { isTrialActive } from "@/lib/entitlements/trial";
 
 // Always dynamic: this route reads live data and must never be
 // statically prerendered or cached at build time.
@@ -57,6 +58,7 @@ export async function GET(_req: Request, { params }: { params: { userId: string 
     activeUnlimitedSub,
     recentPurchases,
     recentTips,
+    fanTrial,
   ] = await Promise.all([
     db.foundingApplication.findFirst({ where: { email: user.email }, orderBy: { createdAt: "desc" } }),
     db.session.findFirst({ where: { userId: user.id, revokedAt: null }, orderBy: { createdAt: "desc" }, select: { createdAt: true, ipAddress: true } }),
@@ -110,7 +112,20 @@ export async function GET(_req: Request, { params }: { params: { userId: string 
       take: 20,
       select: { id: true, amountUsd: true, createdAt: true },
     }),
+    db.fanTrial.findUnique({ where: { fanId: user.id } }),
   ]);
+
+  // MASTER REQUIREMENTS §11 — lazy expiry, no cron job exists in this
+  // codebase to flip a stale row on a schedule (see
+  // src/lib/entitlements/trial.ts's own comment). Fixing it up here,
+  // the moment an admin actually looks, keeps the stored status honest
+  // for display without one — the real access check in
+  // canAccessContent() is time-based regardless of this, so it's never
+  // wrong even between admin views.
+  if (fanTrial && fanTrial.status === "ACTIVE" && fanTrial.expiresAt.getTime() <= Date.now()) {
+    await db.fanTrial.update({ where: { id: fanTrial.id }, data: { status: "EXPIRED" } });
+    fanTrial.status = "EXPIRED";
+  }
 
   // Batch-fetch the display names for the subscribed-to creators — see
   // the query above's own comment on why this isn't a join.
@@ -201,6 +216,17 @@ export async function GET(_req: Request, { params }: { params: { userId: string 
             currentPeriodEnd: s.currentPeriodEnd,
           })),
           paymentHistory,
+          // MASTER REQUIREMENTS §11 — null if trials are disabled or
+          // this account predates the feature, not fabricated.
+          trial: fanTrial
+            ? {
+                status: fanTrial.status,
+                startedAt: fanTrial.startedAt,
+                expiresAt: fanTrial.expiresAt,
+                convertedAt: fanTrial.convertedAt,
+                cancelledAt: fanTrial.cancelledAt,
+              }
+            : null,
         }
       : null,
     recentActivity: recentActivity.map((a) => ({

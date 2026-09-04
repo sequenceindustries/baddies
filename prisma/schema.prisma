@@ -249,6 +249,13 @@ enum ConsentStatus {
   DISPUTED
 }
 
+enum TrialStatus {
+  ACTIVE
+  EXPIRED
+  CONVERTED
+  CANCELLED
+}
+
 // =========================================================================
 // IDENTITY & ACCESS
 // =========================================================================
@@ -288,6 +295,7 @@ model User {
   // FoundingApplication side of AgreementAcceptance) — modeled now so a
   // real User re-accepting an updated agreement later needs no migration.
   agreementAcceptances AgreementAcceptance[]
+  fanTrial             FanTrial?
 
   @@index([role])
   @@map("users")
@@ -655,6 +663,35 @@ model UnlimitedSubscription {
   @@index([fanId])
   @@index([status])
   @@map("unlimited_subscriptions")
+}
+
+// MASTER REQUIREMENTS §11 — one 24-hour trial per fan, ever (prevents
+// trivial re-trial abuse; the spec frames this as a one-time
+// acquisition hook, not a repeatable perk). Grants temporary access to
+// VIP-tier content platform-wide (see src/lib/entitlements/content.ts
+// and its own comment on why FREE/VVIP are excluded) without requiring
+// the VIP pass or any VVIP subscription. Lazily expired, not
+// cron-driven — no job-queue system exists in this codebase — so
+// `status` is authoritative for admin display only; every real access
+// check independently compares `expiresAt` to now() via
+// src/lib/entitlements/trial.ts's isTrialActive(), same pattern
+// Subscription/UnlimitedSubscription already use alongside their own
+// `status` field.
+model FanTrial {
+  id          String      @id @default(cuid())
+  fanId       String      @unique
+  fan         User        @relation(fields: [fanId], references: [id], onDelete: Cascade)
+  status      TrialStatus @default(ACTIVE)
+  startedAt   DateTime    @default(now())
+  expiresAt   DateTime
+  convertedAt DateTime?
+  cancelledAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@map("fan_trials")
 }
 
 // Derived-access cache: recomputed by the entitlement engine, not

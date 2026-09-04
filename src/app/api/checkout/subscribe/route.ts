@@ -5,6 +5,7 @@ import { db } from "@/lib/db/client";
 import { getPaymentProvider } from "@/lib/providers/payment";
 import { resolveCreatorPricing } from "@/lib/creator/pricing";
 import { postRevenueEvent, recomputeWalletBalances } from "@/lib/ledger/service";
+import { markTrialConvertedIfActive } from "@/lib/entitlements/trial";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -110,6 +111,11 @@ export async function POST(req: NextRequest) {
     description: "VVIP subscription (stub checkout)",
   });
   await recomputeWalletBalances(creatorWallet.id);
+
+  // MASTER REQUIREMENTS §11 — subscribing to a creator while on an
+  // active trial is a genuine acquisition win too, not just buying the
+  // VIP pass itself. A no-op if this fan never had a trial.
+  await markTrialConvertedIfActive(user.id);
 
   return NextResponse.json(
     {

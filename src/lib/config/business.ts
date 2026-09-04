@@ -28,6 +28,12 @@ export const BUSINESS_CONFIG_KEYS = {
   // goal, not a pricing/revenue rule, but the same "don't hard-code
   // business numbers in dashboard code" reasoning applies.
   FOUNDING_BADDIES_TARGET: "founding_baddies.target",
+  // MASTER REQUIREMENTS §11 — "Build the data model so trial rules can
+  // be changed later... Do not hardcode the trial logic." TRIAL_ENABLED
+  // is a simple kill switch; TRIAL_DURATION_HOURS controls how long a
+  // newly-registered fan's grant lasts (see src/app/api/auth/register/route.ts).
+  TRIAL_ENABLED: "trial.enabled",
+  TRIAL_DURATION_HOURS: "trial.duration_hours",
 } as const;
 
 export type BusinessConfigKey =
@@ -46,6 +52,8 @@ export const DEFAULT_BUSINESS_CONFIG: Record<BusinessConfigKey, string> = {
   // allocation model per build brief §2, but the engine is pluggable.
   [BUSINESS_CONFIG_KEYS.UNLIMITED_ALLOCATION_MODEL]: "consumption",
   [BUSINESS_CONFIG_KEYS.FOUNDING_BADDIES_TARGET]: "50",
+  [BUSINESS_CONFIG_KEYS.TRIAL_ENABLED]: "true",
+  [BUSINESS_CONFIG_KEYS.TRIAL_DURATION_HOURS]: "24",
 };
 
 export type UnlimitedAllocationModel =

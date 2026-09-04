@@ -1,5 +1,6 @@
 import { db } from "@/lib/db/client";
 import type { Content, User } from "@prisma/client";
+import { isTrialActive } from "./trial";
 
 /**
  * Central entitlement engine. Per build brief §15:
@@ -23,6 +24,7 @@ export type EntitlementReason =
   | "admin_override"
   | "active_vvip_subscription"
   | "vip_pass"
+  | "trial_access" // MASTER REQUIREMENTS §11 — see src/lib/entitlements/trial.ts
   | "ppv_purchase" // legacy — no code path can create PPV content anymore, kept defensively
   | "denied";
 
@@ -98,6 +100,16 @@ export async function canAccessContent(
     const vipPassResult = await checkVipPassAccess(user.id, content.creatorProfileId);
     if (vipPassResult.allowed) return vipPassResult;
 
+    // MASTER REQUIREMENTS §11 — a fan's one-time 24-hour trial (see
+    // src/lib/entitlements/trial.ts) previews the exact same pool of
+    // content the VIP pass would unlock: same opted-in gate as
+    // checkVipPassAccess above, just without requiring an active
+    // UnlimitedSubscription. Not a separate "trial can see anything"
+    // rule — it's temporary, free access to what the VIP pass itself
+    // gates.
+    const trialResult = await checkTrialAccess(user.id, content.creatorProfileId);
+    if (trialResult.allowed) return trialResult;
+
     return { allowed: false, reason: "denied" };
   }
 
@@ -142,4 +154,27 @@ async function checkVipPassAccess(
   });
 
   return activeVipPass ? { allowed: true, reason: "vip_pass" } : { allowed: false, reason: "denied" };
+}
+
+/**
+ * Same opted-in gate as checkVipPassAccess (a creator's VIP-tier
+ * content is only reachable platform-wide once they've opted in — see
+ * that function's own comment) — the trial previews exactly that pool,
+ * not "everything," so it reuses the same creator-level check.
+ */
+async function checkTrialAccess(fanId: string, creatorProfileId: string): Promise<EntitlementResult> {
+  const creator = await db.creatorProfile.findUnique({
+    where: { id: creatorProfileId },
+    select: { unlimitedOptedIn: true },
+  });
+  if (!creator?.unlimitedOptedIn) {
+    return { allowed: false, reason: "denied" };
+  }
+
+  const trial = await db.fanTrial.findUnique({
+    where: { fanId },
+    select: { status: true, expiresAt: true },
+  });
+
+  return isTrialActive(trial) ? { allowed: true, reason: "trial_access" } : { allowed: false, reason: "denied" };
 }

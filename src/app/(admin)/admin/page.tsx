@@ -805,6 +805,13 @@ interface MemberDetailData {
     activeVipPass: { priceUsd: string; currentPeriodEnd: string } | null;
     subscriptions: { creatorProfileId: string; creatorDisplayName: string; priceUsd: string; currentPeriodEnd: string }[];
     paymentHistory: { id: string; type: "purchase" | "tip"; amountUsd: string; refunded: boolean; createdAt: string }[];
+    trial: {
+      status: string;
+      startedAt: string;
+      expiresAt: string;
+      convertedAt: string | null;
+      cancelledAt: string | null;
+    } | null;
   } | null;
   recentActivity: {
     id: string;
@@ -1012,6 +1019,24 @@ function MemberDetailView({ userId, onBack, onChanged }: { userId: string; onBac
 
           {tab === "Subscriptions" && (
             <StatGroup title="Subscriptions">
+              {data.fanFinancials?.trial && (
+                <div
+                  style={{
+                    ...auditRowStyle,
+                    marginBottom: "0.8rem",
+                    borderColor: data.fanFinancials.trial.status === "ACTIVE" ? "var(--accent)" : "var(--border)",
+                  }}
+                >
+                  <span style={{ fontWeight: 600 }}>24-hour trial · {humanizeKey(data.fanFinancials.trial.status)}</span>
+                  <span style={mutedSmallStyle}>
+                    Started {new Date(data.fanFinancials.trial.startedAt).toLocaleString()}
+                    {data.fanFinancials.trial.status === "ACTIVE" &&
+                      ` · expires ${new Date(data.fanFinancials.trial.expiresAt).toLocaleString()}`}
+                    {data.fanFinancials.trial.convertedAt &&
+                      ` · converted ${new Date(data.fanFinancials.trial.convertedAt).toLocaleString()}`}
+                  </span>
+                </div>
+              )}
               {!data.fanFinancials ? (
                 <p style={{ color: "var(--text-muted)" }}>N/A — this is a creator account.</p>
               ) : data.fanFinancials.subscriptions.length === 0 && !data.fanFinancials.activeVipPass ? (

@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
 import { getPaymentProvider } from "@/lib/providers/payment";
 import { getBusinessConfig } from "@/lib/config/settings";
+import { markTrialConvertedIfActive } from "@/lib/entitlements/trial";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -64,6 +65,11 @@ export async function POST() {
       paymentProviderSubscriptionId: providerSub.providerSubscriptionId,
     },
   });
+
+  // MASTER REQUIREMENTS §11 — buying the VIP pass while on an active
+  // trial is a genuine acquisition win the spec wants tracked. A no-op
+  // if this fan never had a trial.
+  await markTrialConvertedIfActive(user.id);
 
   return NextResponse.json(
     {

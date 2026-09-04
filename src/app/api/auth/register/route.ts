@@ -4,6 +4,8 @@ import { db } from "@/lib/db/client";
 import type { Prisma } from "@prisma/client";
 import { hashPassword, createSession } from "@/lib/auth/session";
 import { sendUserEmailVerification } from "@/lib/notifications/user-email-verification";
+import { getPlatformSetting } from "@/lib/config/settings";
+import { BUSINESS_CONFIG_KEYS } from "@/lib/config/business";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -42,6 +44,13 @@ export async function POST(req: NextRequest) {
 
   const passwordHash = await hashPassword(password);
 
+  // Read before the transaction — these are config reads, not part of
+  // the atomic account-creation write itself.
+  const [trialEnabled, trialDurationHours] = await Promise.all([
+    getPlatformSetting(BUSINESS_CONFIG_KEYS.TRIAL_ENABLED),
+    getPlatformSetting(BUSINESS_CONFIG_KEYS.TRIAL_DURATION_HOURS),
+  ]);
+
   const user = await db.$transaction(async (tx: Prisma.TransactionClient) => {
     const created = await tx.user.create({
       data: {
@@ -61,6 +70,21 @@ export async function POST(req: NextRequest) {
         wallet: { create: {} },
       },
     });
+
+    // MASTER REQUIREMENTS §11 — the trial grant is core account
+    // provisioning, not a best-effort side-effect like the
+    // notification below, so it lives inside the same atomic
+    // transaction as account creation rather than a try/catch after it.
+    if (trialEnabled === "true") {
+      const durationHours = Number(trialDurationHours) || 24;
+      await tx.fanTrial.create({
+        data: {
+          fanId: created.id,
+          expiresAt: new Date(Date.now() + durationHours * 60 * 60 * 1000),
+        },
+      });
+    }
+
     return created;
   });
 
