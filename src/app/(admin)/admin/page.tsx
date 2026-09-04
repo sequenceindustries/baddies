@@ -1071,7 +1071,7 @@ function FoundingApplicationsQueue({
 }) {
   const [applications, setApplications] = useState<FoundingApplicationRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   function reload() {
@@ -1101,51 +1101,21 @@ function FoundingApplicationsQueue({
     }
   }
 
-  async function confirmWhatsapp(id: string) {
-    setBusyId(id);
-    const res = await fetch(`/api/admin/founding-applications/${id}/confirm-whatsapp`, { method: "POST" });
-    setBusyId(null);
-    if (res.ok) reload();
-    else {
-      const body = await res.json().catch(() => null);
-      alert(body?.error ?? "Couldn't confirm WhatsApp.");
-    }
-  }
-
-  async function reviewIdentity(id: string, status: "VERIFIED" | "FAILED") {
-    const failureReason =
-      status === "FAILED" ? window.prompt("Reason (shown to no one but admins, optional):") ?? undefined : undefined;
-    setBusyId(id);
-    const res = await fetch(`/api/admin/founding-applications/${id}/identity-review`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, failureReason }),
-    });
-    setBusyId(null);
-    if (res.ok) reload();
-    else {
-      const body = await res.json().catch(() => null);
-      alert(body?.error ?? "Couldn't submit identity review.");
-    }
-  }
-
-  async function reviewBanking(id: string, status: "EXTERNALLY_VERIFIED" | "FAILED" | "NEEDS_CORRECTION") {
-    const adminNotes =
-      status !== "EXTERNALLY_VERIFIED"
-        ? window.prompt("Notes (shown to no one but admins, optional):") ?? undefined
-        : undefined;
-    setBusyId(id);
-    const res = await fetch(`/api/admin/founding-applications/${id}/banking-review`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, adminNotes }),
-    });
-    setBusyId(null);
-    if (res.ok) reload();
-    else {
-      const body = await res.json().catch(() => null);
-      alert(body?.error ?? "Couldn't submit banking review.");
-    }
+  // Phase 4: the full identity/contact/location/banking/agreements/
+  // activity picture (grown too large for an inline row expand across
+  // Phases 1–3) moved to its own detail view — see
+  // FoundingApplicationDetailView below, same selectedId-swap pattern
+  // MembersPanel already uses for MemberDetailView.
+  if (selectedId) {
+    return (
+      <FoundingApplicationDetailView
+        id={selectedId}
+        onBack={() => setSelectedId(null)}
+        onChanged={reload}
+        changeStatus={changeStatus}
+        busy={busyId === selectedId}
+      />
+    );
   }
 
   return (
@@ -1164,224 +1134,489 @@ function FoundingApplicationsQueue({
         <p style={{ color: "var(--text-muted)" }}>{statusFilter ? "None at this stage." : "No applications yet."}</p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          {visibleApplications.map((app) => {
-            const expanded = expandedId === app.id;
-            return (
-              <div key={app.id} style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch" }}>
-                <div
-                  style={{ display: "flex", justifyContent: "space-between", gap: "1rem", cursor: "pointer" }}
-                  onClick={() => setExpandedId(expanded ? null : app.id)}
-                >
-                  <div>
-                    <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>
-                      {app.stageName} · {app.fullName}
-                    </div>
-                    <div style={mutedSmallStyle}>
-                      {app.email} · {app.city}, {app.country} · applied{" "}
-                      {new Date(app.createdAt).toLocaleDateString()}
-                    </div>
-                    <div style={mutedSmallStyle}>
-                      {app.platforms.length} platform{app.platforms.length === 1 ? "" : "s"}:{" "}
-                      {app.platforms.map((p) => p.platform).join(", ")}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
-                    <select
-                      value={app.status}
-                      disabled={busyId === app.id}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => changeStatus(app.id, e.target.value)}
-                      style={statusSelectStyle}
-                    >
-                      {FOUNDING_STATUSES.map((s) => (
-                        <option key={s} value={s}>
-                          {s.replace(/_/g, " ")}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+          {visibleApplications.map((app) => (
+            <div
+              key={app.id}
+              style={{ ...rowCardStyle, cursor: "pointer" }}
+              onClick={() => setSelectedId(app.id)}
+            >
+              <div>
+                <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>
+                  {app.stageName} · {app.fullName}
                 </div>
-                {expanded && (
-                  <div style={{ marginTop: "0.9rem", paddingTop: "0.9rem", borderTop: "1px solid var(--border)" }}>
-                    <div style={{ fontSize: "0.85rem", marginBottom: "0.5rem" }}>
-                      <strong>Phone:</strong> {app.phone}
-                    </div>
-                    {app.platforms.map((p, i) => (
-                      <div key={i} style={mutedSmallStyle}>
-                        {p.category === "creator" ? "Creator platform" : "Social"} · {p.platform}
-                        {p.handle ? ` · @${p.handle}` : ""}
-                        {p.followers ? ` · ${p.followers} followers` : ""}
-                        {p.link ? (
-                          <>
-                            {" · "}
-                            <a href={p.link} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
-                              link
-                            </a>
-                          </>
-                        ) : null}
-                      </div>
-                    ))}
-                    {app.audienceSize && (
-                      <div style={{ fontSize: "0.85rem", marginTop: "0.6rem" }}>
-                        <strong>Audience:</strong> {app.audienceSize}
-                      </div>
-                    )}
-                    {app.creatingSince && (
-                      <div style={{ fontSize: "0.85rem", marginTop: "0.3rem" }}>
-                        <strong>Creating since:</strong> {app.creatingSince}
-                      </div>
-                    )}
-                    {app.currentlyMonetising !== null && (
-                      <div style={{ fontSize: "0.85rem", marginTop: "0.3rem" }}>
-                        <strong>Currently monetising:</strong> {app.currentlyMonetising ? "Yes" : "Not yet"}
-                      </div>
-                    )}
-                    {app.monetisationExperience && (
-                      <div style={{ fontSize: "0.85rem", marginTop: "0.3rem" }}>
-                        <strong>Monetisation experience:</strong> {app.monetisationExperience}
-                      </div>
-                    )}
-                    {/* whyJoinBaddies is no longer a form question (see
-                        founding-baddies/page.tsx) — this stays conditional
-                        so it still shows for applications submitted before
-                        that question was removed, without an empty "Why
-                        baddies:" line on every application after. */}
-                    {app.whyJoinBaddies && (
-                      <div style={{ fontSize: "0.85rem", marginTop: "0.6rem" }}>
-                        <strong>Why baddies:</strong> {app.whyJoinBaddies}
-                      </div>
-                    )}
-                    {/* MASTER REQUIREMENTS sub-statuses (§5). Location is
-                        always populated (written at application time,
-                        both accept and reject paths — see
-                        src/app/api/founding/apply/route.ts). Identity/
-                        Contact/Banking start "Not submitted"/"Unverified"
-                        until the applicant completes those steps
-                        (src/app/founding-baddies/ApplicationNextSteps.tsx)
-                        — the buttons here are the admin side of that. */}
-                    <div
-                      style={{
-                        marginTop: "0.8rem",
-                        paddingTop: "0.6rem",
-                        borderTop: "1px solid var(--border)",
-                        display: "flex",
-                        flexWrap: "wrap",
-                        alignItems: "center",
-                        gap: "0.4rem",
-                      }}
-                    >
-                      <span style={filterChipStyle}>
-                        Location: {app.location ? humanizeKey(app.location.status) : "Pending"}
-                        {app.location?.detectedCountry ? ` (${app.location.detectedCountry})` : ""}
-                      </span>
-                      <span style={filterChipStyle}>
-                        Identity: {app.identity ? humanizeKey(app.identity.status) : "Not submitted"}
-                      </span>
-                      {app.identity?.status === "SUBMITTED" && (
-                        <>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              reviewIdentity(app.id, "VERIFIED");
-                            }}
-                            disabled={busyId === app.id}
-                            style={approveButtonStyle}
-                          >
-                            Verify identity
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              reviewIdentity(app.id, "FAILED");
-                            }}
-                            disabled={busyId === app.id}
-                            style={rejectButtonStyle}
-                          >
-                            Fail identity
-                          </button>
-                        </>
-                      )}
-                      <span style={filterChipStyle}>
-                        Email: {app.contact?.emailVerified ? "Verified" : "Unverified"}
-                      </span>
-                      <span style={filterChipStyle}>
-                        WhatsApp: {app.contact?.whatsappVerified ? "Verified" : "Unverified"}
-                      </span>
-                      {app.contact && !app.contact.whatsappVerified && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            confirmWhatsapp(app.id);
-                          }}
-                          disabled={busyId === app.id}
-                          style={approveButtonStyle}
-                        >
-                          Confirm WhatsApp
-                        </button>
-                      )}
-                      <span style={filterChipStyle}>
-                        Banking: {app.banking ? humanizeKey(app.banking.status) : "Not submitted"}
-                      </span>
-                      {app.banking?.status === "SUBMITTED" && (
-                        <>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              reviewBanking(app.id, "EXTERNALLY_VERIFIED");
-                            }}
-                            disabled={busyId === app.id}
-                            style={approveButtonStyle}
-                          >
-                            Mark verified
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              reviewBanking(app.id, "NEEDS_CORRECTION");
-                            }}
-                            disabled={busyId === app.id}
-                            style={rejectButtonStyle}
-                          >
-                            Needs correction
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              reviewBanking(app.id, "FAILED");
-                            }}
-                            disabled={busyId === app.id}
-                            style={rejectButtonStyle}
-                          >
-                            Fail
-                          </button>
-                        </>
-                      )}
-                      <span style={filterChipStyle}>
-                        Agreements: {app.agreements.length}/4 accepted
-                      </span>
-                    </div>
-                    {app.identityDocuments.length > 0 && (
-                      <div style={{ marginTop: "0.6rem", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                        {app.identityDocuments.map((d) => (
-                          <a
-                            key={d.id}
-                            href={d.signedUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            style={{ ...filterChipStyle, textDecoration: "none" }}
-                          >
-                            View {humanizeKey(d.type)} ↗
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                <div style={mutedSmallStyle}>
+                  {app.email} · {app.city}, {app.country} · applied {new Date(app.createdAt).toLocaleDateString()}
+                </div>
+                <div style={mutedSmallStyle}>
+                  {app.platforms.length} platform{app.platforms.length === 1 ? "" : "s"} · Identity:{" "}
+                  {app.identity ? humanizeKey(app.identity.status) : "Not submitted"} · Banking:{" "}
+                  {app.banking ? humanizeKey(app.banking.status) : "Not submitted"} · Agreements:{" "}
+                  {app.agreements.length}/4
+                </div>
               </div>
-            );
-          })}
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
+                <select
+                  value={app.status}
+                  disabled={busyId === app.id}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => changeStatus(app.id, e.target.value)}
+                  style={statusSelectStyle}
+                >
+                  {FOUNDING_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s.replace(/_/g, " ")}
+                    </option>
+                  ))}
+                </select>
+                <span style={{ ...filterChipStyle, textDecoration: "none" }}>View full profile →</span>
+              </div>
+            </div>
+          ))}
         </div>
+      )}
+    </section>
+  );
+}
+
+interface FoundingApplicationDetail {
+  id: string;
+  fullName: string;
+  stageName: string;
+  email: string;
+  phone: string;
+  country: string;
+  city: string;
+  platforms: PlatformEntryView[];
+  audienceSize: string | null;
+  monetisationExperience: string | null;
+  creatingSince: string | null;
+  currentlyMonetising: boolean | null;
+  status: string;
+  adminNotes: string | null;
+  createdAt: string;
+  identity: {
+    legalName: string;
+    dateOfBirth: string;
+    nationality: string;
+    maskedIdNumber: string;
+    status: string;
+    submittedAt: string | null;
+    reviewedAt: string | null;
+    failureReason: string | null;
+  } | null;
+  contact: {
+    emailVerified: boolean;
+    emailVerifiedAt: string | null;
+    whatsappVerified: boolean;
+    whatsappVerifiedAt: string | null;
+  } | null;
+  location: {
+    status: string;
+    detectedCountry: string | null;
+    detectionSignal: string;
+    detectionTimestamp: string;
+    rejectionReason: string | null;
+  } | null;
+  banking: {
+    status: string;
+    bankName: string;
+    accountHolderName: string;
+    maskedAccountNumber: string;
+    accountType: string;
+    branchCode: string;
+    externalVerificationRef: string | null;
+    verifiedAt: string | null;
+  } | null;
+  identityDocuments: { id: string; type: string; status: string; uploadedAt: string; signedUrl: string }[];
+  agreements: { type: string; version: string; title: string; bodyText: string; acceptedAt: string }[];
+  linkedAccount: {
+    userId: string;
+    contentCount: number;
+    activeSubscribers: number;
+    revenueUsd: string;
+    creatorProfileId: string;
+  } | null;
+  activity: { id: string; action: string; actorEmail: string; createdAt: string }[];
+}
+
+const CREATOR_DETAIL_TABS = [
+  "Overview",
+  "Identity",
+  "Verification",
+  "Contact",
+  "Location",
+  "Creator Profile",
+  "Content",
+  "Subscribers",
+  "Revenue",
+  "Banking",
+  "Agreements",
+  "Activity",
+] as const;
+type CreatorDetailTab = (typeof CREATOR_DETAIL_TABS)[number];
+
+/**
+ * MASTER REQUIREMENTS §15 "Admin Creator Detail" — a FoundingApplication
+ * detail view, not CreatorProfile, because every identity/contact/
+ * location/banking/agreement field only ever gets written to a
+ * FoundingApplication (see the plan file's own reasoning: no FK exists
+ * either direction between it and User/CreatorProfile, and nothing
+ * populates those five entities for a real account today). Content/
+ * Subscribers/Revenue are the one exception — sourced from a real
+ * linked account when one exists (matched by email at fetch time, see
+ * the GET route), with an honest empty state otherwise.
+ *
+ * First tab-strip UI in this file — both prior detail views
+ * (MemberDetailView, ModerationCaseDetailView) are single-scroll. Kept
+ * deliberately as plain local state + buttons, not a reusable
+ * component, since this is the only place that needs it.
+ */
+function FoundingApplicationDetailView({
+  id,
+  onBack,
+  onChanged,
+  changeStatus,
+  busy,
+}: {
+  id: string;
+  onBack: () => void;
+  onChanged: () => void;
+  changeStatus: (id: string, status: string) => Promise<void>;
+  busy: boolean;
+}) {
+  const [data, setData] = useState<FoundingApplicationDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<CreatorDetailTab>("Overview");
+  const [busyAction, setBusyAction] = useState(false);
+
+  function reload() {
+    setLoading(true);
+    fetch(`/api/admin/founding-applications/${id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setData)
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(reload, [id]);
+
+  async function confirmWhatsapp() {
+    setBusyAction(true);
+    const res = await fetch(`/api/admin/founding-applications/${id}/confirm-whatsapp`, { method: "POST" });
+    setBusyAction(false);
+    if (res.ok) {
+      reload();
+      onChanged();
+    } else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error ?? "Couldn't confirm WhatsApp.");
+    }
+  }
+
+  async function reviewIdentity(status: "VERIFIED" | "FAILED") {
+    const failureReason =
+      status === "FAILED" ? window.prompt("Reason (shown to no one but admins, optional):") ?? undefined : undefined;
+    setBusyAction(true);
+    const res = await fetch(`/api/admin/founding-applications/${id}/identity-review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, failureReason }),
+    });
+    setBusyAction(false);
+    if (res.ok) {
+      reload();
+      onChanged();
+    } else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error ?? "Couldn't submit identity review.");
+    }
+  }
+
+  async function reviewBanking(status: "EXTERNALLY_VERIFIED" | "FAILED" | "NEEDS_CORRECTION") {
+    const adminNotes =
+      status !== "EXTERNALLY_VERIFIED"
+        ? window.prompt("Notes (shown to no one but admins, optional):") ?? undefined
+        : undefined;
+    setBusyAction(true);
+    const res = await fetch(`/api/admin/founding-applications/${id}/banking-review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, adminNotes }),
+    });
+    setBusyAction(false);
+    if (res.ok) {
+      reload();
+      onChanged();
+    } else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error ?? "Couldn't submit banking review.");
+    }
+  }
+
+  async function handleStatusChange(newStatus: string) {
+    await changeStatus(id, newStatus);
+    reload();
+  }
+
+  return (
+    <section style={{ marginBottom: "3rem" }}>
+      <button onClick={onBack} style={{ ...tabButtonStyle, marginBottom: "1.25rem" }}>
+        ← Back to list
+      </button>
+
+      {loading || !data ? (
+        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+      ) : (
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", marginBottom: "1.25rem" }}>
+            <div>
+              <h2 style={{ ...sectionHeadingStyle, margin: 0 }}>
+                {data.stageName} · {data.fullName}
+              </h2>
+              <div style={mutedSmallStyle}>
+                {data.email} · {data.city}, {data.country} · applied {new Date(data.createdAt).toLocaleDateString()}
+              </div>
+            </div>
+            <select
+              value={data.status}
+              disabled={busy}
+              onChange={(e) => handleStatusChange(e.target.value)}
+              style={statusSelectStyle}
+            >
+              {FOUNDING_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s.replace(/_/g, " ")}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "1.5rem" }}>
+            {CREATOR_DETAIL_TABS.map((t) => (
+              <button key={t} onClick={() => setTab(t)} style={t === tab ? tabButtonActiveStyle : tabButtonStyle}>
+                {t}
+              </button>
+            ))}
+          </div>
+
+          {tab === "Overview" && (
+            <StatGroup title="Overview">
+              <Stat label="Pipeline stage" value={humanizeKey(data.status)} />
+              <Stat label="Identity" value={data.identity ? humanizeKey(data.identity.status) : "Not submitted"} alert={data.identity?.status === "SUBMITTED"} />
+              <Stat label="Email" value={data.contact?.emailVerified ? "Verified" : "Unverified"} />
+              <Stat label="WhatsApp" value={data.contact?.whatsappVerified ? "Verified" : "Unverified"} alert={data.contact !== null && !data.contact.whatsappVerified && data.contact.emailVerified} />
+              <Stat label="Banking" value={data.banking ? humanizeKey(data.banking.status) : "Not submitted"} alert={data.banking?.status === "SUBMITTED"} />
+              <Stat label="Agreements" value={`${data.agreements.length}/4 accepted`} />
+              <Stat label="Registered account" value={data.linkedAccount ? "Yes" : "Not yet"} />
+            </StatGroup>
+          )}
+
+          {tab === "Identity" && (
+            <StatGroup title="Identity">
+              {!data.identity ? (
+                <p style={{ color: "var(--text-muted)" }}>Not submitted yet.</p>
+              ) : (
+                <>
+                  <Stat label="Legal name" value={data.identity.legalName} />
+                  <Stat label="Date of birth" value={new Date(data.identity.dateOfBirth).toLocaleDateString()} />
+                  <Stat label="Nationality" value={data.identity.nationality} />
+                  <Stat label="ID / passport number" value={data.identity.maskedIdNumber} />
+                  <Stat label="Status" value={humanizeKey(data.identity.status)} />
+                  {data.identity.failureReason && <Stat label="Failure reason" value={data.identity.failureReason} />}
+                </>
+              )}
+              {data.identityDocuments.length > 0 && (
+                <div style={{ marginTop: "0.8rem", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                  {data.identityDocuments.map((d) => (
+                    <a key={d.id} href={d.signedUrl} target="_blank" rel="noreferrer" style={{ ...filterChipStyle, textDecoration: "none" }}>
+                      View {humanizeKey(d.type)} ↗
+                    </a>
+                  ))}
+                </div>
+              )}
+              {data.identity?.status === "SUBMITTED" && (
+                <div style={{ marginTop: "0.8rem", display: "flex", gap: "0.5rem" }}>
+                  <button onClick={() => reviewIdentity("VERIFIED")} disabled={busyAction} style={approveButtonStyle}>
+                    Verify identity
+                  </button>
+                  <button onClick={() => reviewIdentity("FAILED")} disabled={busyAction} style={rejectButtonStyle}>
+                    Fail identity
+                  </button>
+                </div>
+              )}
+            </StatGroup>
+          )}
+
+          {tab === "Verification" && (
+            <StatGroup title="Verification checklist">
+              <Stat label="Location" value={data.location?.status === "SOUTH_AFRICA" ? "✓ South Africa" : "○ " + (data.location ? humanizeKey(data.location.status) : "Pending")} />
+              <Stat label="Identity" value={data.identity?.status === "VERIFIED" ? "✓ Verified" : "○ " + (data.identity ? humanizeKey(data.identity.status) : "Not submitted")} />
+              <Stat label="Email" value={data.contact?.emailVerified ? "✓ Verified" : "○ Unverified"} />
+              <Stat label="WhatsApp" value={data.contact?.whatsappVerified ? "✓ Verified" : "○ Unverified"} />
+              <Stat label="Banking" value={data.banking?.status === "EXTERNALLY_VERIFIED" ? "✓ Verified" : "○ " + (data.banking ? humanizeKey(data.banking.status) : "Not submitted")} />
+            </StatGroup>
+          )}
+
+          {tab === "Contact" && (
+            <StatGroup title="Contact">
+              <Stat label="Email" value={data.contact?.emailVerified ? "Verified" : "Unverified"} />
+              {data.contact?.emailVerifiedAt && <Stat label="Email verified at" value={new Date(data.contact.emailVerifiedAt).toLocaleString()} />}
+              <Stat label="WhatsApp" value={data.contact?.whatsappVerified ? "Verified" : "Unverified"} />
+              {data.contact?.whatsappVerifiedAt && <Stat label="WhatsApp verified at" value={new Date(data.contact.whatsappVerifiedAt).toLocaleString()} />}
+              {data.contact && !data.contact.whatsappVerified && (
+                <div style={{ marginTop: "0.6rem" }}>
+                  <button onClick={confirmWhatsapp} disabled={busyAction} style={approveButtonStyle}>
+                    Confirm WhatsApp
+                  </button>
+                </div>
+              )}
+            </StatGroup>
+          )}
+
+          {tab === "Location" && (
+            <StatGroup title="Location">
+              {!data.location ? (
+                <p style={{ color: "var(--text-muted)" }}>Pending.</p>
+              ) : (
+                <>
+                  <Stat label="Status" value={humanizeKey(data.location.status)} />
+                  <Stat label="Detected country" value={data.location.detectedCountry ?? "Unknown"} />
+                  <Stat label="Detection signal" value={humanizeKey(data.location.detectionSignal)} />
+                  <Stat label="Detected at" value={new Date(data.location.detectionTimestamp).toLocaleString()} />
+                  {data.location.rejectionReason && <Stat label="Rejection reason" value={data.location.rejectionReason} />}
+                </>
+              )}
+            </StatGroup>
+          )}
+
+          {tab === "Creator Profile" && (
+            <StatGroup title="Creator profile">
+              <Stat label="Stage name" value={data.stageName} />
+              {data.audienceSize && <Stat label="Audience size" value={data.audienceSize} />}
+              {data.creatingSince && <Stat label="Creating since" value={data.creatingSince} />}
+              {data.currentlyMonetising !== null && <Stat label="Currently monetising" value={data.currentlyMonetising ? "Yes" : "Not yet"} />}
+              {data.monetisationExperience && <Stat label="Monetisation experience" value={data.monetisationExperience} />}
+              <div style={{ marginTop: "0.6rem" }}>
+                {data.platforms.map((p, i) => (
+                  <div key={i} style={mutedSmallStyle}>
+                    {p.category === "creator" ? "Creator platform" : "Social"} · {p.platform}
+                    {p.handle ? ` · @${p.handle}` : ""}
+                    {p.followers ? ` · ${p.followers} followers` : ""}
+                    {p.link ? (
+                      <>
+                        {" · "}
+                        <a href={p.link} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
+                          link
+                        </a>
+                      </>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </StatGroup>
+          )}
+
+          {tab === "Content" && (
+            <StatGroup title="Content">
+              {data.linkedAccount ? (
+                <Stat label="Content items" value={data.linkedAccount.contentCount} />
+              ) : (
+                <p style={{ color: "var(--text-muted)" }}>Not yet a registered creator — no account exists to have content.</p>
+              )}
+            </StatGroup>
+          )}
+
+          {tab === "Subscribers" && (
+            <StatGroup title="Subscribers">
+              {data.linkedAccount ? (
+                <Stat label="Active subscribers" value={data.linkedAccount.activeSubscribers} />
+              ) : (
+                <p style={{ color: "var(--text-muted)" }}>Not yet a registered creator — no account exists to have subscribers.</p>
+              )}
+            </StatGroup>
+          )}
+
+          {tab === "Revenue" && (
+            <StatGroup title="Revenue">
+              {data.linkedAccount ? (
+                <Stat label="Creator share, all-time" value={`$${data.linkedAccount.revenueUsd}`} />
+              ) : (
+                <p style={{ color: "var(--text-muted)" }}>Not yet a registered creator — no account exists to have revenue.</p>
+              )}
+            </StatGroup>
+          )}
+
+          {tab === "Banking" && (
+            <StatGroup title="Banking">
+              {!data.banking ? (
+                <p style={{ color: "var(--text-muted)" }}>Not submitted yet.</p>
+              ) : (
+                <>
+                  <Stat label="Bank" value={data.banking.bankName} />
+                  <Stat label="Account holder" value={data.banking.accountHolderName} />
+                  <Stat label="Account number" value={data.banking.maskedAccountNumber} />
+                  <Stat label="Account type" value={humanizeKey(data.banking.accountType)} />
+                  <Stat label="Branch code" value={data.banking.branchCode} />
+                  <Stat label="Status" value={humanizeKey(data.banking.status)} />
+                  {data.banking.externalVerificationRef && <Stat label="External reference" value={data.banking.externalVerificationRef} />}
+                  {data.banking.verifiedAt && <Stat label="Verified at" value={new Date(data.banking.verifiedAt).toLocaleString()} />}
+                </>
+              )}
+              {data.banking?.status === "SUBMITTED" && (
+                <div style={{ marginTop: "0.8rem", display: "flex", gap: "0.5rem" }}>
+                  <button onClick={() => reviewBanking("EXTERNALLY_VERIFIED")} disabled={busyAction} style={approveButtonStyle}>
+                    Mark verified
+                  </button>
+                  <button onClick={() => reviewBanking("NEEDS_CORRECTION")} disabled={busyAction} style={rejectButtonStyle}>
+                    Needs correction
+                  </button>
+                  <button onClick={() => reviewBanking("FAILED")} disabled={busyAction} style={rejectButtonStyle}>
+                    Fail
+                  </button>
+                </div>
+              )}
+            </StatGroup>
+          )}
+
+          {tab === "Agreements" && (
+            <StatGroup title="Agreements">
+              {data.agreements.length === 0 ? (
+                <p style={{ color: "var(--text-muted)" }}>None accepted yet.</p>
+              ) : (
+                data.agreements.map((a) => (
+                  <div key={a.type} style={{ marginBottom: "1rem" }}>
+                    <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>
+                      {a.title} ({a.version})
+                    </div>
+                    <div style={mutedSmallStyle}>Accepted {new Date(a.acceptedAt).toLocaleString()}</div>
+                    <details style={{ marginTop: "0.4rem" }}>
+                      <summary style={{ cursor: "pointer", fontSize: "0.85rem", color: "var(--accent)" }}>View full text</summary>
+                      <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", whiteSpace: "pre-wrap", marginTop: "0.4rem" }}>
+                        {a.bodyText}
+                      </p>
+                    </details>
+                  </div>
+                ))
+              )}
+            </StatGroup>
+          )}
+
+          {tab === "Activity" && (
+            <StatGroup title="Activity / audit history">
+              {data.activity.length === 0 ? (
+                <p style={{ color: "var(--text-muted)" }}>No recorded activity yet.</p>
+              ) : (
+                data.activity.map((a) => (
+                  <div key={a.id} style={auditRowStyle}>
+                    <span>{humanizeKey(a.action)}</span>
+                    <span style={mutedSmallStyle}>
+                      {a.actorEmail} · {new Date(a.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                ))
+              )}
+            </StatGroup>
+          )}
+        </>
       )}
     </section>
   );
