@@ -781,6 +781,9 @@ interface MemberDetailData {
   isActive: boolean;
   suspendedAt: string | null;
   ageVerified: boolean;
+  ageVerifiedAt: string | null;
+  emailVerified: boolean;
+  emailVerifiedAt: string | null;
   createdAt: string;
   lastSession: { at: string; ipAddress: string | null } | null;
   foundingApplication: { id: string; status: string; appliedAt: string } | null;
@@ -800,6 +803,8 @@ interface MemberDetailData {
     tipsUsd: string;
     activeCreatorSubscriptions: number;
     activeVipPass: { priceUsd: string; currentPeriodEnd: string } | null;
+    subscriptions: { creatorProfileId: string; creatorDisplayName: string; priceUsd: string; currentPeriodEnd: string }[];
+    paymentHistory: { id: string; type: "purchase" | "tip"; amountUsd: string; refunded: boolean; createdAt: string }[];
   } | null;
   recentActivity: {
     id: string;
@@ -816,11 +821,24 @@ interface MemberDetailData {
   };
 }
 
+const MEMBER_DETAIL_TABS = [
+  "Overview",
+  "Contact",
+  "Verification",
+  "Location",
+  "Subscriptions",
+  "Payment History",
+  "Moderation",
+  "Activity",
+] as const;
+type MemberDetailTab = (typeof MEMBER_DETAIL_TABS)[number];
+
 function MemberDetailView({ userId, onBack, onChanged }: { userId: string; onBack: () => void; onChanged: () => void }) {
   const [data, setData] = useState<MemberDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<MemberDetailTab>("Overview");
 
   useEffect(() => {
     let cancelled = false;
@@ -903,92 +921,189 @@ function MemberDetailView({ userId, onBack, onChanged }: { userId: string; onBac
             )}
           </div>
 
-          {data.foundingApplication && (
-            <StatGroup title="Founding Baddie application">
-              <Stat label="Status" value={humanizeKey(data.foundingApplication.status)} />
-              <Stat label="Applied" value={new Date(data.foundingApplication.appliedAt).toLocaleDateString()} />
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "1.5rem" }}>
+            {MEMBER_DETAIL_TABS.map((t) => (
+              <button key={t} onClick={() => setTab(t)} style={t === tab ? tabButtonActiveStyle : tabButtonStyle}>
+                {t}
+              </button>
+            ))}
+          </div>
+
+          {tab === "Overview" && (
+            <>
+              {data.foundingApplication && (
+                <StatGroup title="Founding Baddie application">
+                  <Stat label="Status" value={humanizeKey(data.foundingApplication.status)} />
+                  <Stat label="Applied" value={new Date(data.foundingApplication.appliedAt).toLocaleDateString()} />
+                </StatGroup>
+              )}
+
+              {data.creatorProfile && (
+                <>
+                  <StatGroup title="Creator performance">
+                    <Stat label="Status" value={humanizeKey(data.creatorProfile.status)} />
+                    <Stat label="Content" value={data.creatorProfile.contentCount} />
+                    <Stat label="Active subscribers" value={data.creatorProfile.activeSubscribers} />
+                    <Stat label="Revenue (earned)" value={money(data.creatorProfile.revenueUsd)} />
+                    <Stat label="Live now" value={data.creatorProfile.isLive ? "Yes" : "No"} />
+                    {data.creatorProfile.approvedAt && (
+                      <Stat label="Approved" value={new Date(data.creatorProfile.approvedAt).toLocaleDateString()} />
+                    )}
+                  </StatGroup>
+                  {data.creatorProfile.recentContent.length > 0 && (
+                    <div style={{ marginBottom: "2rem" }}>
+                      <h3 style={statGroupHeadingStyle}>Recent content</h3>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                        {data.creatorProfile.recentContent.map((c) => (
+                          <div key={c.id} style={auditRowStyle}>
+                            <span style={{ fontWeight: 600 }}>
+                              {humanizeKey(c.mediaType)} · {humanizeKey(c.accessLevel)}
+                            </span>
+                            <span style={mutedSmallStyle}>
+                              {humanizeKey(c.status)} · {new Date(c.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {data.fanFinancials && (
+                <StatGroup title="Financials">
+                  <Stat label="Purchases" value={money(data.fanFinancials.purchasesUsd)} />
+                  <Stat label="Tips" value={money(data.fanFinancials.tipsUsd)} />
+                  <Stat label="Active creator subscriptions" value={data.fanFinancials.activeCreatorSubscriptions} />
+                  <Stat label="VIP pass" value={data.fanFinancials.activeVipPass ? money(data.fanFinancials.activeVipPass.priceUsd) + "/mo" : "None"} />
+                </StatGroup>
+              )}
+            </>
+          )}
+
+          {tab === "Contact" && (
+            <StatGroup title="Contact">
+              <Stat label="Email" value={data.emailVerified ? "Verified" : "Unverified"} />
+              {data.emailVerifiedAt && <Stat label="Verified at" value={new Date(data.emailVerifiedAt).toLocaleString()} />}
             </StatGroup>
           )}
 
-          {data.creatorProfile && (
+          {tab === "Verification" && (
+            <StatGroup title="Verification">
+              <Stat label="Age" value={data.ageVerified ? "Confirmed (self-declared)" : "Not confirmed"} />
+              {data.ageVerifiedAt && <Stat label="Confirmed at" value={new Date(data.ageVerifiedAt).toLocaleString()} />}
+              <p style={{ ...mutedSmallStyle, marginTop: "0.6rem", maxWidth: "480px" }}>
+                Fans aren&apos;t required to submit identity documents in V1 — this is the 18+ checkbox
+                confirmed at registration, not ID-based verification.
+              </p>
+            </StatGroup>
+          )}
+
+          {tab === "Location" && (
+            <StatGroup title="Location">
+              <Stat label="Country" value={data.country ?? "Not provided"} />
+              <Stat label="City" value={data.city ?? "Not provided"} />
+              <p style={{ ...mutedSmallStyle, marginTop: "0.6rem", maxWidth: "480px" }}>
+                Self-reported at registration (optionally assisted by browser geolocation) — not
+                server-verified the way a creator&apos;s location is.
+              </p>
+            </StatGroup>
+          )}
+
+          {tab === "Subscriptions" && (
+            <StatGroup title="Subscriptions">
+              {!data.fanFinancials ? (
+                <p style={{ color: "var(--text-muted)" }}>N/A — this is a creator account.</p>
+              ) : data.fanFinancials.subscriptions.length === 0 && !data.fanFinancials.activeVipPass ? (
+                <p style={{ color: "var(--text-muted)" }}>No active subscriptions.</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                  {data.fanFinancials.activeVipPass && (
+                    <div style={auditRowStyle}>
+                      <span style={{ fontWeight: 600 }}>VIP pass (platform-wide)</span>
+                      <span style={mutedSmallStyle}>
+                        {money(data.fanFinancials.activeVipPass.priceUsd)}/mo · renews{" "}
+                        {new Date(data.fanFinancials.activeVipPass.currentPeriodEnd).toLocaleDateString()}
+                      </span>
+                    </div>
+                  )}
+                  {data.fanFinancials.subscriptions.map((s) => (
+                    <div key={s.creatorProfileId} style={auditRowStyle}>
+                      <span style={{ fontWeight: 600 }}>{s.creatorDisplayName}</span>
+                      <span style={mutedSmallStyle}>
+                        {money(s.priceUsd)}/mo · renews {new Date(s.currentPeriodEnd).toLocaleDateString()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </StatGroup>
+          )}
+
+          {tab === "Payment History" && (
+            <StatGroup title="Payment history">
+              {!data.fanFinancials ? (
+                <p style={{ color: "var(--text-muted)" }}>N/A — this is a creator account.</p>
+              ) : data.fanFinancials.paymentHistory.length === 0 ? (
+                <p style={{ color: "var(--text-muted)" }}>No payments yet.</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                  {data.fanFinancials.paymentHistory.map((p) => (
+                    <div key={`${p.type}-${p.id}`} style={auditRowStyle}>
+                      <span style={{ fontWeight: 600 }}>
+                        {p.type === "purchase" ? "Content purchase" : "Tip"} · {money(p.amountUsd)}
+                        {p.refunded ? " (refunded)" : ""}
+                      </span>
+                      <span style={mutedSmallStyle}>{new Date(p.createdAt).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </StatGroup>
+          )}
+
+          {tab === "Moderation" && (
             <>
-              <StatGroup title="Creator performance">
-                <Stat label="Status" value={humanizeKey(data.creatorProfile.status)} />
-                <Stat label="Content" value={data.creatorProfile.contentCount} />
-                <Stat label="Active subscribers" value={data.creatorProfile.activeSubscribers} />
-                <Stat label="Revenue (earned)" value={money(data.creatorProfile.revenueUsd)} />
-                <Stat label="Live now" value={data.creatorProfile.isLive ? "Yes" : "No"} />
-                {data.creatorProfile.approvedAt && (
-                  <Stat label="Approved" value={new Date(data.creatorProfile.approvedAt).toLocaleDateString()} />
-                )}
-              </StatGroup>
-              {data.creatorProfile.recentContent.length > 0 && (
-                <div style={{ marginBottom: "2rem" }}>
-                  <h3 style={statGroupHeadingStyle}>Recent content</h3>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                    {data.creatorProfile.recentContent.map((c) => (
-                      <div key={c.id} style={auditRowStyle}>
-                        <span style={{ fontWeight: 600 }}>
-                          {humanizeKey(c.mediaType)} · {humanizeKey(c.accessLevel)}
-                        </span>
-                        <span style={mutedSmallStyle}>
-                          {humanizeKey(c.status)} · {new Date(c.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+              {data.moderation.reportsFiled.length === 0 && data.moderation.reportsAgainst.length === 0 ? (
+                <p style={{ color: "var(--text-muted)" }}>No moderation history.</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                  {data.moderation.reportsAgainst.map((r) => (
+                    <div key={r.id} style={{ ...auditRowStyle, borderColor: "var(--danger)" }}>
+                      <span style={{ fontWeight: 600, color: "var(--danger)" }}>Reported: {humanizeKey(r.reason)}</span>
+                      <span style={mutedSmallStyle}>{new Date(r.createdAt).toLocaleString()}</span>
+                    </div>
+                  ))}
+                  {data.moderation.reportsFiled.map((r) => (
+                    <div key={r.id} style={auditRowStyle}>
+                      <span style={{ fontWeight: 600 }}>Filed a report: {humanizeKey(r.reason)}</span>
+                      <span style={mutedSmallStyle}>{new Date(r.createdAt).toLocaleString()}</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </>
           )}
 
-          {data.fanFinancials && (
-            <StatGroup title="Financials">
-              <Stat label="Purchases" value={money(data.fanFinancials.purchasesUsd)} />
-              <Stat label="Tips" value={money(data.fanFinancials.tipsUsd)} />
-              <Stat label="Active creator subscriptions" value={data.fanFinancials.activeCreatorSubscriptions} />
-              <Stat label="VIP pass" value={data.fanFinancials.activeVipPass ? money(data.fanFinancials.activeVipPass.priceUsd) + "/mo" : "None"} />
-            </StatGroup>
+          {tab === "Activity" && (
+            <>
+              {data.recentActivity.length === 0 ? (
+                <p style={{ color: "var(--text-muted)" }}>Nothing yet.</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                  {data.recentActivity.map((a) => (
+                    <div key={a.id} style={auditRowStyle}>
+                      <span style={{ fontWeight: 600, textTransform: "capitalize" }}>{a.action.replace(/[._]/g, " ")}</span>
+                      <span style={mutedSmallStyle}>
+                        {a.isActor ? "by this member" : `on this member (by ${a.actorEmail})`} ·{" "}
+                        {new Date(a.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
-
-          {(data.moderation.reportsFiled.length > 0 || data.moderation.reportsAgainst.length > 0) && (
-            <div style={{ marginBottom: "2rem" }}>
-              <h3 style={statGroupHeadingStyle}>Moderation flags</h3>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                {data.moderation.reportsAgainst.map((r) => (
-                  <div key={r.id} style={{ ...auditRowStyle, borderColor: "var(--danger)" }}>
-                    <span style={{ fontWeight: 600, color: "var(--danger)" }}>Reported: {humanizeKey(r.reason)}</span>
-                    <span style={mutedSmallStyle}>{new Date(r.createdAt).toLocaleString()}</span>
-                  </div>
-                ))}
-                {data.moderation.reportsFiled.map((r) => (
-                  <div key={r.id} style={auditRowStyle}>
-                    <span style={{ fontWeight: 600 }}>Filed a report: {humanizeKey(r.reason)}</span>
-                    <span style={mutedSmallStyle}>{new Date(r.createdAt).toLocaleString()}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div>
-            <h3 style={statGroupHeadingStyle}>Recent activity</h3>
-            {data.recentActivity.length === 0 ? (
-              <p style={{ color: "var(--text-muted)" }}>Nothing yet.</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                {data.recentActivity.map((a) => (
-                  <div key={a.id} style={auditRowStyle}>
-                    <span style={{ fontWeight: 600, textTransform: "capitalize" }}>{a.action.replace(/[._]/g, " ")}</span>
-                    <span style={mutedSmallStyle}>
-                      {a.isActor ? "by this member" : `on this member (by ${a.actorEmail})`} ·{" "}
-                      {new Date(a.createdAt).toLocaleString()}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </>
       )}
     </section>

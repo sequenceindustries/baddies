@@ -55,6 +55,8 @@ export async function GET(_req: Request, { params }: { params: { userId: string 
     tipSum,
     activeSubscriptions,
     activeUnlimitedSub,
+    recentPurchases,
+    recentTips,
   ] = await Promise.all([
     db.foundingApplication.findFirst({ where: { email: user.email }, orderBy: { createdAt: "desc" } }),
     db.session.findFirst({ where: { userId: user.id, revokedAt: null }, orderBy: { createdAt: "desc" }, select: { createdAt: true, ipAddress: true } }),
@@ -81,12 +83,67 @@ export async function GET(_req: Request, { params }: { params: { userId: string 
       : Promise.resolve([]),
     db.purchase.aggregate({ where: { fanId: user.id }, _sum: { priceUsd: true } }),
     db.tip.aggregate({ where: { fanId: user.id }, _sum: { amountUsd: true } }),
+    // Itemized (MASTER REQUIREMENTS §16 "Subscriptions" wants which
+    // creators, not just a count). Subscription.creatorProfileId is a
+    // plain FK column with no declared Prisma relation (confirmed by
+    // reading the schema directly) — the creator's display name is
+    // batch-fetched separately below rather than joined here.
     db.subscription.findMany({
       where: { fanId: user.id, status: "ACTIVE" },
       select: { creatorProfileId: true, priceUsdAtPurchase: true, currentPeriodEnd: true },
     }),
     db.unlimitedSubscription.findFirst({ where: { fanId: user.id, status: "ACTIVE" }, select: { priceUsdAtPurchase: true, currentPeriodEnd: true } }),
+    // Itemized payment history (§16 "Payment history") — the same
+    // fan-scoped where clause as the aggregates above, just findMany
+    // instead of aggregate. Merged with tips and sorted client-side
+    // (below) rather than a raw SQL UNION for what's a small, bounded
+    // admin-facing list.
+    db.purchase.findMany({
+      where: { fanId: user.id },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      select: { id: true, priceUsd: true, createdAt: true, refundedAt: true },
+    }),
+    db.tip.findMany({
+      where: { fanId: user.id },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      select: { id: true, amountUsd: true, createdAt: true },
+    }),
   ]);
+
+  // Batch-fetch the display names for the subscribed-to creators — see
+  // the query above's own comment on why this isn't a join.
+  const subscribedCreatorProfiles =
+    activeSubscriptions.length > 0
+      ? await db.creatorProfile.findMany({
+          where: { id: { in: activeSubscriptions.map((s) => s.creatorProfileId) } },
+          select: { id: true, user: { select: { profile: { select: { displayName: true } } } } },
+        })
+      : [];
+  const creatorNameById = new Map(subscribedCreatorProfiles.map((c) => [c.id, c.user.profile?.displayName ?? null]));
+
+  // Merged, sorted payment history (§16) — Purchase and Tip are
+  // separate tables with no shared base, so this is assembled here
+  // rather than as a single query.
+  const paymentHistory = [
+    ...recentPurchases.map((p) => ({
+      id: p.id,
+      type: "purchase" as const,
+      amountUsd: p.priceUsd.toString(),
+      refunded: p.refundedAt !== null,
+      createdAt: p.createdAt,
+    })),
+    ...recentTips.map((t) => ({
+      id: t.id,
+      type: "tip" as const,
+      amountUsd: t.amountUsd.toString(),
+      refunded: false,
+      createdAt: t.createdAt,
+    })),
+  ]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 20);
 
   return NextResponse.json({
     userId: user.id,
@@ -99,6 +156,9 @@ export async function GET(_req: Request, { params }: { params: { userId: string 
     isActive: user.isActive,
     suspendedAt: user.suspendedAt,
     ageVerified: user.ageVerified,
+    ageVerifiedAt: user.ageVerifiedAt,
+    emailVerified: user.emailVerified !== null,
+    emailVerifiedAt: user.emailVerified,
     createdAt: user.createdAt,
     lastSession: lastSession ? { at: lastSession.createdAt, ipAddress: lastSession.ipAddress } : null,
     foundingApplication: foundingApplication
@@ -131,6 +191,16 @@ export async function GET(_req: Request, { params }: { params: { userId: string 
           activeVipPass: activeUnlimitedSub
             ? { priceUsd: activeUnlimitedSub.priceUsdAtPurchase.toString(), currentPeriodEnd: activeUnlimitedSub.currentPeriodEnd }
             : null,
+          // Itemized — §16 "Subscriptions" wants which creators, not
+          // just a count (activeCreatorSubscriptions above is kept too,
+          // for the existing Overview summary line).
+          subscriptions: activeSubscriptions.map((s) => ({
+            creatorProfileId: s.creatorProfileId,
+            creatorDisplayName: creatorNameById.get(s.creatorProfileId) ?? "Unknown creator",
+            priceUsd: s.priceUsdAtPurchase.toString(),
+            currentPeriodEnd: s.currentPeriodEnd,
+          })),
+          paymentHistory,
         }
       : null,
     recentActivity: recentActivity.map((a) => ({

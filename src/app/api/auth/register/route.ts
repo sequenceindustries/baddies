@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db/client";
 import type { Prisma } from "@prisma/client";
 import { hashPassword, createSession } from "@/lib/auth/session";
+import { sendUserEmailVerification } from "@/lib/notifications/user-email-verification";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -47,12 +48,30 @@ export async function POST(req: NextRequest) {
         email,
         passwordHash,
         role: "FAN",
+        // confirmsAdult is already a required, zod-enforced checkbox
+        // above — this persists that fact rather than dropping it, per
+        // the plan's own note: not new fabrication, just recording a
+        // self-attestation the route already requires. Labeled "Age
+        // confirmed (self-declared)" wherever shown to an admin, never
+        // "ID-verified" — real ID-based age verification for fans is
+        // explicitly out of scope for V1 (see MASTER REQUIREMENTS §9).
+        ageVerified: true,
+        ageVerifiedAt: new Date(),
         profile: { create: { displayName, country, city } },
         wallet: { create: {} },
       },
     });
     return created;
   });
+
+  // Never lets a notification failure fail or block registration itself
+  // — the account above is already committed regardless, same reasoning
+  // as every other notification send in this codebase.
+  try {
+    await sendUserEmailVerification(user.id, user.email, displayName);
+  } catch (err) {
+    console.error("[register] email verification send failed", err);
+  }
 
   const { token, expiresAt } = await createSession(user.id, user.role, {
     userAgent: req.headers.get("user-agent") ?? undefined,
