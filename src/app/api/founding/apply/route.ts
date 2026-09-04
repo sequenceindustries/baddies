@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db/client";
-import { getRequestCountry, isSouthAfrica, NOT_SOUTH_AFRICA_MESSAGE } from "@/lib/security/geo";
+import type { Prisma } from "@prisma/client";
+import {
+  getRequestCountry,
+  getRequestLocation,
+  isSouthAfrica,
+  NOT_SOUTH_AFRICA_MESSAGE,
+} from "@/lib/security/geo";
 import { notifyFoundingApplicationReceived } from "@/lib/notifications/founding-application";
 
 // Always dynamic: this route writes live data and must never be
@@ -66,19 +72,63 @@ export async function POST(req: NextRequest) {
   // South African creators only, no exceptions — checked against the
   // request's actual network origin, not the free-text "Country" field
   // above (which is stored for the application record, but proves
-  // nothing on its own — see getRequestCountry's comment).
-  const country = await getRequestCountry(req);
-  if (!isSouthAfrica(country)) {
+  // nothing on its own — see getRequestLocation's comment).
+  const { country: detectedCountry, signal: detectionSignal } = await getRequestLocation(req);
+
+  // whyJoinBaddies is a required, non-null column (see the Prisma
+  // schema) from when this was still a form question. It no longer
+  // is — see the form's own removal of that field — so this writes an
+  // empty string rather than needing a migration to make the column
+  // nullable for a field nothing populates anymore.
+  const applicationData = { ...data, whyJoinBaddies: "", platforms };
+
+  if (!isSouthAfrica(detectedCountry)) {
+    // MASTER REQUIREMENTS §1/§19.2: a non-South-African detected location
+    // is an immediate rejection, not a manual-review flag — and it must
+    // leave an auditable trace (detected country/signal/timestamp/reason),
+    // not just a 403 with nothing persisted (the previous behavior here).
+    await db.$transaction(async (tx: Prisma.TransactionClient) => {
+      const created = await tx.foundingApplication.create({
+        data: { ...applicationData, status: "REJECTED" },
+      });
+      await tx.location.create({
+        data: {
+          foundingApplicationId: created.id,
+          detectedCountry,
+          detectionSignal,
+          status: "REJECTED",
+          rejectionReason: NOT_SOUTH_AFRICA_MESSAGE,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: null,
+          action: "founding_application.reject_geo",
+          targetType: "founding_application",
+          targetId: created.id,
+          metadata: { detectedCountry, detectionSignal },
+        },
+      });
+    });
     return NextResponse.json({ error: NOT_SOUTH_AFRICA_MESSAGE }, { status: 403 });
   }
 
-  const application = await db.foundingApplication.create({
-    // whyJoinBaddies is a required, non-null column (see the Prisma
-    // schema) from when this was still a form question. It no longer
-    // is — see the form's own removal of that field — so this writes an
-    // empty string rather than needing a migration to make the column
-    // nullable for a field nothing populates anymore.
-    data: { ...data, whyJoinBaddies: "", platforms },
+  const application = await db.$transaction(async (tx) => {
+    const created = await tx.foundingApplication.create({ data: applicationData });
+    await tx.location.create({
+      data: {
+        foundingApplicationId: created.id,
+        detectedCountry,
+        detectionSignal,
+        status: "SOUTH_AFRICA",
+      },
+    });
+    // Initializes the verification-state row (both timestamps null) so
+    // it exists from the start of the pipeline rather than being
+    // lazily created whenever Phase 2's WhatsApp/email flows first touch
+    // it.
+    await tx.contact.create({ data: { foundingApplicationId: created.id } });
+    return created;
   });
 
   // Never lets a notification failure fail or block the applicant's

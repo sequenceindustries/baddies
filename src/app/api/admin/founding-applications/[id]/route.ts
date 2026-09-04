@@ -3,23 +3,14 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
+import { FOUNDING_STATUSES } from "@/lib/founding/status";
 
 // Always dynamic: this route writes live data and must never be
 // statically prerendered or cached at build time.
 export const dynamic = "force-dynamic";
 
 const UpdateSchema = z.object({
-  status: z.enum([
-    "APPLIED",
-    "REVIEWED",
-    "APPROVED",
-    "VERIFICATION_PENDING",
-    "VERIFIED",
-    "ONBOARDING",
-    "CONTENT_READY",
-    "LIVE",
-    "REJECTED",
-  ]),
+  status: z.enum(FOUNDING_STATUSES),
   adminNotes: z.string().max(4000).nullable().optional(),
 });
 

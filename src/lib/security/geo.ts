@@ -27,30 +27,62 @@ export function isSouthAfrica(country: string | null): boolean {
   return country === SOUTH_AFRICA_ISO2;
 }
 
-export async function getRequestCountry(req: Request): Promise<string | null> {
+/**
+ * Which of the resolution paths in getRequestLocation() actually produced
+ * the result — recorded on the Location model (see prisma/schema.prisma)
+ * as part of the MASTER REQUIREMENTS §1 audit trail for every founding
+ * application, accepted or rejected.
+ */
+export type LocationDetectionSignal =
+  | "vercel-header"
+  | "cloudflare-header"
+  | "ip-geolocation"
+  | "dev-bypass";
+
+export interface RequestLocation {
+  country: string | null;
+  signal: LocationDetectionSignal;
+}
+
+/**
+ * Single source of truth for both the detected country AND which signal
+ * produced it — getRequestCountry() below is a thin wrapper kept for the
+ * existing call sites that only need the country. Resolution order
+ * unchanged from before this was split out.
+ */
+export async function getRequestLocation(req: Request): Promise<RequestLocation> {
   if (process.env.NODE_ENV !== "production" && process.env.GEO_LOCK_DISABLED !== "false") {
-    return SOUTH_AFRICA_ISO2;
+    return { country: SOUTH_AFRICA_ISO2, signal: "dev-bypass" };
   }
 
-  const headerCountry =
-    req.headers.get("x-vercel-ip-country") ?? req.headers.get("cf-ipcountry");
-  if (headerCountry) return headerCountry.toUpperCase();
+  const vercelCountry = req.headers.get("x-vercel-ip-country");
+  if (vercelCountry) return { country: vercelCountry.toUpperCase(), signal: "vercel-header" };
+
+  const cfCountry = req.headers.get("cf-ipcountry");
+  if (cfCountry) return { country: cfCountry.toUpperCase(), signal: "cloudflare-header" };
 
   const ip = getClientIp(req);
-  if (!ip) return null;
+  if (!ip) return { country: null, signal: "ip-geolocation" };
 
   try {
     const res = await fetch(`https://ipwho.is/${ip}`);
-    if (!res.ok) return null;
+    if (!res.ok) return { country: null, signal: "ip-geolocation" };
     const body = await res.json();
-    if (!body.success) return null;
-    return typeof body.country_code === "string" ? body.country_code.toUpperCase() : null;
+    const country =
+      body.success && typeof body.country_code === "string"
+        ? body.country_code.toUpperCase()
+        : null;
+    return { country, signal: "ip-geolocation" };
   } catch {
     // Geolocation lookup failing shouldn't crash the request — callers
     // treat a null country as "not South Africa" (see requireSouthAfrica),
     // so this fails closed, not open.
-    return null;
+    return { country: null, signal: "ip-geolocation" };
   }
+}
+
+export async function getRequestCountry(req: Request): Promise<string | null> {
+  return (await getRequestLocation(req)).country;
 }
 
 function getClientIp(req: Request): string | null {

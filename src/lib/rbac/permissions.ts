@@ -24,7 +24,8 @@ export type Permission =
   | "ledger:view_any"
   | "settings:write"
   | "audit:view"
-  | "dashboard:view"; // admin-only: aggregate stats + the member directory
+  | "dashboard:view" // admin-only: aggregate stats + the member directory
+  | "banking:view"; // admin-only: creator/Founding Baddie banking details (masked in the UI regardless — see src/lib/security/mask.ts)
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   FAN: ["creator:apply", "report:file", "ledger:view_own"],
@@ -49,6 +50,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "settings:write",
     "audit:view",
     "dashboard:view",
+    "banking:view",
   ],
 };
 

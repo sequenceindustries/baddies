@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useSession, displayHeadingStyle, SignInGate } from "@/components/ui";
+import { FOUNDING_STATUSES } from "@/lib/founding/status";
 
 interface CreatorApplication {
   creatorProfileId: string;
@@ -58,7 +59,7 @@ interface CommandCentreData {
     current: number;
     percent: number | null;
     funnel: Record<string, number>;
-    conversion: { appliedToApproved: number | null; approvedToVerified: number | null; verifiedToLive: number | null };
+    conversion: { appliedToVerified: number | null; verifiedToApproved: number | null; approvedToLive: number | null };
     newInRange: number;
     awaitingReview: number;
     onboarding: number;
@@ -264,20 +265,10 @@ function humanizeKey(key: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// Same 9 stages as the API's FOUNDING_STAGE_ORDER (kept in sync by
-// hand — small, stable list) and FOUNDING_STATUSES below (the status
-// dropdown) — CONTENT_READY sits between ONBOARDING and LIVE.
-const FOUNDING_FUNNEL_STAGES = [
-  "APPLIED",
-  "REVIEWED",
-  "APPROVED",
-  "VERIFICATION_PENDING",
-  "VERIFIED",
-  "ONBOARDING",
-  "CONTENT_READY",
-  "LIVE",
-  "REJECTED",
-] as const;
+// Single source of truth for the pipeline's status list — see its own
+// doc comment. Used both for the funnel bar chart below and the status
+// dropdown further down (previously two separately hand-kept copies).
+const FOUNDING_FUNNEL_STAGES = FOUNDING_STATUSES;
 
 function OverviewPanel({
   data,
@@ -460,9 +451,9 @@ function FoundingBaddiesSection({
       </div>
 
       <StatGroup title="Recruitment funnel">
-        <Stat label="Applied → Approved" value={data.conversion.appliedToApproved !== null ? `${data.conversion.appliedToApproved}%` : "—"} />
-        <Stat label="Approved → Verified" value={data.conversion.approvedToVerified !== null ? `${data.conversion.approvedToVerified}%` : "—"} />
-        <Stat label="Verified → Live" value={data.conversion.verifiedToLive !== null ? `${data.conversion.verifiedToLive}%` : "—"} />
+        <Stat label="Applied → Verified" value={data.conversion.appliedToVerified !== null ? `${data.conversion.appliedToVerified}%` : "—"} />
+        <Stat label="Verified → Approved" value={data.conversion.verifiedToApproved !== null ? `${data.conversion.verifiedToApproved}%` : "—"} />
+        <Stat label="Approved → Live" value={data.conversion.approvedToLive !== null ? `${data.conversion.approvedToLive}%` : "—"} />
         <Stat label="New applications" value={data.newInRange} />
         <Stat label="Awaiting review" value={data.awaitingReview} alert={data.awaitingReview > 0} />
         <Stat label="Onboarding" value={data.onboarding} />
@@ -1029,19 +1020,29 @@ interface FoundingApplicationRow {
   status: string;
   adminNotes: string | null;
   createdAt: string;
+  // MASTER REQUIREMENTS sub-statuses (§5, §7) — read-only in Phase 1, see
+  // GET /api/admin/founding-applications. Mostly null/empty until Phase 2
+  // builds real capture (identity/contact/banking) — Location is the
+  // exception, always populated from the moment of application (both
+  // accept and reject paths write one, see src/app/api/founding/apply).
+  identity: { status: string } | null;
+  contact: { emailVerified: boolean; whatsappVerified: boolean } | null;
+  location: {
+    status: string;
+    detectedCountry: string | null;
+    detectionSignal: string;
+    detectionTimestamp: string;
+    rejectionReason: string | null;
+  } | null;
+  banking: {
+    status: string;
+    bankName: string;
+    accountHolderName: string;
+    maskedAccountNumber: string;
+    accountType: string;
+    branchCode: string;
+  } | null;
 }
-
-const FOUNDING_STATUSES = [
-  "APPLIED",
-  "REVIEWED",
-  "APPROVED",
-  "VERIFICATION_PENDING",
-  "VERIFIED",
-  "ONBOARDING",
-  "CONTENT_READY",
-  "LIVE",
-  "REJECTED",
-] as const;
 
 /**
  * Founding Baddies campaign applications (§ Founding Baddies Sprint,
@@ -1197,6 +1198,40 @@ function FoundingApplicationsQueue({
                         <strong>Why baddies:</strong> {app.whyJoinBaddies}
                       </div>
                     )}
+                    {/* MASTER REQUIREMENTS sub-statuses (§5) — read-only
+                        here in Phase 1; Location is the only one always
+                        populated (written at application time, both
+                        accept and reject paths — see
+                        src/app/api/founding/apply/route.ts). Identity/
+                        Contact/Banking stay "Not submitted"/"Unverified"
+                        until Phase 2 builds real capture. */}
+                    <div
+                      style={{
+                        marginTop: "0.8rem",
+                        paddingTop: "0.6rem",
+                        borderTop: "1px solid var(--border)",
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "0.4rem",
+                      }}
+                    >
+                      <span style={filterChipStyle}>
+                        Location: {app.location ? humanizeKey(app.location.status) : "Pending"}
+                        {app.location?.detectedCountry ? ` (${app.location.detectedCountry})` : ""}
+                      </span>
+                      <span style={filterChipStyle}>
+                        Identity: {app.identity ? humanizeKey(app.identity.status) : "Not submitted"}
+                      </span>
+                      <span style={filterChipStyle}>
+                        Email: {app.contact?.emailVerified ? "Verified" : "Unverified"}
+                      </span>
+                      <span style={filterChipStyle}>
+                        WhatsApp: {app.contact?.whatsappVerified ? "Verified" : "Unverified"}
+                      </span>
+                      <span style={filterChipStyle}>
+                        Banking: {app.banking ? humanizeKey(app.banking.status) : "Not submitted"}
+                      </span>
+                    </div>
                   </div>
                 )}
               </div>

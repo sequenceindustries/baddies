@@ -46,16 +46,84 @@ enum CreatorStatus {
 // ONBOARDING and LIVE — onboarded and verified, content prepared, just
 // waiting to flip live (see the Command Centre's Founding Baddies
 // funnel, which reads "ready for launch" as this stage).
+//
+// Matches the MASTER REQUIREMENTS spec's pipeline exactly (§6):
+// Applied -> Contact Confirmed -> Identity Submitted -> Verification
+// Review -> Verified -> Approved -> Onboarding -> Content Ready -> Live,
+// with Rejected possible at any stage. Suspended/Banned are deliberately
+// NOT here — those apply once a Founding Baddie has a real User account
+// (see CreatorStatus), not to the pre-account application record.
+// Renamed from the previous 9-value set (REVIEWED, VERIFICATION_PENDING
+// replaced by CONTACT_CONFIRMED, IDENTITY_SUBMITTED, VERIFICATION_REVIEW)
+// via prisma/migrations/*_founding_application_pipeline_rework — checked
+// production directly before renaming: zero rows used the two dropped
+// values, so no data remapping was needed.
 enum FoundingApplicationStatus {
   APPLIED
-  REVIEWED
-  APPROVED
-  VERIFICATION_PENDING
+  CONTACT_CONFIRMED
+  IDENTITY_SUBMITTED
+  VERIFICATION_REVIEW
   VERIFIED
+  APPROVED
   ONBOARDING
   CONTENT_READY
   LIVE
   REJECTED
+}
+
+// Per-channel identity-review status (MASTER REQUIREMENTS §5) — kept
+// self-contained on Identity rather than routed through the generic
+// VerificationSession model, which stays reserved for when a real
+// automated KYC provider is plugged in later (§18); Identity's shape
+// here already matches what such a provider would return.
+enum IdentityStatus {
+  NOT_SUBMITTED
+  SUBMITTED
+  UNDER_REVIEW
+  VERIFIED
+  FAILED
+  REJECTED
+}
+
+enum IdentityDocumentType {
+  ID_DOCUMENT
+  SELFIE
+  ID_HOLDING_PHOTO
+}
+
+enum IdentityDocumentStatus {
+  UPLOADED
+  UNDER_REVIEW
+  ACCEPTED
+  REJECTED
+  DELETED
+}
+
+// The one MASTER REQUIREMENTS rule marked non-negotiable (§1, §19.2):
+// creator location is auto-detected server-side (see
+// src/lib/security/geo.ts), never self-reported, and a non-South-African
+// result is an immediate rejection, not a manual-review flag. This model
+// is what makes that decision auditable after the fact — see
+// src/app/api/founding/apply/route.ts for where it's written.
+enum LocationStatus {
+  PENDING
+  SOUTH_AFRICA
+  REJECTED
+}
+
+enum BankingStatus {
+  NOT_SUBMITTED
+  SUBMITTED
+  EXTERNALLY_VERIFIED
+  FAILED
+  NEEDS_CORRECTION
+}
+
+enum BankAccountType {
+  SAVINGS
+  CHEQUE
+  TRANSMISSION
+  OTHER
 }
 
 enum VerificationType {
@@ -187,40 +255,40 @@ model User {
   ageVerifiedAt     DateTime?
   ageVerificationId String? // FK-ish reference to VerificationSession, resolved via app layer
 
-  isActive  Boolean   @default(true)
+  isActive    Boolean   @default(true)
   suspendedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  profile         Profile?
-  creatorProfile  CreatorProfile?
-  wallet          Wallet?
-  sentMessages    Message[]        @relation("MessageSender")
-  reportsFiled    Report[]         @relation("ReportReporter")
-  auditLogs       AuditLog[]
-  sessions        Session[]
-  notifications   Notification[]
-  purchases       Purchase[]
-  tips            Tip[]            @relation("TipSender")
-  subscriptions   Subscription[]   @relation("FanSubscriptions")
-  unlimitedSubs   UnlimitedSubscription[]
-  follows         Follow[]         @relation("FanFollows")
-  contentLikes    ContentLike[]    @relation("ContentLikes")
+  profile        Profile?
+  creatorProfile CreatorProfile?
+  wallet         Wallet?
+  sentMessages   Message[]               @relation("MessageSender")
+  reportsFiled   Report[]                @relation("ReportReporter")
+  auditLogs      AuditLog[]
+  sessions       Session[]
+  notifications  Notification[]
+  purchases      Purchase[]
+  tips           Tip[]                   @relation("TipSender")
+  subscriptions  Subscription[]          @relation("FanSubscriptions")
+  unlimitedSubs  UnlimitedSubscription[]
+  follows        Follow[]                @relation("FanFollows")
+  contentLikes   ContentLike[]           @relation("ContentLikes")
 
   @@index([role])
   @@map("users")
 }
 
 model Session {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash String   @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
   userAgent String?
   ipAddress String?
   expiresAt DateTime
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
   revokedAt DateTime?
 
   @@index([userId])
@@ -266,12 +334,12 @@ model CreatorProfile {
   // provider-hosted records rather than raw documents.
   legalNameEncrypted String? // encrypted at rest; never returned to clients directly
 
-  coverImageUrl      String?
-  vvipPriceOverride  Decimal? @db.Decimal(10, 2) // this creator's own subscription price; null = use PlatformSetting default
-  unlimitedOptedIn   Boolean  @default(false) // opts this creator's VIP-tier content into the platform-wide VIP pass
+  coverImageUrl     String?
+  vvipPriceOverride Decimal? @db.Decimal(10, 2) // this creator's own subscription price; null = use PlatformSetting default
+  unlimitedOptedIn  Boolean  @default(false) // opts this creator's VIP-tier content into the platform-wide VIP pass
 
   subscriberCountVisible Boolean @default(false)
-  locationVisible         Boolean @default(false)
+  locationVisible        Boolean @default(false)
 
   // "Live videos" (an Exclusive-subscription benefit) — a status flag a
   // creator toggles, not a video transport. There is no real streaming
@@ -283,9 +351,9 @@ model CreatorProfile {
   isLive        Boolean   @default(false)
   liveStartedAt DateTime?
 
-  appliedAt   DateTime  @default(now())
-  approvedAt  DateTime?
-  approvedBy  String? // admin User.id
+  appliedAt  DateTime  @default(now())
+  approvedAt DateTime?
+  approvedBy String? // admin User.id
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -304,23 +372,23 @@ model CreatorProfile {
 // AND third-party content participants. Provider-agnostic by design;
 // see src/lib/providers/verification.ts for the interface this backs.
 model VerificationSession {
-  id       String            @id @default(cuid())
-  type     VerificationType
-  status   VerificationStatus @default(NOT_STARTED)
+  id     String             @id @default(cuid())
+  type   VerificationType
+  status VerificationStatus @default(NOT_STARTED)
 
   // Polymorphic-ish: exactly one of these should be set.
-  creatorProfileId       String?
-  creatorProfile         CreatorProfile? @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+  creatorProfileId          String?
+  creatorProfile            CreatorProfile?          @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
   verificationParticipantId String?
   verificationParticipant   VerificationParticipant? @relation(fields: [verificationParticipantId], references: [id], onDelete: Cascade)
 
-  provider           String // e.g. "stub", set via VERIFICATION_PROVIDER
-  providerSessionId  String? // opaque reference into provider's system
-  providerReference  String? // e.g. hosted-document URL/ID; never a raw file blob
+  provider          String // e.g. "stub", set via VERIFICATION_PROVIDER
+  providerSessionId String? // opaque reference into provider's system
+  providerReference String? // e.g. hosted-document URL/ID; never a raw file blob
 
-  startedAt   DateTime  @default(now())
-  completedAt DateTime?
-  expiresAt   DateTime?
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+  expiresAt     DateTime?
   failureReason String?
 
   createdAt DateTime @default(now())
@@ -336,14 +404,14 @@ model VerificationSession {
 // (e.g. a collaborator). Verification + consent tracked independently
 // of the uploading creator's own verification.
 model VerificationParticipant {
-  id                String        @id @default(cuid())
+  id                 String             @id @default(cuid())
   legalNameEncrypted String?
-  status            VerificationStatus @default(NOT_STARTED)
+  status             VerificationStatus @default(NOT_STARTED)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  verifications      VerificationSession[]
+  verifications       VerificationSession[]
   consentRecords      ConsentRecord[]
   contentParticipants ContentParticipant[]
 
@@ -351,7 +419,7 @@ model VerificationParticipant {
 }
 
 model ConsentRecord {
-  id                        String   @id @default(cuid())
+  id                        String                  @id @default(cuid())
   verificationParticipantId String
   verificationParticipant   VerificationParticipant @relation(fields: [verificationParticipantId], references: [id], onDelete: Cascade)
 
@@ -375,12 +443,12 @@ model ConsentRecord {
 // A fan following a creator. Drives the "Creators the fan follows" section
 // of Fan Home (§13, priority #1) and the "Following" discovery tab (§11).
 model Follow {
-  id               String   @id @default(cuid())
+  id               String         @id @default(cuid())
   fanId            String
-  fan              User     @relation("FanFollows", fields: [fanId], references: [id], onDelete: Cascade)
+  fan              User           @relation("FanFollows", fields: [fanId], references: [id], onDelete: Cascade)
   creatorProfileId String
   creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
-  createdAt        DateTime @default(now())
+  createdAt        DateTime       @default(now())
 
   @@unique([fanId, creatorProfileId])
   @@index([creatorProfileId])
@@ -446,31 +514,31 @@ model PlatformSetting {
 // =========================================================================
 
 model Content {
-  id               String              @id @default(cuid())
+  id               String         @id @default(cuid())
   creatorProfileId String
-  creatorProfile   CreatorProfile      @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
 
-  mediaType        MediaType
-  accessLevel      ContentAccessLevel
-  priceUsd         Decimal?            @db.Decimal(10, 2) // required when accessLevel = PPV
-  caption          String?
+  mediaType   MediaType
+  accessLevel ContentAccessLevel
+  priceUsd    Decimal?           @db.Decimal(10, 2) // required when accessLevel = PPV
+  caption     String?
 
-  status           ContentStatus       @default(DRAFT)
-  moderationStatus ContentStatus       @default(DRAFT)
+  status           ContentStatus @default(DRAFT)
+  moderationStatus ContentStatus @default(DRAFT)
   contentHash      String? // dedup / provenance
 
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  mediaAssets  MediaAsset[]
-  participants ContentParticipant[]
-  entitlements ContentEntitlement[]
-  purchases    Purchase[]
-  reports      Report[]
-  moderationCases ModerationCase[]
+  mediaAssets       MediaAsset[]
+  participants      ContentParticipant[]
+  entitlements      ContentEntitlement[]
+  purchases         Purchase[]
+  reports           Report[]
+  moderationCases   ModerationCase[]
   consumptionEvents QualifiedConsumptionEvent[]
-  likes ContentLike[]
+  likes             ContentLike[]
 
   @@index([creatorProfileId, status])
   @@index([accessLevel])
@@ -478,9 +546,9 @@ model Content {
 }
 
 model ContentParticipant {
-  id                        String @id @default(cuid())
+  id                        String                  @id @default(cuid())
   contentId                 String
-  content                   Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  content                   Content                 @relation(fields: [contentId], references: [id], onDelete: Cascade)
   verificationParticipantId String
   verificationParticipant   VerificationParticipant @relation(fields: [verificationParticipantId], references: [id], onDelete: Cascade)
 
@@ -493,15 +561,15 @@ model ContentParticipant {
 // Private storage reference only — never a public permanent URL.
 // Access is always mediated by signed URLs at request time.
 model MediaAsset {
-  id             String    @id @default(cuid())
-  contentId      String
-  content        Content   @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  id              String   @id @default(cuid())
+  contentId       String
+  content         Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
   storageProvider String
-  storageKey     String // private bucket key, never a public URL
-  mimeType       String
-  byteSize       Int?
+  storageKey      String // private bucket key, never a public URL
+  mimeType        String
+  byteSize        Int?
   durationSeconds Int?
-  createdAt      DateTime  @default(now())
+  createdAt       DateTime @default(now())
 
   @@index([contentId])
   @@map("media_assets")
@@ -580,12 +648,12 @@ model UnlimitedSubscription {
 // hand-edited. Kept so reads don't need to replay subscription logic
 // on every content request.
 model ContentEntitlement {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   fanId     String
   contentId String
-  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  content   Content   @relation(fields: [contentId], references: [id], onDelete: Cascade)
   source    String // e.g. "subscription:<id>", "ppv:<purchaseId>", "unlimited:<id>"
-  grantedAt DateTime @default(now())
+  grantedAt DateTime  @default(now())
   expiresAt DateTime?
   revokedAt DateTime?
 
@@ -595,16 +663,16 @@ model ContentEntitlement {
 }
 
 model Purchase {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   fanId     String
-  fan       User     @relation(fields: [fanId], references: [id], onDelete: Cascade)
+  fan       User    @relation(fields: [fanId], references: [id], onDelete: Cascade)
   contentId String
-  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  content   Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
 
   priceUsd Decimal @db.Decimal(10, 2)
 
   paymentProviderTransactionId String?
-  refundedAt                    DateTime?
+  refundedAt                   DateTime?
 
   createdAt DateTime @default(now())
 
@@ -614,9 +682,9 @@ model Purchase {
 }
 
 model Tip {
-  id       String @id @default(cuid())
-  fanId    String
-  fan      User   @relation("TipSender", fields: [fanId], references: [id], onDelete: Cascade)
+  id               String @id @default(cuid())
+  fanId            String
+  fan              User   @relation("TipSender", fields: [fanId], references: [id], onDelete: Cascade)
   creatorProfileId String
 
   amountUsd Decimal @db.Decimal(10, 2)
@@ -634,10 +702,10 @@ model Tip {
 // Deliberately NOT satisfied by simple page views — see QualifiedConsumptionEvent
 // eligibility rules in src/lib/entitlements/unlimited.ts
 model QualifiedConsumptionEvent {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   fanId     String
   contentId String
-  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  content   Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
 
   unlimitedSubscriptionId String
 
@@ -658,17 +726,17 @@ model QualifiedConsumptionEvent {
 // =========================================================================
 
 model Message {
-  id         String   @id @default(cuid())
-  senderId   String
-  sender     User     @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  id          String @id @default(cuid())
+  senderId    String
+  sender      User   @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
   recipientId String
-  threadKey  String // stable key for a fan<->creator conversation
+  threadKey   String // stable key for a fan<->creator conversation
 
-  body      String?
+  body         String?
   mediaAssetId String?
-  priceUsd  Decimal? @db.Decimal(10, 2) // set for paid messages (architecture only in V1)
+  priceUsd     Decimal? @db.Decimal(10, 2) // set for paid messages (architecture only in V1)
 
-  isModerated Boolean @default(false)
+  isModerated Boolean  @default(false)
   createdAt   DateTime @default(now())
 
   @@index([threadKey])
@@ -690,9 +758,9 @@ model Wallet {
   // They may be cached here for performance but must be recomputable
   // from ledger_entries alone. Never write to these fields directly
   // outside of the ledger-reconciliation job.
-  cachedPendingBalanceUsd   Decimal @default(0) @db.Decimal(12, 2)
-  cachedAvailableBalanceUsd Decimal @default(0) @db.Decimal(12, 2)
-  cachedPaidBalanceUsd      Decimal @default(0) @db.Decimal(12, 2)
+  cachedPendingBalanceUsd   Decimal   @default(0) @db.Decimal(12, 2)
+  cachedAvailableBalanceUsd Decimal   @default(0) @db.Decimal(12, 2)
+  cachedPaidBalanceUsd      Decimal   @default(0) @db.Decimal(12, 2)
   balanceRecomputedAt       DateTime?
 
   createdAt DateTime @default(now())
@@ -705,9 +773,9 @@ model Wallet {
 }
 
 model LedgerEntry {
-  id       String          @id @default(cuid())
+  id       String @id @default(cuid())
   walletId String
-  wallet   Wallet          @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  wallet   Wallet @relation(fields: [walletId], references: [id], onDelete: Restrict)
 
   creatorProfileId String?
   creatorProfile   CreatorProfile? @relation(fields: [creatorProfileId], references: [id])
@@ -715,11 +783,11 @@ model LedgerEntry {
   type LedgerEventType
 
   // Gross amount for the event, in the original transaction currency.
-  grossAmount     Decimal @db.Decimal(12, 2)
-  currency        String  @default("USD")
-  fxRate          Decimal? @db.Decimal(12, 6)
+  grossAmount     Decimal   @db.Decimal(12, 2)
+  currency        String    @default("USD")
+  fxRate          Decimal?  @db.Decimal(12, 6)
   fxTimestamp     DateTime?
-  settledAmount   Decimal? @db.Decimal(12, 2) // in settlement currency, once known
+  settledAmount   Decimal?  @db.Decimal(12, 2) // in settlement currency, once known
   settledCurrency String?
 
   // Split of gross amount — populated per PlatformSetting rules at write time,
@@ -743,18 +811,18 @@ model LedgerEntry {
 }
 
 model Payout {
-  id       String       @id @default(cuid())
+  id       String @id @default(cuid())
   walletId String
-  wallet   Wallet       @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  wallet   Wallet @relation(fields: [walletId], references: [id], onDelete: Restrict)
 
   amountUsd Decimal      @db.Decimal(12, 2)
   currency  String       @default("USD")
   status    PayoutStatus @default(REQUESTED)
 
   paymentProviderPayoutId String?
-  requestedAt DateTime  @default(now())
-  processedAt DateTime?
-  failureReason String?
+  requestedAt             DateTime  @default(now())
+  processedAt             DateTime?
+  failureReason           String?
 
   @@index([walletId])
   @@index([status])
@@ -766,14 +834,14 @@ model Payout {
 // =========================================================================
 
 model Report {
-  id              String       @id @default(cuid())
-  reporterId      String
-  reporter        User         @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
-  contentId       String?
-  content         Content?     @relation(fields: [contentId], references: [id])
-  reportedUserId  String?
+  id             String   @id @default(cuid())
+  reporterId     String
+  reporter       User     @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  contentId      String?
+  content        Content? @relation(fields: [contentId], references: [id])
+  reportedUserId String?
 
-  reason ReportReason
+  reason  ReportReason
   details String?
 
   createdAt DateTime @default(now())
@@ -786,19 +854,19 @@ model Report {
 }
 
 model ModerationCase {
-  id        String                @id @default(cuid())
+  id        String   @id @default(cuid())
   contentId String?
-  content   Content?              @relation(fields: [contentId], references: [id])
-  reportId  String?                @unique
-  report    Report?               @relation(fields: [reportId], references: [id])
+  content   Content? @relation(fields: [contentId], references: [id])
+  reportId  String?  @unique
+  report    Report?  @relation(fields: [reportId], references: [id])
 
-  status ModerationCaseStatus @default(OPEN)
+  status            ModerationCaseStatus @default(OPEN)
   assignedToAdminId String?
-  resolutionNotes String?
+  resolutionNotes   String?
 
-  escalated   Boolean   @default(false)
-  appealedAt  DateTime?
-  resolvedAt  DateTime?
+  escalated  Boolean   @default(false)
+  appealedAt DateTime?
+  resolvedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -863,8 +931,8 @@ model FoundingApplication {
   currentlyMonetising    Boolean?
   whyJoinBaddies         String
 
-  confirmsAdult         Boolean
-  agreesToVerification  Boolean
+  confirmsAdult        Boolean
+  agreesToVerification Boolean
 
   status     FoundingApplicationStatus @default(APPLIED)
   adminNotes String?
@@ -874,15 +942,152 @@ model FoundingApplication {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // MASTER REQUIREMENTS data-architecture entities (§7) — each attaches
+  // 1:1 (or 1:N for documents) directly to the application record rather
+  // than polymorphically like VerificationSession, because a Founding
+  // Baddie has no User row yet (see this model's own comment above).
+  identity  Identity?
+  contact   Contact?
+  location  Location?
+  banking   Banking?
+  documents IdentityDocument[]
+
   @@index([status])
   @@index([email])
   @@map("founding_applications")
 }
 
+// Legal/biographical identity + review state for a Founding Baddie
+// applicant (MASTER REQUIREMENTS §5, §7). idNumberEncrypted uses the
+// same encryptField()/decryptField() as CreatorProfile.legalNameEncrypted
+// (see src/lib/security/field-encryption.ts) — no new crypto code.
+model Identity {
+  id                    String              @id @default(cuid())
+  foundingApplicationId String              @unique
+  foundingApplication   FoundingApplication @relation(fields: [foundingApplicationId], references: [id], onDelete: Cascade)
+
+  legalName         String
+  dateOfBirth       DateTime @db.Date
+  nationality       String
+  idNumberEncrypted String
+
+  status        IdentityStatus @default(NOT_SUBMITTED)
+  submittedAt   DateTime?
+  reviewedBy    String? // admin User.id
+  reviewedAt    DateTime?
+  failureReason String?
+  notes         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@map("identities")
+}
+
+// Private file reference for ID documents / verification selfies / ID-
+// holding photos — same pattern as MediaAsset (storageKey is an opaque,
+// private key via getMediaStorageProvider(), never a public URL). One
+// application can have several (resubmissions), so this is 1:N rather
+// than living inline on Identity.
+model IdentityDocument {
+  id                    String              @id @default(cuid())
+  foundingApplicationId String
+  foundingApplication   FoundingApplication @relation(fields: [foundingApplicationId], references: [id], onDelete: Cascade)
+
+  type            IdentityDocumentType
+  storageProvider String
+  storageKey      String
+  mimeType        String
+
+  status     IdentityDocumentStatus @default(UPLOADED)
+  reviewedBy String? // admin User.id
+  reviewedAt DateTime?
+  uploadedAt DateTime               @default(now())
+  deletedAt  DateTime?
+
+  @@index([foundingApplicationId])
+  @@map("identity_documents")
+}
+
+// Email/WhatsApp verification *state* only — email and phone themselves
+// stay on FoundingApplication, unchanged. "Status" (Verified/Unverified)
+// is deliberately derived from whether the *VerifiedAt timestamp is set
+// rather than a redundant stored enum column, matching the spec's own
+// 2-value lists (§5) with one less thing that can drift out of sync.
+// whatsappMethod is a plain string, not an enum, on purpose — see
+// src/lib/providers/whatsapp/ for why (Phase 2 can add a real OTP method
+// later with no migration).
+model Contact {
+  id                    String              @id @default(cuid())
+  foundingApplicationId String              @unique
+  foundingApplication   FoundingApplication @relation(fields: [foundingApplicationId], references: [id], onDelete: Cascade)
+
+  emailVerifiedAt DateTime?
+
+  whatsappVerifiedAt DateTime?
+  whatsappVerifiedBy String? // admin User.id who manually confirmed it
+  whatsappMethod     String    @default("click_to_chat_manual")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("application_contacts")
+}
+
+// Server-detected location + the decision it produced — the audit trail
+// behind the one MASTER REQUIREMENTS rule marked non-negotiable (§1,
+// §19.2). Always written, on both the accept and reject path — see
+// src/app/api/founding/apply/route.ts.
+model Location {
+  id                    String              @id @default(cuid())
+  foundingApplicationId String              @unique
+  foundingApplication   FoundingApplication @relation(fields: [foundingApplicationId], references: [id], onDelete: Cascade)
+
+  detectedCountry    String? // ISO2, or null if detection failed entirely
+  detectionSignal    String // "vercel-header" | "cloudflare-header" | "ip-geolocation" | "dev-bypass"
+  detectionTimestamp DateTime       @default(now())
+  status             LocationStatus
+  rejectionReason    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([status])
+  @@map("locations")
+}
+
+// Banking details for payouts (MASTER REQUIREMENTS §3). Bank verification
+// is handled externally in V1 (status/externalVerificationRef only — no
+// verification logic here). accountNumberEncrypted uses the same
+// encryptField() as Identity.idNumberEncrypted; the plaintext account
+// number is never sent to any client — see src/lib/security/mask.ts.
+model Banking {
+  id                    String              @id @default(cuid())
+  foundingApplicationId String              @unique
+  foundingApplication   FoundingApplication @relation(fields: [foundingApplicationId], references: [id], onDelete: Cascade)
+
+  bankName               String
+  accountHolderName      String
+  accountNumberEncrypted String
+  accountType            BankAccountType
+  branchCode             String
+
+  status                  BankingStatus @default(NOT_SUBMITTED)
+  externalVerificationRef String?
+  verifiedAt              DateTime?
+  adminNotes              String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@map("banking_details")
+}
+
 // Append-only. Every sensitive admin / financial / moderation action
 // should write one of these. Never update or delete rows here.
 model AuditLog {
-  id     String  @id @default(cuid())
+  id      String  @id @default(cuid())
   actorId String?
   actor   User?   @relation(fields: [actorId], references: [id])
 

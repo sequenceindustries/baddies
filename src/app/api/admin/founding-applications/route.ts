@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
+import { can, requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
+import { decryptField } from "@/lib/security/field-encryption";
+import { maskAccountNumber } from "@/lib/security/mask";
 import type { FoundingApplicationStatus } from "@prisma/client";
 
 // Always dynamic: this route reads live data (DB, auth, or both) and
@@ -31,10 +33,15 @@ export async function GET(req: NextRequest) {
 
   const statusParam = req.nextUrl.searchParams.get("status") as FoundingApplicationStatus | null;
 
+  // §3: banking data is admin-restricted specifically, not just anyone
+  // who can review applications — see the new "banking:view" permission.
+  const canViewBanking = can(user.role, "banking:view");
+
   const applications = await db.foundingApplication.findMany({
     where: statusParam ? { status: statusParam } : undefined,
     orderBy: { createdAt: "desc" },
     take: 200,
+    include: { identity: true, contact: true, location: true, banking: true },
   });
 
   return NextResponse.json({
@@ -55,6 +62,38 @@ export async function GET(req: NextRequest) {
       status: a.status,
       adminNotes: a.adminNotes,
       createdAt: a.createdAt,
+      // Sub-statuses (MASTER REQUIREMENTS §5, §7) — mostly empty/default
+      // until Phase 2 builds real capture; surfaced now so the admin
+      // queue can start showing them (read-only in Phase 1).
+      identity: a.identity ? { status: a.identity.status } : null,
+      contact: a.contact
+        ? {
+            emailVerified: a.contact.emailVerifiedAt !== null,
+            whatsappVerified: a.contact.whatsappVerifiedAt !== null,
+          }
+        : null,
+      location: a.location
+        ? {
+            status: a.location.status,
+            detectedCountry: a.location.detectedCountry,
+            detectionSignal: a.location.detectionSignal,
+            detectionTimestamp: a.location.detectionTimestamp,
+            rejectionReason: a.location.rejectionReason,
+          }
+        : null,
+      // Never the decrypted plaintext, and only for admins with
+      // banking:view at all — see maskAccountNumber's own comment.
+      banking:
+        a.banking && canViewBanking
+          ? {
+              status: a.banking.status,
+              bankName: a.banking.bankName,
+              accountHolderName: a.banking.accountHolderName,
+              maskedAccountNumber: maskAccountNumber(decryptField(a.banking.accountNumberEncrypted)),
+              accountType: a.banking.accountType,
+              branchCode: a.banking.branchCode,
+            }
+          : null,
     })),
   });
 }

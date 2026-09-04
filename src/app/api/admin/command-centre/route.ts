@@ -6,22 +6,13 @@ import { db } from "@/lib/db/client";
 import { getPlatformSetting } from "@/lib/config/settings";
 import { BUSINESS_CONFIG_KEYS } from "@/lib/config/business";
 import { pctChange, ratePercent, rangeBounds, RANGES, type Range } from "@/lib/analytics/rates";
+import { FOUNDING_STATUSES } from "@/lib/founding/status";
 
 // Always dynamic: this route reads live data and must never be
 // statically prerendered or cached at build time.
 export const dynamic = "force-dynamic";
 
-const FOUNDING_STAGE_ORDER = [
-  "APPLIED",
-  "REVIEWED",
-  "APPROVED",
-  "VERIFICATION_PENDING",
-  "VERIFIED",
-  "ONBOARDING",
-  "CONTENT_READY",
-  "LIVE",
-  "REJECTED",
-] as const;
+const FOUNDING_STAGE_ORDER = FOUNDING_STATUSES;
 
 function countsByStatus<Row extends { _count: { _all: number } }, K extends string>(
   rows: Row[],
@@ -163,10 +154,13 @@ export async function GET(req: NextRequest) {
   const targetNum = Number(foundingTarget) || 0;
 
   // Cumulative "reached this stage or later" sums, feeding the
-  // conversion rates below.
-  const reachedApproved =
-    funnel.APPROVED + funnel.VERIFICATION_PENDING + funnel.VERIFIED + funnel.ONBOARDING + funnel.CONTENT_READY + funnel.LIVE;
-  const reachedVerified = funnel.VERIFIED + funnel.ONBOARDING + funnel.CONTENT_READY + funnel.LIVE;
+  // conversion rates below. Pipeline order per the MASTER REQUIREMENTS
+  // rework (§6): ... -> Verified -> Approved -> Onboarding -> Content
+  // Ready -> Live — note Verified now comes BEFORE Approved (the
+  // opposite order from the enum this replaced), so reachedApproved must
+  // NOT include funnel.VERIFIED.
+  const reachedVerified = funnel.VERIFIED + funnel.APPROVED + funnel.ONBOARDING + funnel.CONTENT_READY + funnel.LIVE;
+  const reachedApproved = funnel.APPROVED + funnel.ONBOARDING + funnel.CONTENT_READY + funnel.LIVE;
 
   const activeSubscriptionsCount = activeSubs + activeUnlimitedSubs;
   const mrrUsd =
@@ -250,9 +244,9 @@ export async function GET(req: NextRequest) {
       // excluded since a rejection ends the pipeline rather than
       // advancing it.
       conversion: {
-        appliedToApproved: ratePercent(reachedApproved, foundingTotal - funnel.REJECTED),
-        approvedToVerified: ratePercent(reachedVerified, reachedApproved),
-        verifiedToLive: ratePercent(funnel.LIVE, reachedVerified),
+        appliedToVerified: ratePercent(reachedVerified, foundingTotal - funnel.REJECTED),
+        verifiedToApproved: ratePercent(reachedApproved, reachedVerified),
+        approvedToLive: ratePercent(funnel.LIVE, reachedApproved),
       },
       newInRange: newFoundingApplications,
       awaitingReview: pendingFoundingReview,
