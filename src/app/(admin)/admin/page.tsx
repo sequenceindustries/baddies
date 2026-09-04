@@ -23,7 +23,7 @@ interface ContentQueueItem {
   participantCount: number;
 }
 
-const TABS = ["Overview", "Members", "Creators", "Applications", "Content", "Revenue", "Payouts", "Trust & Safety", "Audit Log"] as const;
+const TABS = ["Overview", "Members", "Creators", "Applications", "Content", "Revenue", "Payouts", "Trust & Safety", "Audit Log", "System Health"] as const;
 type Tab = (typeof TABS)[number];
 
 type RangeKey = "today" | "7d" | "30d" | "90d" | "all";
@@ -99,7 +99,7 @@ const NAV_GROUPS: NavGroup[] = [
   { label: "Content", items: [{ label: "Content", tab: "Content", badgeKey: "content" }] },
   { label: "Business", items: [{ label: "Revenue", tab: "Revenue" }, { label: "Payouts", tab: "Payouts", badgeKey: "payouts" }] },
   { label: "Insights", items: [{ label: "Trust & Safety", tab: "Trust & Safety", badgeKey: "trustSafety" }, { label: "Audit Log", tab: "Audit Log" }] },
-  { label: "System", items: [{ label: "System Health" }] },
+  { label: "System", items: [{ label: "System Health", tab: "System Health" }] },
 ];
 
 function NavGroups({ tab, onSelect, badges }: { tab: Tab; onSelect: (t: Tab) => void; badges?: CommandCentreData["badges"] }) {
@@ -243,6 +243,7 @@ export default function AdminDashboardPage() {
       )}
       {tab === "Trust & Safety" && <TrustAndSafetyPanel />}
       {tab === "Audit Log" && <AuditLogPanel />}
+      {tab === "System Health" && <SystemHealthPanel />}
     </main>
   );
 }
@@ -1943,6 +1944,116 @@ function AuditLogPanel() {
               {loadingMore ? "Loading..." : "Load more"}
             </button>
           )}
+        </>
+      )}
+    </section>
+  );
+}
+
+interface SystemHealthData {
+  database: { connected: boolean; latencyMs: number | null; error: string | null };
+  runtime: { nodeVersion: string; appVersion: string; uptimeSeconds: number; nodeEnv: string };
+  launchMode: string;
+  providers: {
+    payment: { name: string; isStub: boolean };
+    storage: { name: string; isStub: boolean };
+    verification: { name: string; isStub: boolean };
+  };
+  notImplemented: { label: string; reason: string }[];
+}
+
+function formatUptime(totalSeconds: number): string {
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+/**
+ * Spec §15 — a real, honest snapshot (see GET /api/admin/system-health's
+ * own doc comment): database connectivity + latency, runtime facts, and
+ * which providers are still `stub` (true in production too, pre-launch —
+ * that's real, useful information, not a placeholder). The three things
+ * the spec asks for that genuinely don't exist yet in this codebase
+ * (failed jobs, a system error log, notification failures) are listed
+ * plainly as not implemented rather than a fabricated all-clear.
+ */
+function SystemHealthPanel() {
+  const [data, setData] = useState<SystemHealthData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch("/api/admin/system-health")
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null);
+          throw new Error(body?.error ?? "Failed to load system health.");
+        }
+        return r.json();
+      })
+      .then((body) => {
+        if (!cancelled) setData(body);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <section>
+      <h2 style={sectionHeadingStyle}>System Health</h2>
+
+      {loading && <p style={{ color: "var(--text-muted)" }}>Loading...</p>}
+      {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
+
+      {data && (
+        <>
+          <div style={heroStatGridStyle}>
+            <KpiCard
+              label="Database"
+              value={data.database.connected ? "Connected" : "Disconnected"}
+              caption={data.database.connected ? `${data.database.latencyMs}ms latency` : data.database.error ?? undefined}
+              alert={!data.database.connected}
+            />
+            <KpiCard label="Launch mode" value={data.launchMode === "coming_soon" ? "Coming soon" : "Live"} />
+            <KpiCard label="Uptime" value={formatUptime(data.runtime.uptimeSeconds)} caption={data.runtime.nodeEnv} />
+            <KpiCard label="App version" value={data.runtime.appVersion} caption={data.runtime.nodeVersion} />
+          </div>
+
+          <StatGroup title="Configured providers">
+            <Stat label="Payment" value={data.providers.payment.name} alert={data.providers.payment.isStub} />
+            <Stat label="Storage" value={data.providers.storage.name} alert={data.providers.storage.isStub} />
+            <Stat label="Verification" value={data.providers.verification.name} alert={data.providers.verification.isStub} />
+          </StatGroup>
+          {(data.providers.payment.isStub || data.providers.storage.isStub || data.providers.verification.isStub) && (
+            <p style={mutedSmallStyle}>
+              A &quot;stub&quot; provider simulates the real thing for development — no real charges, files, or
+              verifications happen through it. Swap it for a real provider before launch.
+            </p>
+          )}
+
+          <div style={{ marginTop: "2rem" }}>
+            <h3 style={statGroupHeadingStyle}>Not yet implemented</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              {data.notImplemented.map((item) => (
+                <div key={item.label} style={auditRowStyle}>
+                  <span style={{ fontWeight: 600 }}>{item.label}</span>
+                  <span style={mutedSmallStyle}>{item.reason}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </>
       )}
     </section>
