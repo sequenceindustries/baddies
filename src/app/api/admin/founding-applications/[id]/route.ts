@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
 import { FOUNDING_STATUSES } from "@/lib/founding/status";
+import { sendOnboardingApprovedEmail } from "@/lib/notifications/onboarding-approved";
 
 // Always dynamic: this route writes live data and must never be
 // statically prerendered or cached at build time.
@@ -67,6 +68,20 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       metadata: { from: existing.status, to: updated.status },
     },
   });
+
+  // The one status transition this route reacts to directly: moving
+  // INTO APPROVED (not already there) is what unlocks banking +
+  // agreements, so that's the point the applicant needs the onboarding
+  // link — see src/lib/notifications/onboarding-approved.ts. Never lets
+  // a send failure fail the admin's approve action itself, same
+  // reasoning as every other notification send in this flow.
+  if (existing.status !== "APPROVED" && updated.status === "APPROVED") {
+    try {
+      await sendOnboardingApprovedEmail(updated.id, updated.email, updated.stageName);
+    } catch (err) {
+      console.error("[founding-applications] onboarding-approved email failed", err);
+    }
+  }
 
   return NextResponse.json({ id: updated.id, status: updated.status });
 }

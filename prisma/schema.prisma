@@ -126,6 +126,15 @@ enum BankAccountType {
   OTHER
 }
 
+// MASTER REQUIREMENTS §4 — AGE_DECLARATION deliberately excluded, see
+// the Agreement model's own comment.
+enum AgreementType {
+  CREATOR_TERMS
+  CONTENT_POLICY
+  PRIVACY_POLICY
+  PAYOUT_AGREEMENT
+}
+
 enum VerificationType {
   IDENTITY
   AGE
@@ -261,20 +270,24 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  profile        Profile?
-  creatorProfile CreatorProfile?
-  wallet         Wallet?
-  sentMessages   Message[]               @relation("MessageSender")
-  reportsFiled   Report[]                @relation("ReportReporter")
-  auditLogs      AuditLog[]
-  sessions       Session[]
-  notifications  Notification[]
-  purchases      Purchase[]
-  tips           Tip[]                   @relation("TipSender")
-  subscriptions  Subscription[]          @relation("FanSubscriptions")
-  unlimitedSubs  UnlimitedSubscription[]
-  follows        Follow[]                @relation("FanFollows")
-  contentLikes   ContentLike[]           @relation("ContentLikes")
+  profile              Profile?
+  creatorProfile       CreatorProfile?
+  wallet               Wallet?
+  sentMessages         Message[]               @relation("MessageSender")
+  reportsFiled         Report[]                @relation("ReportReporter")
+  auditLogs            AuditLog[]
+  sessions             Session[]
+  notifications        Notification[]
+  purchases            Purchase[]
+  tips                 Tip[]                   @relation("TipSender")
+  subscriptions        Subscription[]          @relation("FanSubscriptions")
+  unlimitedSubs        UnlimitedSubscription[]
+  follows              Follow[]                @relation("FanFollows")
+  contentLikes         ContentLike[]           @relation("ContentLikes")
+  // Not yet exercised by any route (Phase 3 only ever writes the
+  // FoundingApplication side of AgreementAcceptance) — modeled now so a
+  // real User re-accepting an updated agreement later needs no migration.
+  agreementAcceptances AgreementAcceptance[]
 
   @@index([role])
   @@map("users")
@@ -946,11 +959,12 @@ model FoundingApplication {
   // 1:1 (or 1:N for documents) directly to the application record rather
   // than polymorphically like VerificationSession, because a Founding
   // Baddie has no User row yet (see this model's own comment above).
-  identity  Identity?
-  contact   Contact?
-  location  Location?
-  banking   Banking?
-  documents IdentityDocument[]
+  identity             Identity?
+  contact              Contact?
+  agreementAcceptances AgreementAcceptance[]
+  location             Location?
+  banking              Banking?
+  documents            IdentityDocument[]
 
   @@index([status])
   @@index([email])
@@ -1082,6 +1096,58 @@ model Banking {
 
   @@index([status])
   @@map("banking_details")
+}
+
+// Creator Terms / Content Policy / Privacy Policy / Payout Agreement
+// (MASTER REQUIREMENTS §4). AGE_DECLARATION is deliberately not a type
+// here — FoundingApplication.confirmsAdult already covers that, no
+// reason to migrate a working boolean into this system. bodyText is
+// full inline text, no separate CMS/route — rendered directly wherever
+// an agreement needs to be shown (see
+// src/app/founding-baddies/complete-onboarding/page.tsx).
+//
+// NOTE: seeded body text (see prisma/seed.ts) is placeholder, real but
+// not lawyer-reviewed — each one says so in its own first line. Swap in
+// real reviewed text as a new `version` row when ready; never edit an
+// existing version's bodyText in place, since AgreementAcceptance rows
+// point at a specific version and that link should stay meaningful.
+model Agreement {
+  id          String        @id @default(cuid())
+  type        AgreementType
+  version     String
+  title       String
+  bodyText    String
+  effectiveAt DateTime      @default(now())
+
+  acceptances AgreementAcceptance[]
+
+  @@unique([type, version])
+  @@map("agreements")
+}
+
+// Polymorphic like VerificationSession (exactly one of
+// foundingApplicationId/userId set) — Phase 3 only ever writes the
+// FoundingApplication side; userId exists for a real account
+// re-accepting an updated agreement later, not built yet. ipAddress is
+// always read server-side from the request (req.headers.get
+// ("x-forwarded-for")), same as every other AuditLog/Session row —
+// never client-supplied.
+model AgreementAcceptance {
+  id                    String               @id @default(cuid())
+  agreementId           String
+  agreement             Agreement            @relation(fields: [agreementId], references: [id])
+  foundingApplicationId String?
+  foundingApplication   FoundingApplication? @relation(fields: [foundingApplicationId], references: [id], onDelete: Cascade)
+  userId                String?
+  user                  User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  acceptedAt DateTime @default(now())
+  ipAddress  String?
+
+  @@index([agreementId])
+  @@index([foundingApplicationId])
+  @@index([userId])
+  @@map("agreement_acceptances")
 }
 
 // Append-only. Every sensitive admin / financial / moderation action

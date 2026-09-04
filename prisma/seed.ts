@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { DEFAULT_BUSINESS_CONFIG } from "../src/lib/config/business";
+import { AGREEMENTS } from "./agreements";
 import { hashPassword } from "../src/lib/auth/session";
 import { encryptField } from "../src/lib/security/field-encryption";
 
@@ -453,6 +454,20 @@ async function main() {
       where: { key },
       create: { key, value, description: "Seeded default — see src/lib/config/business.ts" },
       update: {}, // do not clobber values an admin may have already changed
+    });
+  }
+
+  console.log("Seeding agreement content...");
+  for (const agreement of AGREEMENTS) {
+    await db.agreement.upsert({
+      where: { type_version: { type: agreement.type, version: agreement.version } },
+      create: agreement,
+      // Never overwrite an existing version's body — AgreementAcceptance
+      // rows point at a specific version and that link should stay
+      // meaningful (see the Agreement model's own schema comment). A
+      // real content change belongs in a new `version` entry, not an
+      // edit here.
+      update: {},
     });
   }
 

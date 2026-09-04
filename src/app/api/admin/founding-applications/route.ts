@@ -42,7 +42,14 @@ export async function GET(req: NextRequest) {
     where: statusParam ? { status: statusParam } : undefined,
     orderBy: { createdAt: "desc" },
     take: 200,
-    include: { identity: true, contact: true, location: true, banking: true, documents: true },
+    include: {
+      identity: true,
+      contact: true,
+      location: true,
+      banking: true,
+      documents: true,
+      agreementAcceptances: { include: { agreement: true } },
+    },
   });
 
   const storage = getMediaStorageProvider();
@@ -111,6 +118,14 @@ export async function GET(req: NextRequest) {
           signedUrl: await storage.getSignedReadUrl(d.storageKey),
         }))
       ),
+      // Not gated on banking:view — acceptance *records* (who accepted
+      // which version, when) aren't the financial secret the account
+      // number is, same reasoning as identity/contact above.
+      agreements: a.agreementAcceptances.map((acc: (typeof a.agreementAcceptances)[number]) => ({
+        type: acc.agreement.type,
+        version: acc.agreement.version,
+        acceptedAt: acc.acceptedAt,
+      })),
     }))
   );
 

@@ -1045,6 +1045,9 @@ interface FoundingApplicationRow {
   // Phase 2: real uploads, signed per-request (see GET
   // /api/admin/founding-applications) — never a stored/public URL.
   identityDocuments: { id: string; type: string; status: string; uploadedAt: string; signedUrl: string }[];
+  // Phase 3: acceptance records only (who accepted which version, when)
+  // — not gated on banking:view, see that route's own comment.
+  agreements: { type: string; version: string; acceptedAt: string }[];
 }
 
 /**
@@ -1123,6 +1126,25 @@ function FoundingApplicationsQueue({
     else {
       const body = await res.json().catch(() => null);
       alert(body?.error ?? "Couldn't submit identity review.");
+    }
+  }
+
+  async function reviewBanking(id: string, status: "EXTERNALLY_VERIFIED" | "FAILED" | "NEEDS_CORRECTION") {
+    const adminNotes =
+      status !== "EXTERNALLY_VERIFIED"
+        ? window.prompt("Notes (shown to no one but admins, optional):") ?? undefined
+        : undefined;
+    setBusyId(id);
+    const res = await fetch(`/api/admin/founding-applications/${id}/banking-review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, adminNotes }),
+    });
+    setBusyId(null);
+    if (res.ok) reload();
+    else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error ?? "Couldn't submit banking review.");
     }
   }
 
@@ -1299,6 +1321,43 @@ function FoundingApplicationsQueue({
                       )}
                       <span style={filterChipStyle}>
                         Banking: {app.banking ? humanizeKey(app.banking.status) : "Not submitted"}
+                      </span>
+                      {app.banking?.status === "SUBMITTED" && (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              reviewBanking(app.id, "EXTERNALLY_VERIFIED");
+                            }}
+                            disabled={busyId === app.id}
+                            style={approveButtonStyle}
+                          >
+                            Mark verified
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              reviewBanking(app.id, "NEEDS_CORRECTION");
+                            }}
+                            disabled={busyId === app.id}
+                            style={rejectButtonStyle}
+                          >
+                            Needs correction
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              reviewBanking(app.id, "FAILED");
+                            }}
+                            disabled={busyId === app.id}
+                            style={rejectButtonStyle}
+                          >
+                            Fail
+                          </button>
+                        </>
+                      )}
+                      <span style={filterChipStyle}>
+                        Agreements: {app.agreements.length}/4 accepted
                       </span>
                     </div>
                     {app.identityDocuments.length > 0 && (
