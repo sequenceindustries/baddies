@@ -1042,6 +1042,9 @@ interface FoundingApplicationRow {
     accountType: string;
     branchCode: string;
   } | null;
+  // Phase 2: real uploads, signed per-request (see GET
+  // /api/admin/founding-applications) — never a stored/public URL.
+  identityDocuments: { id: string; type: string; status: string; uploadedAt: string; signedUrl: string }[];
 }
 
 /**
@@ -1092,6 +1095,34 @@ function FoundingApplicationsQueue({
     else {
       const body = await res.json().catch(() => null);
       alert(body?.error ?? "Update failed.");
+    }
+  }
+
+  async function confirmWhatsapp(id: string) {
+    setBusyId(id);
+    const res = await fetch(`/api/admin/founding-applications/${id}/confirm-whatsapp`, { method: "POST" });
+    setBusyId(null);
+    if (res.ok) reload();
+    else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error ?? "Couldn't confirm WhatsApp.");
+    }
+  }
+
+  async function reviewIdentity(id: string, status: "VERIFIED" | "FAILED") {
+    const failureReason =
+      status === "FAILED" ? window.prompt("Reason (shown to no one but admins, optional):") ?? undefined : undefined;
+    setBusyId(id);
+    const res = await fetch(`/api/admin/founding-applications/${id}/identity-review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, failureReason }),
+    });
+    setBusyId(null);
+    if (res.ok) reload();
+    else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error ?? "Couldn't submit identity review.");
     }
   }
 
@@ -1198,13 +1229,14 @@ function FoundingApplicationsQueue({
                         <strong>Why baddies:</strong> {app.whyJoinBaddies}
                       </div>
                     )}
-                    {/* MASTER REQUIREMENTS sub-statuses (§5) — read-only
-                        here in Phase 1; Location is the only one always
-                        populated (written at application time, both
-                        accept and reject paths — see
+                    {/* MASTER REQUIREMENTS sub-statuses (§5). Location is
+                        always populated (written at application time,
+                        both accept and reject paths — see
                         src/app/api/founding/apply/route.ts). Identity/
-                        Contact/Banking stay "Not submitted"/"Unverified"
-                        until Phase 2 builds real capture. */}
+                        Contact/Banking start "Not submitted"/"Unverified"
+                        until the applicant completes those steps
+                        (src/app/founding-baddies/ApplicationNextSteps.tsx)
+                        — the buttons here are the admin side of that. */}
                     <div
                       style={{
                         marginTop: "0.8rem",
@@ -1212,6 +1244,7 @@ function FoundingApplicationsQueue({
                         borderTop: "1px solid var(--border)",
                         display: "flex",
                         flexWrap: "wrap",
+                        alignItems: "center",
                         gap: "0.4rem",
                       }}
                     >
@@ -1222,16 +1255,68 @@ function FoundingApplicationsQueue({
                       <span style={filterChipStyle}>
                         Identity: {app.identity ? humanizeKey(app.identity.status) : "Not submitted"}
                       </span>
+                      {app.identity?.status === "SUBMITTED" && (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              reviewIdentity(app.id, "VERIFIED");
+                            }}
+                            disabled={busyId === app.id}
+                            style={approveButtonStyle}
+                          >
+                            Verify identity
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              reviewIdentity(app.id, "FAILED");
+                            }}
+                            disabled={busyId === app.id}
+                            style={rejectButtonStyle}
+                          >
+                            Fail identity
+                          </button>
+                        </>
+                      )}
                       <span style={filterChipStyle}>
                         Email: {app.contact?.emailVerified ? "Verified" : "Unverified"}
                       </span>
                       <span style={filterChipStyle}>
                         WhatsApp: {app.contact?.whatsappVerified ? "Verified" : "Unverified"}
                       </span>
+                      {app.contact && !app.contact.whatsappVerified && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            confirmWhatsapp(app.id);
+                          }}
+                          disabled={busyId === app.id}
+                          style={approveButtonStyle}
+                        >
+                          Confirm WhatsApp
+                        </button>
+                      )}
                       <span style={filterChipStyle}>
                         Banking: {app.banking ? humanizeKey(app.banking.status) : "Not submitted"}
                       </span>
                     </div>
+                    {app.identityDocuments.length > 0 && (
+                      <div style={{ marginTop: "0.6rem", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                        {app.identityDocuments.map((d) => (
+                          <a
+                            key={d.id}
+                            href={d.signedUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ ...filterChipStyle, textDecoration: "none" }}
+                          >
+                            View {humanizeKey(d.type)} ↗
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

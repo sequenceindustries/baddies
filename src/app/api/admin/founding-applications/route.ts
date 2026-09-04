@@ -4,6 +4,7 @@ import { can, requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
 import { decryptField } from "@/lib/security/field-encryption";
 import { maskAccountNumber } from "@/lib/security/mask";
+import { getMediaStorageProvider } from "@/lib/providers/storage";
 import type { FoundingApplicationStatus } from "@prisma/client";
 
 // Always dynamic: this route reads live data (DB, auth, or both) and
@@ -41,11 +42,13 @@ export async function GET(req: NextRequest) {
     where: statusParam ? { status: statusParam } : undefined,
     orderBy: { createdAt: "desc" },
     take: 200,
-    include: { identity: true, contact: true, location: true, banking: true },
+    include: { identity: true, contact: true, location: true, banking: true, documents: true },
   });
 
-  return NextResponse.json({
-    applications: applications.map((a: (typeof applications)[number]) => ({
+  const storage = getMediaStorageProvider();
+
+  const mapped = await Promise.all(
+    applications.map(async (a: (typeof applications)[number]) => ({
       id: a.id,
       fullName: a.fullName,
       stageName: a.stageName,
@@ -94,6 +97,22 @@ export async function GET(req: NextRequest) {
               branchCode: a.banking.branchCode,
             }
           : null,
-    })),
-  });
+      // Signed, short-lived, generated per-request — never a stored/public
+      // URL (see MediaStorageProvider's own interface comment). This
+      // whole route is already admin-gated above, so issuing one here is
+      // safe: an admin reviewing the queue is exactly the "already
+      // entitled" reader this interface expects.
+      identityDocuments: await Promise.all(
+        a.documents.map(async (d: (typeof a.documents)[number]) => ({
+          id: d.id,
+          type: d.type,
+          status: d.status,
+          uploadedAt: d.uploadedAt,
+          signedUrl: await storage.getSignedReadUrl(d.storageKey),
+        }))
+      ),
+    }))
+  );
+
+  return NextResponse.json({ applications: mapped });
 }

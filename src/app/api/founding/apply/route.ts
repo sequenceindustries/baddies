@@ -9,6 +9,8 @@ import {
   NOT_SOUTH_AFRICA_MESSAGE,
 } from "@/lib/security/geo";
 import { notifyFoundingApplicationReceived } from "@/lib/notifications/founding-application";
+import { sendFoundingEmailVerification } from "@/lib/notifications/email-verification";
+import { getWhatsappProvider } from "@/lib/providers/whatsapp";
 
 // Always dynamic: this route writes live data and must never be
 // statically prerendered or cached at build time.
@@ -132,14 +134,30 @@ export async function POST(req: NextRequest) {
   });
 
   // Never lets a notification failure fail or block the applicant's
-  // submission — the row above is already committed regardless.
+  // submission — the row above is already committed regardless. Same
+  // reasoning applies to the applicant's own verification email below:
+  // a delivery failure there is real (they can't verify), but it must
+  // never turn into a failed submission — they've already applied.
   try {
     await notifyFoundingApplicationReceived(application);
   } catch (err) {
-    console.error("[founding-apply] notification failed", err);
+    console.error("[founding-apply] admin notification failed", err);
+  }
+  try {
+    await sendFoundingEmailVerification(application.id, application.email, application.stageName);
+  } catch (err) {
+    console.error("[founding-apply] email verification send failed", err);
   }
 
-  return NextResponse.json({ applicationId: application.id }, { status: 201 });
+  // The applicant's very next step (identity + documents, or a WhatsApp
+  // message) needs somewhere to go right now, in the same page load —
+  // see the plan's "resumability" note for why the emailed link is the
+  // *other* way back into this, not the only one.
+  const whatsappLink = getWhatsappProvider().buildClickToChatLink(
+    `Hi, I'm ${application.stageName} — I just applied to become a Founding Baddie (application ${application.id}).`
+  );
+
+  return NextResponse.json({ applicationId: application.id, whatsappLink }, { status: 201 });
 }
 
 /**
