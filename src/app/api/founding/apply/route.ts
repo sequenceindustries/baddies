@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db/client";
 import { getRequestCountry, isSouthAfrica, NOT_SOUTH_AFRICA_MESSAGE } from "@/lib/security/geo";
+import { notifyFoundingApplicationReceived } from "@/lib/notifications/founding-application";
 
 // Always dynamic: this route writes live data and must never be
 // statically prerendered or cached at build time.
@@ -79,6 +80,14 @@ export async function POST(req: NextRequest) {
     // nullable for a field nothing populates anymore.
     data: { ...data, whyJoinBaddies: "", platforms },
   });
+
+  // Never lets a notification failure fail or block the applicant's
+  // submission — the row above is already committed regardless.
+  try {
+    await notifyFoundingApplicationReceived(application);
+  } catch (err) {
+    console.error("[founding-apply] notification failed", err);
+  }
 
   return NextResponse.json({ applicationId: application.id }, { status: 201 });
 }
