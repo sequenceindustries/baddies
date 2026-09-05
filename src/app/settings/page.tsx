@@ -43,7 +43,7 @@ function AccountTypePanel({
   role,
   creatorProfile,
 }: {
-  role: "FAN" | "CREATOR" | "ADMIN";
+  role: "FAN" | "CREATOR" | "ADMIN" | "PARTNER";
   creatorProfile: { id: string; status: string } | null;
 }) {
   let heading = "Fan account";
@@ -51,6 +51,9 @@ function AccountTypePanel({
   if (role === "ADMIN") {
     heading = "Admin account";
     body = "You have platform administration access.";
+  } else if (role === "PARTNER") {
+    heading = "Founding Partner account";
+    body = "You have access to your private Founding Partner dashboard.";
   } else if (creatorProfile) {
     heading = "Creator account";
     body =
@@ -63,7 +66,7 @@ function AccountTypePanel({
     <div style={{ ...cardStyle, marginBottom: "2rem" }}>
       <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>{heading}</h2>
       <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", margin: 0 }}>{body}</p>
-      {!creatorProfile && role !== "ADMIN" && (
+      {!creatorProfile && role !== "ADMIN" && role !== "PARTNER" && (
         <Link
           href="/apply"
           style={{

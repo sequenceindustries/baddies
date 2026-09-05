@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 export interface SessionUser {
   id: string;
   email: string;
-  role: "FAN" | "CREATOR" | "ADMIN";
+  role: "FAN" | "CREATOR" | "ADMIN" | "PARTNER";
   displayName: string | null;
   creatorProfile: { id: string; status: string } | null;
 }
@@ -126,6 +126,7 @@ export function useSession() {
 export function roleHomePath(role: SessionUser["role"]): string {
   if (role === "ADMIN") return "/admin";
   if (role === "CREATOR") return "/creator-dashboard";
+  if (role === "PARTNER") return "/partner-dashboard";
   return "/fan-home";
 }
 
@@ -169,6 +170,11 @@ export function Nav() {
                 Dashboard
               </Link>
             )}
+            {user.role === "PARTNER" && (
+              <Link href="/partner-dashboard" style={linkStyle}>
+                Partner Dashboard
+              </Link>
+            )}
             {user.role === "FAN" && (
               <>
                 <Link href="/fan-home" style={linkStyle}>
@@ -179,7 +185,7 @@ export function Nav() {
                 </Link>
               </>
             )}
-            {user.role !== "ADMIN" && (
+            {user.role !== "ADMIN" && user.role !== "PARTNER" && (
               <>
                 <Link href="/discovery" style={linkStyle}>
                   Discover
@@ -318,6 +324,9 @@ function AccountTypeBadge({
 }) {
   if (role === "ADMIN") {
     return <span style={accountBadgeStyle("var(--accent)")}>Admin</span>;
+  }
+  if (role === "PARTNER") {
+    return <span style={accountBadgeStyle("var(--accent)")}>Founding Partner</span>;
   }
   if (creatorProfile) {
     const verified = creatorProfile.status === "VERIFIED";

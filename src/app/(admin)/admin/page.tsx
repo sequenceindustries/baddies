@@ -28,7 +28,7 @@ interface ContentQueueItem {
   participantCount: number;
 }
 
-const TABS = ["Overview", "Members", "Creators", "Applications", "Content", "Revenue", "Payouts", "Trust & Safety", "Audit Log", "System Health"] as const;
+const TABS = ["Overview", "Members", "Creators", "Applications", "Founding Partners", "Content", "Revenue", "Payouts", "Trust & Safety", "Audit Log", "System Health"] as const;
 type Tab = (typeof TABS)[number];
 
 type RangeKey = "today" | "7d" | "30d" | "90d" | "all";
@@ -99,6 +99,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Members", tab: "Members" },
       { label: "Creators", tab: "Creators" },
       { label: "Applications", tab: "Applications", badgeKey: "applications" },
+      { label: "Founding Partners", tab: "Founding Partners" },
     ],
   },
   { label: "Content", items: [{ label: "Content", tab: "Content", badgeKey: "content" }] },
@@ -233,6 +234,7 @@ export default function AdminDashboardPage() {
           <CreatorQueue />
         </>
       )}
+      {tab === "Founding Partners" && <FoundingPartnersPanel />}
       {tab === "Content" && (
         <>
           <ContentQueue />
@@ -2612,6 +2614,243 @@ function SystemHealthPanel() {
               ))}
             </div>
           </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+interface PartnerInvitationRow {
+  id: string;
+  email: string;
+  status: string;
+  invitedByEmail: string;
+  expiresAt: string | null;
+  acceptedAt: string | null;
+  revokedAt: string | null;
+  resentAt: string | null;
+  resendCount: number;
+  createdAt: string;
+  foundingPartnerId: string | null;
+}
+
+interface PartnerLedgerEntryRow {
+  id: string;
+  type: string;
+  grossAmount: string;
+  creatorShareAmount: string | null;
+  platformShareAmount: string | null;
+  createdAt: string;
+}
+
+interface ReferredCreatorRow {
+  foundingApplicationId: string;
+  stageName: string;
+  email: string;
+  status: string;
+  correctedBy: string | null;
+  correctionReason: string | null;
+}
+
+interface FoundingPartnerRow {
+  id: string;
+  email: string;
+  referralCode: string;
+  status: string;
+  activatedAt: string;
+  referredCreators: ReferredCreatorRow[];
+  ledgerEntryCount: number;
+  ledgerEntries: PartnerLedgerEntryRow[];
+}
+
+const MAX_FOUNDING_PARTNERS = 10;
+
+/**
+ * The private Founding Partner programme: invitation CRUD (create/revoke/
+ * resend), the partner roster with embedded referral + reward detail, and
+ * suspend/reactivate. Not paginated anywhere — the whole programme is
+ * capped at 10 partners, so both lists stay small by construction. Same
+ * reload()/busyId queue pattern as every other admin panel in this file.
+ */
+function FoundingPartnersPanel() {
+  const [invitations, setInvitations] = useState<PartnerInvitationRow[]>([]);
+  const [partners, setPartners] = useState<FoundingPartnerRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
+  const [expiresInDays, setExpiresInDays] = useState("14");
+  const [inviting, setInviting] = useState(false);
+
+  function reload() {
+    setLoading(true);
+    Promise.all([
+      fetch("/api/admin/partners/invitations").then((r) => (r.ok ? r.json() : { invitations: [] })),
+      fetch("/api/admin/partners").then((r) => (r.ok ? r.json() : { partners: [] })),
+    ])
+      .then(([invBody, partnerBody]) => {
+        setInvitations(invBody.invitations ?? []);
+        setPartners(partnerBody.partners ?? []);
+      })
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(reload, []);
+
+  async function sendInvite(e: React.FormEvent) {
+    e.preventDefault();
+    setInviting(true);
+    const res = await fetch("/api/admin/partners/invitations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, expiresInDays: expiresInDays ? Number(expiresInDays) : undefined }),
+    });
+    setInviting(false);
+    if (res.ok) {
+      setEmail("");
+      reload();
+    } else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error && typeof body.error === "string" ? body.error : "Couldn't send invitation.");
+    }
+  }
+
+  async function revokeInvite(id: string) {
+    setBusyId(id);
+    const res = await fetch(`/api/admin/partners/invitations/${id}/revoke`, { method: "POST" });
+    setBusyId(null);
+    if (res.ok) reload();
+    else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error ?? "Revoke failed.");
+    }
+  }
+
+  async function resendInvite(id: string) {
+    setBusyId(id);
+    const res = await fetch(`/api/admin/partners/invitations/${id}/resend`, { method: "POST" });
+    setBusyId(null);
+    if (res.ok) reload();
+    else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error ?? "Resend failed.");
+    }
+  }
+
+  async function toggleSuspend(id: string, currentlyActive: boolean) {
+    setBusyId(id);
+    const res = await fetch(`/api/admin/partners/${id}/${currentlyActive ? "suspend" : "reactivate"}`, { method: "POST" });
+    setBusyId(null);
+    if (res.ok) reload();
+    else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error ?? "Action failed.");
+    }
+  }
+
+  const activePartnerCount = partners.filter((p) => p.status === "ACTIVE").length;
+  const pendingInviteCount = invitations.filter((i) => i.status === "PENDING").length;
+  const slotsRemaining = MAX_FOUNDING_PARTNERS - activePartnerCount - pendingInviteCount;
+
+  return (
+    <section style={{ marginBottom: "3rem" }}>
+      <h2 style={sectionHeadingStyle}>Founding Partners</h2>
+      <p style={mutedSmallStyle}>
+        {activePartnerCount} active · {pendingInviteCount} pending invitation{pendingInviteCount === 1 ? "" : "s"} ·{" "}
+        {slotsRemaining} slot{slotsRemaining === 1 ? "" : "s"} remaining (programme capped at {MAX_FOUNDING_PARTNERS})
+      </p>
+
+      <form onSubmit={sendInvite} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", margin: "1rem 0 2rem" }}>
+        <input
+          type="email"
+          style={memberSearchInputStyle}
+          placeholder="Invitee email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
+        <select style={statusSelectStyle} value={expiresInDays} onChange={(e) => setExpiresInDays(e.target.value)}>
+          <option value="">No expiry</option>
+          <option value="7">Expires in 7 days</option>
+          <option value="14">Expires in 14 days</option>
+          <option value="30">Expires in 30 days</option>
+        </select>
+        <button type="submit" style={approveButtonStyle} disabled={inviting || slotsRemaining <= 0}>
+          {inviting ? "Sending..." : "Send invitation"}
+        </button>
+      </form>
+
+      {loading ? (
+        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+      ) : (
+        <>
+          <h3 style={statGroupHeadingStyle}>Invitations</h3>
+          {invitations.length === 0 ? (
+            <p style={{ color: "var(--text-muted)" }}>No invitations sent yet.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", marginBottom: "2rem" }}>
+              {invitations.map((inv) => (
+                <div key={inv.id} style={rowCardStyle}>
+                  <div>
+                    <div style={{ fontSize: "0.9rem" }}>{inv.email}</div>
+                    <div style={mutedSmallStyle}>
+                      {inv.status} · invited by {inv.invitedByEmail} · {new Date(inv.createdAt).toLocaleDateString()}
+                      {inv.expiresAt && ` · expires ${new Date(inv.expiresAt).toLocaleDateString()}`}
+                      {inv.resendCount > 0 && ` · resent ${inv.resendCount}x`}
+                    </div>
+                  </div>
+                  {inv.status === "PENDING" && (
+                    <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
+                      <button onClick={() => resendInvite(inv.id)} disabled={busyId === inv.id} style={approveButtonStyle}>
+                        Resend
+                      </button>
+                      <button onClick={() => revokeInvite(inv.id)} disabled={busyId === inv.id} style={rejectButtonStyle}>
+                        Revoke
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <h3 style={statGroupHeadingStyle}>Partners</h3>
+          {partners.length === 0 ? (
+            <p style={{ color: "var(--text-muted)" }}>No activated partners yet.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              {partners.map((p) => (
+                <div key={p.id} style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch", gap: "0.6rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
+                    <div>
+                      <div style={{ fontSize: "0.9rem" }}>{p.email}</div>
+                      <div style={mutedSmallStyle}>
+                        {p.status} · code <code>{p.referralCode}</code> · activated {new Date(p.activatedAt).toLocaleDateString()} ·{" "}
+                        {p.referredCreators.length} referred creator{p.referredCreators.length === 1 ? "" : "s"} ·{" "}
+                        {p.ledgerEntryCount} ledger event{p.ledgerEntryCount === 1 ? "" : "s"}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => toggleSuspend(p.id, p.status === "ACTIVE")}
+                      disabled={busyId === p.id}
+                      style={p.status === "ACTIVE" ? rejectButtonStyle : approveButtonStyle}
+                    >
+                      {p.status === "ACTIVE" ? "Suspend" : "Reactivate"}
+                    </button>
+                  </div>
+                  {p.referredCreators.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+                      {p.referredCreators.map((c) => (
+                        <span key={c.foundingApplicationId} style={filterChipStyle}>
+                          {c.stageName} · {humanizeKey(c.status)}
+                          {c.correctedBy && " (corrected)"}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </>
       )}
     </section>
