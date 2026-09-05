@@ -7,6 +7,8 @@ const PUBLIC_PATHS = new Set(["/", "/login", "/founding-baddies", "/partner-invi
 
 const PUBLIC_PREFIXES = [
   "/api/founding/apply",
+  "/api/founding/referral", // sets the referral-attribution cookie from /founding-baddies?ref=<code>, called before the visitor has any account
+  "/api/partner-invite", // status + accept — an invited partner has no session yet either
   "/api/health",
   "/api/auth/login",
   "/api/auth/logout",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { NOT_SOUTH_AFRICA_MESSAGE } from "@/lib/security/geo";
 import ApplicationNextSteps from "./ApplicationNextSteps";
 
@@ -14,6 +15,20 @@ import ApplicationNextSteps from "./ApplicationNextSteps";
  * isn't tied to a User row — see that route's own comment.
  */
 export default function FoundingBaddiesPage() {
+  const searchParams = useSearchParams();
+  const ref = searchParams.get("ref");
+
+  // Silent, one-shot: a valid Founding Partner referral code sets a
+  // signed httpOnly cookie (see GET /api/founding/referral/[code]) that
+  // POST /api/founding/apply reads later to attribute the application.
+  // No visible confirmation here on purpose — a referred vs. unreferred
+  // visitor sees exactly the same page, same reasoning the public
+  // homepage keeps referral/partner mechanics off itself entirely.
+  useEffect(() => {
+    if (!ref) return;
+    fetch(`/api/founding/referral/${encodeURIComponent(ref)}`).catch(() => {});
+  }, [ref]);
+
   return (
     <main style={pageStyle}>
       <Hero />

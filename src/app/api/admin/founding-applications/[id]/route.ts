@@ -53,6 +53,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       banking: true,
       documents: true,
       agreementAcceptances: { include: { agreement: true } },
+      referralAttribution: { include: { foundingPartner: { include: { user: { select: { email: true } } } } } },
     },
   });
   if (!application) {
@@ -174,6 +175,17 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       actorEmail: a.actor?.email ?? "system",
       createdAt: a.createdAt,
     })),
+
+    referralAttribution: application.referralAttribution
+      ? {
+          foundingPartnerId: application.referralAttribution.foundingPartnerId,
+          partnerEmail: application.referralAttribution.foundingPartner.user.email,
+          attributedAt: application.referralAttribution.attributedAt,
+          correctedBy: application.referralAttribution.correctedBy,
+          correctedAt: application.referralAttribution.correctedAt,
+          correctionReason: application.referralAttribution.correctionReason,
+        }
+      : null,
   });
 }
 

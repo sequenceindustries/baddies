@@ -11,6 +11,7 @@ import {
 import { notifyFoundingApplicationReceived } from "@/lib/notifications/founding-application";
 import { sendFoundingEmailVerification } from "@/lib/notifications/email-verification";
 import { getWhatsappProvider } from "@/lib/providers/whatsapp";
+import { resolveReferralAttribution } from "@/lib/founding/referral-attribution";
 
 // Always dynamic: this route writes live data and must never be
 // statically prerendered or cached at build time.
@@ -115,6 +116,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: NOT_SOUTH_AFRICA_MESSAGE }, { status: 403 });
   }
 
+  // Resolved before the transaction (a read, not part of the atomic
+  // write) but the ReferralAttribution row itself is created inside the
+  // same transaction as the FoundingApplication below — attribution must
+  // exist the instant the application does, never as a separate
+  // best-effort step afterward. A missing/invalid/tampered cookie, a
+  // suspended partner, or a self-referral (the partner applying through
+  // their own link) all resolve to "no attribution" silently — none of
+  // these should block the application itself.
+  const referralPartnerId = await resolveReferralAttribution(req, applicationData.email);
+
   const application = await db.$transaction(async (tx) => {
     const created = await tx.foundingApplication.create({ data: applicationData });
     await tx.location.create({
@@ -130,6 +141,11 @@ export async function POST(req: NextRequest) {
     // lazily created whenever Phase 2's WhatsApp/email flows first touch
     // it.
     await tx.contact.create({ data: { foundingApplicationId: created.id } });
+    if (referralPartnerId) {
+      await tx.referralAttribution.create({
+        data: { foundingApplicationId: created.id, foundingPartnerId: referralPartnerId },
+      });
+    }
     return created;
   });
 

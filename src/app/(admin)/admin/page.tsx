@@ -1383,6 +1383,14 @@ interface FoundingApplicationDetail {
     creatorProfileId: string;
   } | null;
   activity: { id: string; action: string; actorEmail: string; createdAt: string }[];
+  referralAttribution: {
+    foundingPartnerId: string;
+    partnerEmail: string;
+    attributedAt: string;
+    correctedBy: string | null;
+    correctedAt: string | null;
+    correctionReason: string | null;
+  } | null;
 }
 
 const CREATOR_DETAIL_TABS = [
@@ -1434,16 +1442,43 @@ function FoundingApplicationDetailView({
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<CreatorDetailTab>("Overview");
   const [busyAction, setBusyAction] = useState(false);
+  const [partners, setPartners] = useState<{ id: string; email: string }[]>([]);
+  const [attributionChoice, setAttributionChoice] = useState("");
 
   function reload() {
     setLoading(true);
     fetch(`/api/admin/founding-applications/${id}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then(setData)
+      .then((body: FoundingApplicationDetail | null) => {
+        setData(body);
+        setAttributionChoice(body?.referralAttribution?.foundingPartnerId ?? "");
+      })
       .finally(() => setLoading(false));
   }
 
   useEffect(reload, [id]);
+  useEffect(() => {
+    fetch("/api/admin/partners")
+      .then((r) => (r.ok ? r.json() : { partners: [] }))
+      .then((body) => setPartners((body.partners ?? []).map((p: { id: string; email: string }) => ({ id: p.id, email: p.email }))));
+  }, []);
+
+  async function correctAttribution() {
+    const reason = window.prompt("Reason for this attribution change (required):");
+    if (!reason) return;
+    setBusyAction(true);
+    const res = await fetch(`/api/admin/founding-applications/${id}/correct-attribution`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ foundingPartnerId: attributionChoice || null, reason }),
+    });
+    setBusyAction(false);
+    if (res.ok) reload();
+    else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error ?? "Couldn't update attribution.");
+    }
+  }
 
   async function confirmWhatsapp() {
     setBusyAction(true);
@@ -1553,6 +1588,30 @@ function FoundingApplicationDetailView({
               <Stat label="Banking" value={data.banking ? humanizeKey(data.banking.status) : "Not submitted"} alert={data.banking?.status === "SUBMITTED"} />
               <Stat label="Agreements" value={`${data.agreements.length}/4 accepted`} />
               <Stat label="Registered account" value={data.linkedAccount ? "Yes" : "Not yet"} />
+              <Stat
+                label="Referred by"
+                value={data.referralAttribution ? data.referralAttribution.partnerEmail : "No referral"}
+              />
+              {data.referralAttribution?.correctedBy && (
+                <Stat label="Attribution corrected" value={data.referralAttribution.correctionReason ?? "—"} />
+              )}
+              <div style={{ marginTop: "0.8rem", display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+                <select
+                  value={attributionChoice}
+                  onChange={(e) => setAttributionChoice(e.target.value)}
+                  style={statusSelectStyle}
+                >
+                  <option value="">No referral</option>
+                  {partners.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.email}
+                    </option>
+                  ))}
+                </select>
+                <button onClick={correctAttribution} disabled={busyAction} style={approveButtonStyle}>
+                  Save attribution correction
+                </button>
+              </div>
             </StatGroup>
           )}
 
