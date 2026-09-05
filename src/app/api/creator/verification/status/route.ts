@@ -6,10 +6,10 @@ import { db } from "@/lib/db/client";
 export const dynamic = "force-dynamic";
 
 /**
- * Lets /apply's VERIFICATION_REQUIRED screen know whether the current
- * creator has already submitted a capture (so it shows "awaiting review"
- * on reload instead of the camera UI again), without building a full
- * verification status page.
+ * Lets the VerificationFlow wizard (used on /apply and creator-dashboard)
+ * know which of its 3 steps are already done, so it shows the right step
+ * (and an "awaiting review" state for later steps) instead of always
+ * starting from step 1.
  */
 export async function GET() {
   const user = await getCurrentUser();
@@ -19,7 +19,10 @@ export async function GET() {
 
   const creatorProfile = await db.creatorProfile.findUnique({
     where: { userId: user.id },
-    select: { verifications: { select: { type: true, status: true } } },
+    select: {
+      verifications: { select: { type: true, status: true } },
+      identity: { select: { id: true } },
+    },
   });
   if (!creatorProfile) {
     return NextResponse.json({ error: "No creator application found." }, { status: 404 });
@@ -30,5 +33,5 @@ export async function GET() {
     checks[v.type] = v.status;
   }
 
-  return NextResponse.json({ checks });
+  return NextResponse.json({ detailsSubmitted: creatorProfile.identity !== null, checks });
 }

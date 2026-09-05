@@ -379,11 +379,13 @@ model CreatorProfile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  verifications VerificationSession[]
-  content       Content[]
-  ledgerEntries LedgerEntry[]
-  followers     Follow[]
-  categories    CreatorCategory[]
+  verifications    VerificationSession[]
+  content          Content[]
+  ledgerEntries    LedgerEntry[]
+  followers        Follow[]
+  categories       CreatorCategory[]
+  identity         CreatorIdentity?
+  identityDocument CreatorIdentityDocument?
 
   @@index([status])
   @@map("creator_profiles")
@@ -1059,6 +1061,48 @@ model IdentityDocument {
 
   @@index([foundingApplicationId])
   @@map("identity_documents")
+}
+
+// Real-creator (CreatorProfile) counterpart to Identity/IdentityDocument
+// above — deliberately a separate model rather than a polymorphic
+// extension of those: this flow and the Founding one have no shared
+// consumer, and this project already prefers a small parallel model over
+// forcing two independent flows through one table (see FanTrial vs.
+// ContentEntitlement's reasoning). legalName is not duplicated here — it
+// already lives on CreatorProfile.legalNameEncrypted. Review/pass-fail
+// state lives on VerificationSession (type IDENTITY), not here — this is
+// just the supporting details+document an admin reviews alongside that
+// session's live-captured selfie-holding-ID photo.
+model CreatorIdentity {
+  id               String         @id @default(cuid())
+  creatorProfileId String         @unique
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+
+  dateOfBirth       DateTime @db.Date
+  nationality       String
+  idNumberEncrypted String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("creator_identities")
+}
+
+// The uploaded ID-document image for the above — one per creator,
+// overwritten in place on resubmission (no resubmission history needed
+// for V1, unlike Founding's IdentityDocument which keeps every
+// submission). Same opaque-storageKey pattern as every other private
+// file reference in this codebase.
+model CreatorIdentityDocument {
+  id               String         @id @default(cuid())
+  creatorProfileId String         @unique
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+
+  storageKey String
+  mimeType   String
+  uploadedAt DateTime @default(now())
+
+  @@map("creator_identity_documents")
 }
 
 // Email/WhatsApp verification *state* only — email and phone themselves

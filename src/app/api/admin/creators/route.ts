@@ -4,6 +4,8 @@ import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
 import type { CreatorStatus } from "@prisma/client";
 import { getMediaStorageProvider } from "@/lib/providers/storage";
+import { decryptField } from "@/lib/security/field-encryption";
+import { maskAccountNumber } from "@/lib/security/mask";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -14,9 +16,9 @@ const QUEUE_STATUSES: CreatorStatus[] = ["VERIFICATION_REQUIRED", "UNDER_REVIEW"
 /**
  * Lists creator applications for the admin compliance-review queue (§23:
  * "Creator Management: Applications, Verification, Approvals..."). Only
- * exposes what an admin needs to make a decision — never raw verification
- * documents (those stay behind the provider's hosted reference, per §7:
- * "Do not expose sensitive verification documents to normal users").
+ * exposes what an admin needs to make a decision — ID number is
+ * decrypted then masked server-side, never sent to the client in
+ * plaintext (per §3, same rule banking details already follow).
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -48,27 +50,47 @@ export async function GET(req: NextRequest) {
       verifications: {
         select: { type: true, status: true, completedAt: true, providerReference: true },
       },
+      identity: { select: { dateOfBirth: true, nationality: true, idNumberEncrypted: true } },
+      identityDocument: { select: { storageKey: true } },
     },
   });
 
   // A MANUAL_REVIEW session's providerReference is a self-capture storage
   // key (see POST /api/creator/verification/capture) — sign it once per
-  // application so an admin can actually see the evidence they're
-  // approving/rejecting. Never exposed to anyone but admins with
+  // application, per group, so an admin can actually see the evidence
+  // they're approving/rejecting. Never exposed to anyone but admins with
   // creator:verify (enforced above).
   const storage = getMediaStorageProvider();
-  const applicationsWithCaptureUrl = await Promise.all(
+  const applicationsWithDetail = await Promise.all(
     applications.map(async (app: (typeof applications)[number]) => {
-      const pending = app.verifications.find(
-        (v: (typeof app.verifications)[number]) => v.status === "MANUAL_REVIEW" && v.providerReference
-      );
-      const captureReviewUrl = pending ? await storage.getSignedReadUrl(pending.providerReference!) : null;
+      const pendingByType = (types: string[]) =>
+        app.verifications.find(
+          (v: (typeof app.verifications)[number]) => types.includes(v.type) && v.status === "MANUAL_REVIEW" && v.providerReference
+        );
+      const identityAgePending = pendingByType(["IDENTITY", "AGE"]);
+      const livenessPending = pendingByType(["LIVENESS"]);
+
+      const [identityAgeReviewUrl, livenessReviewUrl, identityDocumentUrl] = await Promise.all([
+        identityAgePending ? storage.getSignedReadUrl(identityAgePending.providerReference!) : Promise.resolve(null),
+        livenessPending ? storage.getSignedReadUrl(livenessPending.providerReference!) : Promise.resolve(null),
+        app.identityDocument ? storage.getSignedReadUrl(app.identityDocument.storageKey) : Promise.resolve(null),
+      ]);
+
       return {
         creatorProfileId: app.id,
         status: app.status,
         appliedAt: app.appliedAt,
         applicantEmail: app.user.email,
-        captureReviewUrl,
+        identityDetails: app.identity
+          ? {
+              dateOfBirth: app.identity.dateOfBirth,
+              nationality: app.identity.nationality,
+              maskedIdNumber: maskAccountNumber(decryptField(app.identity.idNumberEncrypted)),
+            }
+          : null,
+        identityDocumentUrl,
+        identityAgeReviewUrl,
+        livenessReviewUrl,
         verificationChecks: app.verifications.map((v: (typeof app.verifications)[number]) => ({
           type: v.type,
           status: v.status,
@@ -78,5 +100,5 @@ export async function GET(req: NextRequest) {
     })
   );
 
-  return NextResponse.json({ applications: applicationsWithCaptureUrl });
+  return NextResponse.json({ applications: applicationsWithDetail });
 }

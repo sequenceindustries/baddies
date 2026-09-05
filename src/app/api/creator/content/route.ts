@@ -110,6 +110,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No creator profile found." }, { status: 404 });
   }
 
+  // Real verification gate — a creator can't publish anything (any access
+  // level, not just VIP/VVIP) until they've at least submitted both
+  // required evidence groups: identity+age (details + live photo, see
+  // /api/creator/verification/identity-details and .../capture) and
+  // liveness (recorded video). "Submitted" is enough — this doesn't wait
+  // for admin approval — but a FAILED review re-blocks until they
+  // resubmit, since FAILED means the evidence itself was rejected.
+  const requiredSessions = await db.verificationSession.findMany({
+    where: { creatorProfileId: creatorProfile.id, type: { in: ["IDENTITY", "LIVENESS"] } },
+  });
+  const isSubmitted = (type: "IDENTITY" | "LIVENESS") => {
+    const session = requiredSessions.find((s: (typeof requiredSessions)[number]) => s.type === type);
+    return !!session && session.status !== "FAILED";
+  };
+  if (!isSubmitted("IDENTITY") || !isSubmitted("LIVENESS")) {
+    return NextResponse.json(
+      { error: "Complete identity, age & liveness verification before uploading content." },
+      { status: 403 }
+    );
+  }
+
   const json = await req.json().catch(() => null);
   const parsed = UploadSchema.safeParse(json);
   if (!parsed.success) {

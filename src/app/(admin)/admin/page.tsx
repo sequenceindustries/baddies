@@ -10,7 +10,10 @@ interface CreatorApplication {
   status: string;
   appliedAt: string;
   applicantEmail: string;
-  captureReviewUrl: string | null;
+  identityDetails: { dateOfBirth: string; nationality: string; maskedIdNumber: string } | null;
+  identityDocumentUrl: string | null;
+  identityAgeReviewUrl: string | null;
+  livenessReviewUrl: string | null;
   verificationChecks: { type: string; status: string; completedAt: string | null }[];
 }
 
@@ -2658,14 +2661,14 @@ function CreatorQueue() {
     }
   }
 
-  async function reviewVerification(id: string, decision: "PASSED" | "FAILED") {
+  async function reviewVerification(id: string, kind: "IDENTITY_AGE" | "LIVENESS", decision: "PASSED" | "FAILED") {
     const failureReason =
       decision === "FAILED" ? window.prompt("Reason (shown to no one but admins, optional):") ?? undefined : undefined;
     setBusyId(id);
     const res = await fetch(`/api/admin/creators/${id}/verification-review`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decision, failureReason }),
+      body: JSON.stringify({ kind, decision, failureReason }),
     });
     setBusyId(null);
     if (res.ok) reload();
@@ -2696,30 +2699,69 @@ function CreatorQueue() {
                     ? "No verification checks started"
                     : app.verificationChecks.map((c) => `${c.type}: ${c.status}`).join(" · ")}
                 </div>
-                {app.captureReviewUrl && (
+                {app.identityDetails && (
+                  <div style={mutedSmallStyle}>
+                    DOB {new Date(app.identityDetails.dateOfBirth).toLocaleDateString()} ·{" "}
+                    {app.identityDetails.nationality} · ID {app.identityDetails.maskedIdNumber}
+                    {app.identityDocumentUrl && (
+                      <>
+                        {" · "}
+                        <a href={app.identityDocumentUrl} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
+                          View ID document ↗
+                        </a>
+                      </>
+                    )}
+                  </div>
+                )}
+                {app.identityAgeReviewUrl && (
                   <div style={{ marginTop: "0.4rem" }}>
-                    <a href={app.captureReviewUrl} target="_blank" rel="noreferrer" style={{ ...filterChipStyle, textDecoration: "none" }}>
-                      View selfie-with-ID capture ↗
+                    <a href={app.identityAgeReviewUrl} target="_blank" rel="noreferrer" style={{ ...filterChipStyle, textDecoration: "none" }}>
+                      View identity+age photo ↗
+                    </a>
+                  </div>
+                )}
+                {app.livenessReviewUrl && (
+                  <div style={{ marginTop: "0.4rem" }}>
+                    <a href={app.livenessReviewUrl} target="_blank" rel="noreferrer" style={{ ...filterChipStyle, textDecoration: "none" }}>
+                      View liveness video ↗
                     </a>
                   </div>
                 )}
               </div>
               <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0, flexWrap: "wrap" }}>
-                {app.captureReviewUrl && (
+                {app.identityAgeReviewUrl && (
                   <>
                     <button
-                      onClick={() => reviewVerification(app.creatorProfileId, "PASSED")}
+                      onClick={() => reviewVerification(app.creatorProfileId, "IDENTITY_AGE", "PASSED")}
                       disabled={busyId === app.creatorProfileId}
                       style={approveButtonStyle}
                     >
-                      Approve verification
+                      Approve identity+age
                     </button>
                     <button
-                      onClick={() => reviewVerification(app.creatorProfileId, "FAILED")}
+                      onClick={() => reviewVerification(app.creatorProfileId, "IDENTITY_AGE", "FAILED")}
                       disabled={busyId === app.creatorProfileId}
                       style={rejectButtonStyle}
                     >
-                      Reject verification
+                      Reject identity+age
+                    </button>
+                  </>
+                )}
+                {app.livenessReviewUrl && (
+                  <>
+                    <button
+                      onClick={() => reviewVerification(app.creatorProfileId, "LIVENESS", "PASSED")}
+                      disabled={busyId === app.creatorProfileId}
+                      style={approveButtonStyle}
+                    >
+                      Approve liveness
+                    </button>
+                    <button
+                      onClick={() => reviewVerification(app.creatorProfileId, "LIVENESS", "FAILED")}
+                      disabled={busyId === app.creatorProfileId}
+                      style={rejectButtonStyle}
+                    >
+                      Reject liveness
                     </button>
                   </>
                 )}

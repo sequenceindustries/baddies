@@ -3,30 +3,39 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, VerificationType } from "@prisma/client";
 import { maybeAdvanceCreatorAfterVerification } from "@/lib/creator/verification-workflow";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
 export const dynamic = "force-dynamic";
 
+const SESSION_TYPES: Record<"IDENTITY_AGE" | "LIVENESS", VerificationType[]> = {
+  IDENTITY_AGE: ["IDENTITY", "AGE"],
+  LIVENESS: ["LIVENESS"],
+};
+
 const ReviewSchema = z.object({
+  kind: z.enum(["IDENTITY_AGE", "LIVENESS"]),
   decision: z.enum(["PASSED", "FAILED"]),
   failureReason: z.string().max(2000).optional(),
 });
 
 /**
- * Reviews a creator's self-captured "selfie holding ID" evidence (see
- * POST /api/creator/verification/capture) — the one admin action that
- * makes MANUAL_REVIEW sessions ever move. Standard admin-action template:
- * resolve user → requirePermission → state change → AuditLog, in one
- * transaction.
+ * Reviews one of the two self-captured evidence groups (see POST
+ * /api/creator/verification/capture) — Identity+Age (details + ID
+ * document from step 1, plus the live photo from step 2) or Liveness
+ * (the recorded video from step 3). The two groups are submitted at
+ * different times, so they're reviewed independently. Standard
+ * admin-action template: resolve user → requirePermission → state
+ * change → AuditLog, in one transaction.
  *
  * On PASSED, calls maybeAdvanceCreatorAfterVerification directly (rather
  * than going through applyVerificationOutcome, which keys off a
  * providerSessionId these self-capture sessions never have) so the
  * existing IDENTITY+AGE+LIVENESS-all-PASSED → UNDER_REVIEW auto-advance
- * logic stays the single source of truth.
+ * logic stays the single source of truth — a no-op here until the other
+ * group is PASSED too.
  */
 export async function POST(
   req: NextRequest,
@@ -59,16 +68,17 @@ export async function POST(
     return NextResponse.json({ error: "Creator profile not found." }, { status: 404 });
   }
 
+  const types = SESSION_TYPES[parsed.data.kind];
   const pendingSessions = await db.verificationSession.findMany({
-    where: { creatorProfileId: creatorProfile.id, status: "MANUAL_REVIEW" },
+    where: { creatorProfileId: creatorProfile.id, type: { in: types }, status: "MANUAL_REVIEW" },
   });
   if (pendingSessions.length === 0) {
-    return NextResponse.json({ error: "No capture is awaiting review for this creator." }, { status: 409 });
+    return NextResponse.json({ error: "No capture is awaiting review for this group." }, { status: 409 });
   }
 
   await db.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.verificationSession.updateMany({
-      where: { creatorProfileId: creatorProfile.id, status: "MANUAL_REVIEW" },
+      where: { creatorProfileId: creatorProfile.id, type: { in: types }, status: "MANUAL_REVIEW" },
       data: {
         status: parsed.data.decision,
         completedAt: new Date(),
@@ -82,7 +92,7 @@ export async function POST(
         action: "creator.verification.reviewed",
         targetType: "creator_profile",
         targetId: creatorProfile.id,
-        metadata: { decision: parsed.data.decision, failureReason: parsed.data.failureReason },
+        metadata: { kind: parsed.data.kind, decision: parsed.data.decision, failureReason: parsed.data.failureReason },
         ipAddress: req.headers.get("x-forwarded-for") ?? undefined,
       },
     });

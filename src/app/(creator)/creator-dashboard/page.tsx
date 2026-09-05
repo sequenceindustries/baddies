@@ -12,6 +12,7 @@ import {
   errorBannerStyle,
   ImageUploadField,
 } from "@/components/ui";
+import { VerificationFlow } from "@/components/verification-capture";
 
 type CreatorStatus =
   | "PENDING"
@@ -38,16 +39,10 @@ interface OwnContentItem {
   likeCount: number;
 }
 
-const VERIFICATION_STEPS: { type: "IDENTITY" | "AGE" | "LIVENESS"; label: string }[] = [
-  { type: "IDENTITY", label: "Identity" },
-  { type: "AGE", label: "Age" },
-  { type: "LIVENESS", label: "Liveness" },
-];
-
 type DashboardTab = "overview" | "content" | "golive" | "settings";
 
 export default function CreatorDashboardPage() {
-  const { user, loading, refresh } = useSession();
+  const { user, loading } = useSession();
   const [tab, setTab] = useState<DashboardTab>("overview");
 
   if (loading) return <main style={mainStyle} />;
@@ -87,7 +82,7 @@ export default function CreatorDashboardPage() {
   return (
     <main style={mainStyle}>
       <h1 style={displayHeadingStyle}>Creator Dashboard</h1>
-      <StatusPanel status={status} onAdvance={refresh} />
+      <StatusPanel status={status} />
 
       {active && (
         <>
@@ -386,31 +381,10 @@ function WalletStat({
   );
 }
 
-function StatusPanel({ status, onAdvance }: { status: CreatorStatus; onAdvance: () => void }) {
-  const [completed, setCompleted] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function startVerification(type: "IDENTITY" | "AGE" | "LIVENESS") {
-    setBusy(type);
-    setError(null);
-    const res = await fetch("/api/creator/verification/start", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ verificationType: type }),
-    });
-    setBusy(null);
-    if (!res.ok) {
-      setError("Couldn't start verification. Try again.");
-      return;
-    }
-    setCompleted((prev) => new Set(prev).add(type));
-    onAdvance(); // re-fetch session — status may have auto-advanced to UNDER_REVIEW
-  }
-
+function StatusPanel({ status }: { status: CreatorStatus }) {
   const copy: Record<CreatorStatus, string> = {
     PENDING: "Application received.",
-    VERIFICATION_REQUIRED: "Complete identity, age, and liveness verification below.",
+    VERIFICATION_REQUIRED: "Complete your identity, age, and liveness verification below.",
     UNDER_REVIEW: "Verification complete — awaiting admin approval.",
     VERIFIED: "You're a Verified baddie. You can publish monetised content.",
     SUSPENDED: "Your creator account is suspended.",
@@ -425,21 +399,7 @@ function StatusPanel({ status, onAdvance }: { status: CreatorStatus; onAdvance: 
       </p>
       <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", marginTop: "0.5rem" }}>{copy[status]}</p>
 
-      {status === "VERIFICATION_REQUIRED" && (
-        <div style={{ display: "flex", gap: "0.6rem", marginTop: "1rem", flexWrap: "wrap" }}>
-          {VERIFICATION_STEPS.map((step) => (
-            <button
-              key={step.type}
-              onClick={() => startVerification(step.type)}
-              disabled={busy === step.type || completed.has(step.type)}
-              style={stepButtonStyle(completed.has(step.type))}
-            >
-              {completed.has(step.type) ? `✓ ${step.label}` : busy === step.type ? "..." : `Verify ${step.label}`}
-            </button>
-          ))}
-        </div>
-      )}
-      {error && <div style={{ ...errorBannerStyle, marginTop: "1rem", marginBottom: 0 }}>{error}</div>}
+      {status === "VERIFICATION_REQUIRED" && <VerificationFlow />}
     </div>
   );
 }
@@ -851,15 +811,3 @@ const deleteButtonStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
-function stepButtonStyle(done: boolean): React.CSSProperties {
-  return {
-    background: done ? "var(--surface-raised)" : "var(--accent)",
-    color: done ? "var(--text-muted)" : "var(--bg)",
-    border: done ? "1px solid var(--border)" : "none",
-    borderRadius: "var(--radius)",
-    padding: "0.45rem 0.85rem",
-    fontSize: "0.82rem",
-    fontWeight: 600,
-    cursor: done ? "default" : "pointer",
-  };
-}
