@@ -1,5 +1,5 @@
 import { db } from "@/lib/db/client";
-import { getBusinessConfig } from "@/lib/config/settings";
+import { resolveCreatorRevenueShare } from "@/lib/config/revenue-rules";
 import type { LedgerEventType } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 
@@ -33,14 +33,25 @@ export interface RevenueEventInput {
 
 /**
  * Posts a gross sale event, splitting it into creator/platform shares
- * using the CURRENT platform revenue-share setting. The split is frozen on
- * the entry at write time — later changes to CREATOR_SHARE do not
+ * using the CURRENT revenue-share rule for this specific creator: the
+ * standard rate (80%), or the higher partner-referred rate (85%) if this
+ * creator's original Founding Baddie application is attributed to a
+ * Founding Partner (see resolveCreatorRevenueShare). The resolved rule
+ * id and any crediting partner are frozen onto the entry at write time —
+ * later rule changes, or a later attribution correction, never
  * retroactively alter historical entries.
+ *
+ * Replaces the old flat, unversioned PlatformSetting CREATOR_SHARE/
+ * PLATFORM_SHARE pair as the source of the SPLIT itself — getBusinessConfig()
+ * is still the right place for everything else it holds (pricing, the
+ * VIP-pass allocation model), just no longer for this one value, which
+ * genuinely needed version history a mutate-in-place setting can't provide.
  */
 export async function postRevenueEvent(input: RevenueEventInput) {
-  const config = await getBusinessConfig();
-  const creatorShareAmount = roundCents(input.grossAmountUsd * config.creatorShare);
-  const platformShareAmount = roundCents(input.grossAmountUsd * config.platformShare);
+  const { rule, foundingPartnerId } = await resolveCreatorRevenueShare(input.creatorProfileId);
+  const creatorSharePct = Number(rule.percentage);
+  const creatorShareAmount = roundCents(input.grossAmountUsd * creatorSharePct);
+  const platformShareAmount = roundCents(input.grossAmountUsd * (1 - creatorSharePct));
 
   return db.ledgerEntry.create({
     data: {
@@ -52,6 +63,8 @@ export async function postRevenueEvent(input: RevenueEventInput) {
       creatorShareAmount: new Prisma.Decimal(creatorShareAmount),
       platformShareAmount: new Prisma.Decimal(platformShareAmount),
       paymentFeeAmount: input.paymentFeeUsd != null ? new Prisma.Decimal(input.paymentFeeUsd) : null,
+      revenueShareRuleId: rule.id,
+      foundingPartnerId,
       referenceType: input.referenceType,
       referenceId: input.referenceId,
       description: input.description,

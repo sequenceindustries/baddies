@@ -53,6 +53,15 @@ export async function GET() {
     return NextResponse.json({ error: "No Founding Partner record found for this account." }, { status: 404 });
   }
 
+  // Real, finalized annual profit-pool shares only — never a projection.
+  // A year with no row here for this partner genuinely hasn't been
+  // finalized yet (or this partner wasn't active when it was).
+  const profitShares = await db.partnerProfitShare.findMany({
+    where: { foundingPartnerId: partner.id },
+    include: { distribution: { select: { year: true, status: true, finalizedAt: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+
   const acceptance = await db.agreementAcceptance.findFirst({
     where: { userId: user.id },
     include: { agreement: { select: { type: true, title: true, version: true } } },
@@ -92,5 +101,10 @@ export async function GET() {
     agreement: acceptance
       ? { title: acceptance.agreement.title, version: acceptance.agreement.version, acceptedAt: acceptance.acceptedAt }
       : null,
+    profitShares: profitShares.map((s: (typeof profitShares)[number]) => ({
+      year: s.distribution.year,
+      amountUsd: s.amountUsd,
+      finalizedAt: s.distribution.finalizedAt,
+    })),
   });
 }

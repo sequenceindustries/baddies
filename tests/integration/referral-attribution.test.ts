@@ -35,6 +35,7 @@ function requestWithReferralCookie(token: string): NextRequest {
 
 describe.skipIf(!dbAvailable)("resolveReferralAttribution (integration)", () => {
   const cleanupUserIds: string[] = [];
+  const cleanupInvitationIds: string[] = [];
 
   afterAll(async () => {
     for (const userId of cleanupUserIds) {
@@ -42,12 +43,16 @@ describe.skipIf(!dbAvailable)("resolveReferralAttribution (integration)", () => 
       await db.wallet.deleteMany({ where: { userId } });
       await db.user.deleteMany({ where: { id: userId } });
     }
+    // FoundingPartner rows above are gone by now, so the invitations they
+    // referenced (Restrict-on-delete FK) can safely be removed too.
+    await db.partnerInvitation.deleteMany({ where: { id: { in: cleanupInvitationIds } } });
   });
 
   async function createTestPartner(email: string, status: "ACTIVE" | "SUSPENDED" = "ACTIVE") {
     const invitation = await db.partnerInvitation.create({
       data: { email, invitedBy: (await db.user.findFirstOrThrow({ where: { role: "ADMIN" } })).id, status: "ACCEPTED", acceptedAt: new Date() },
     });
+    cleanupInvitationIds.push(invitation.id);
     const user = await db.user.create({
       data: {
         email,
