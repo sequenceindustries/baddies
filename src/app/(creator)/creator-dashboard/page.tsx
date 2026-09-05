@@ -606,7 +606,7 @@ function FeaturedImagePanel() {
     <div style={{ ...cardStyle, marginBottom: "2rem" }}>
       <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Featured image</h2>
       <p style={{ ...mutedSmallStyle, marginTop: "-0.6rem", marginBottom: "1.1rem" }}>
-        What shows on Top baddies, baddies near you, and other discovery cards. Keep it
+        What shows on The Baddest, baddies near you, and other discovery cards. Keep it
         non-explicit. Leave blank to use your latest Free post instead.
       </p>
       <ImageUploadField label="Featured image" value={featuredImageUrl} onChange={save} shape="rect" />

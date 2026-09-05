@@ -322,7 +322,7 @@ function ApplicationForm() {
 
   return (
     <section id="apply" style={{ ...sectionStyle, ...formSectionStyle }}>
-      <h2 style={sectionHeadingStyle}>Apply to become a founding baddie</h2>
+      <h2 style={sectionHeadingStyle}>Apply to become a Founding baddie</h2>
       <p style={sectionSubStyle}>Takes about five minutes. No documents required at this stage.</p>
 
       <form onSubmit={handleSubmit} style={formStyle}>
@@ -440,7 +440,7 @@ function ApplicationForm() {
         </div>
 
         <button type="submit" style={submitButtonStyle} disabled={submitting}>
-          {submitting ? "Submitting..." : "Become a founding baddie"}
+          {submitting ? "Submitting..." : "Become a Founding baddie"}
         </button>
       </form>
     </section>

@@ -88,7 +88,7 @@ export default function LandingPage() {
           (Discover, fan Home). */}
       {topCreators.length > 0 && (
         <section style={sectionStyle}>
-          <CreatorCardRow title="Top baddies" creators={topCreators} size="lg" scroll />
+          <CreatorCardRow title="The Baddest" creators={topCreators} size="lg" scroll />
         </section>
       )}
 
