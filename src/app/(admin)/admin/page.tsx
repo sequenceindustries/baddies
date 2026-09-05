@@ -2720,6 +2720,7 @@ interface FoundingPartnerRow {
   referredCreators: ReferredCreatorRow[];
   ledgerEntryCount: number;
   ledgerEntries: PartnerLedgerEntryRow[];
+  agreement: { version: string; acceptedAt: string } | null;
 }
 
 interface ProfitDistributionRow {
@@ -2931,7 +2932,8 @@ function FoundingPartnersPanel() {
                       <div style={mutedSmallStyle}>
                         {p.status} · code <code>{p.referralCode}</code> · activated {new Date(p.activatedAt).toLocaleDateString()} ·{" "}
                         {p.referredCreators.length} referred creator{p.referredCreators.length === 1 ? "" : "s"} ·{" "}
-                        {p.ledgerEntryCount} ledger event{p.ledgerEntryCount === 1 ? "" : "s"}
+                        {p.ledgerEntryCount} ledger event{p.ledgerEntryCount === 1 ? "" : "s"} · agreement{" "}
+                        {p.agreement ? `${p.agreement.version} accepted ${new Date(p.agreement.acceptedAt).toLocaleDateString()}` : "not on file"}
                       </div>
                     </div>
                     <button
