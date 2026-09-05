@@ -85,7 +85,10 @@ export async function getRequestCountry(req: Request): Promise<string | null> {
   return (await getRequestLocation(req)).country;
 }
 
-function getClientIp(req: Request): string | null {
+// Exported for src/lib/security/rate-limit.ts, which needs the same
+// "one real client IP out of possibly-spoofable headers" logic — no
+// second implementation of this.
+export function getClientIp(req: Request): string | null {
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) return (forwarded.split(",")[0] ?? forwarded).trim();
   return req.headers.get("x-real-ip");

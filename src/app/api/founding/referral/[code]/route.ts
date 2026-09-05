@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { createReferralAttributionToken } from "@/lib/founding/referral-attribution-token";
 import { REFERRAL_COOKIE_NAME } from "@/lib/founding/referral-attribution";
+import { checkRateLimitByIp, rateLimitResponse } from "@/lib/security/rate-limit";
 
 // Always dynamic: reads live data (DB) and sets a cookie.
 export const dynamic = "force-dynamic";
@@ -18,6 +19,12 @@ const COOKIE_TTL_SECONDS = 60 * 60 * 24 * 7; // matches referral-attribution-tok
  * exactly the same with or without a referral.
  */
 export async function GET(req: NextRequest, { params }: { params: { code: string } }) {
+  // 30 per 15 minutes per IP — generous for a real visitor loading the
+  // page normally, tight enough to blunt scripted enumeration of
+  // referral codes.
+  const rateLimit = checkRateLimitByIp(req, "founding-referral", 30, 15 * 60);
+  if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
+
   const partner = await db.foundingPartner.findUnique({
     where: { referralCode: params.code },
     select: { id: true, status: true },

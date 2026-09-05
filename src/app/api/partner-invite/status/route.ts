@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { verifyPartnerInviteToken } from "@/lib/founding/partner-invite-token";
+import { checkRateLimitByIp, rateLimitResponse } from "@/lib/security/rate-limit";
 
 // Always dynamic: reads live data (DB) and depends on a query param.
 export const dynamic = "force-dynamic";
@@ -13,6 +14,12 @@ export const dynamic = "force-dynamic";
  * exposing the invitation id itself or another invitee's email.
  */
 export async function GET(req: NextRequest) {
+  // 20 per 15 minutes per IP — the accept page calls this once per load;
+  // this just blunts token-guessing attempts (the token itself is a
+  // signed JWT, effectively unguessable — this is defense-in-depth).
+  const rateLimit = checkRateLimitByIp(req, "partner-invite-status", 20, 15 * 60);
+  if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
+
   const token = req.nextUrl.searchParams.get("token");
   if (!token) {
     return NextResponse.json({ valid: false, reason: "missing_token" });

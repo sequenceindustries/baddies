@@ -5,6 +5,7 @@ import { db } from "@/lib/db/client";
 import type { Prisma } from "@prisma/client";
 import { hashPassword, createSession } from "@/lib/auth/session";
 import { verifyPartnerInviteToken } from "@/lib/founding/partner-invite-token";
+import { checkRateLimitByIp, rateLimitResponse } from "@/lib/security/rate-limit";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -30,6 +31,12 @@ const AcceptSchema = z.object({
  * Logs the visitor in immediately afterward, same as registration.
  */
 export async function POST(req: NextRequest) {
+  // 10 per 15 minutes per IP — this creates a real account, so tighter
+  // than a plain read; still comfortably above what one real invitee
+  // filling in the form (with a retry or two) would ever hit.
+  const rateLimit = checkRateLimitByIp(req, "partner-invite-accept", 10, 15 * 60);
+  if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
+
   const json = await req.json().catch(() => null);
   const parsed = AcceptSchema.safeParse(json);
   if (!parsed.success) {

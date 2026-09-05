@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db/client";
 import { verifyPassword, createSession } from "@/lib/auth/session";
+import { checkRateLimitByIp, rateLimitResponse } from "@/lib/security/rate-limit";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -13,6 +14,14 @@ const LoginSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  // 10 attempts per 15 minutes per IP — a basic anti-brute-force guard
+  // that didn't exist on this route at all before (confirmed via review:
+  // no rate limiting existed anywhere in this codebase). Keyed by IP, not
+  // by the submitted email, so it can't be used to enumerate which
+  // emails have accounts.
+  const rateLimit = checkRateLimitByIp(req, "auth-login", 10, 15 * 60);
+  if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
+
   const json = await req.json().catch(() => null);
   const parsed = LoginSchema.safeParse(json);
   if (!parsed.success) {

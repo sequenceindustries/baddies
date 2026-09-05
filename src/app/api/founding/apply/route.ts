@@ -12,6 +12,7 @@ import { notifyFoundingApplicationReceived } from "@/lib/notifications/founding-
 import { sendFoundingEmailVerification } from "@/lib/notifications/email-verification";
 import { getWhatsappProvider } from "@/lib/providers/whatsapp";
 import { resolveReferralAttribution } from "@/lib/founding/referral-attribution";
+import { checkRateLimitByIp, rateLimitResponse } from "@/lib/security/rate-limit";
 
 // Always dynamic: this route writes live data and must never be
 // statically prerendered or cached at build time.
@@ -59,6 +60,12 @@ const ApplySchema = z.object({
  * registered creator (see FoundingApplication's own schema comment).
  */
 export async function POST(req: NextRequest) {
+  // 5 submissions per 15 minutes per IP — generous for a real applicant
+  // (who applies once), tight enough to blunt scripted spam against a
+  // public, unauthenticated form.
+  const rateLimit = checkRateLimitByIp(req, "founding-apply", 5, 15 * 60);
+  if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
+
   const json = await req.json().catch(() => null);
   const parsed = ApplySchema.safeParse(json);
   if (!parsed.success) {
