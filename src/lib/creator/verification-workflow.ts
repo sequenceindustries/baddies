@@ -44,7 +44,14 @@ export async function applyVerificationOutcome(params: {
   // src/lib/creator/participants.ts (Sprint 1 collaborative-content work).
 }
 
-async function maybeAdvanceCreatorAfterVerification(creatorProfileId: string): Promise<void> {
+/**
+ * Exported (not just called internally by applyVerificationOutcome) so the
+ * admin verification-review route can invoke it directly after marking a
+ * self-captured MANUAL_REVIEW session PASSED — that flow never goes
+ * through a VerificationProvider/providerSessionId, so it can't reach this
+ * via applyVerificationOutcome.
+ */
+export async function maybeAdvanceCreatorAfterVerification(creatorProfileId: string): Promise<void> {
   const creatorProfile = await db.creatorProfile.findUnique({
     where: { id: creatorProfileId },
   });

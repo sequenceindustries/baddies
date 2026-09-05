@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/components/ui";
 import {
@@ -68,6 +68,7 @@ export default function ApplyPage() {
             {STATUS_COPY[existingStatus] ?? "Application on file."}
           </p>
         </div>
+        {existingStatus === "VERIFICATION_REQUIRED" && <SelfieCapture />}
       </main>
     );
   }
@@ -206,3 +207,191 @@ function formatError(body: unknown): string {
   }
   return "Something went wrong. Please try again.";
 }
+
+type CapturePhase = "checking" | "live" | "review" | "submitted";
+
+/**
+ * Live in-browser capture of a selfie holding ID for the
+ * VERIFICATION_REQUIRED step — getUserMedia + canvas, never a file
+ * picker (product decision: "not upload but capture within the site").
+ * One captured frame is submitted as evidence for identity, age, and
+ * liveness together (see POST /api/creator/verification/capture); a
+ * human admin reviews it afterward — this UI never claims the creator is
+ * verified on its own.
+ */
+function SelfieCapture() {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [phase, setPhase] = useState<CapturePhase>("checking");
+  const [captured, setCaptured] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/creator/verification/status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body: { checks?: Record<string, string> } | null) => {
+        if (cancelled) return;
+        const livenessCheck = body?.checks?.LIVENESS;
+        setPhase(livenessCheck === "MANUAL_REVIEW" || livenessCheck === "PASSED" ? "submitted" : "live");
+      })
+      .catch(() => {
+        if (!cancelled) setPhase("live");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function stopStream() {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  }
+
+  useEffect(() => {
+    if (phase !== "live") return;
+    let cancelled = false;
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: "user" } })
+      .then((stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError(
+            "Camera access is required to verify your identity. Please allow camera permission and reload the page."
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+      stopStream();
+    };
+  }, [phase]);
+
+  function handleCapture() {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    setCaptured(canvas.toDataURL("image/jpeg", 0.85));
+    stopStream();
+    setPhase("review");
+  }
+
+  function handleRetake() {
+    setCaptured(null);
+    setError(null);
+    setPhase("live");
+  }
+
+  async function handleSubmit() {
+    if (!captured) return;
+    setSubmitting(true);
+    setError(null);
+    const base64Data = captured.slice(captured.indexOf(",") + 1);
+    const res = await fetch("/api/creator/verification/capture", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mimeType: "image/jpeg", base64Data }),
+    });
+    setSubmitting(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(formatError(body));
+      return;
+    }
+    setPhase("submitted");
+  }
+
+  if (phase === "checking") return null;
+
+  if (phase === "submitted") {
+    return (
+      <div style={{ ...cardStyle, marginTop: "1rem" }}>
+        <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--text-muted)" }}>
+          Your selfie holding your ID has been submitted and is awaiting manual review.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ ...cardStyle, marginTop: "1rem" }}>
+      <h3 style={{ margin: "0 0 0.5rem", fontSize: "1rem" }}>Verify your identity</h3>
+      <p style={{ margin: "0 0 0.8rem", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+        Hold your ID next to your face — make sure both are clearly visible. This is captured live
+        with your camera; uploading a photo isn&apos;t supported.
+      </p>
+      {error && <div style={errorBannerStyle}>{error}</div>}
+      {phase === "live" && !error && (
+        <>
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            style={captureMediaStyle}
+          />
+          <div style={{ marginTop: "0.8rem" }}>
+            <button type="button" onClick={handleCapture} style={{ ...primaryButtonStyle, width: "auto" }}>
+              Capture
+            </button>
+          </div>
+        </>
+      )}
+      {phase === "review" && captured && (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={captured} alt="Captured selfie holding ID" style={captureMediaStyle} />
+          <div style={{ marginTop: "0.8rem", display: "flex", gap: "0.5rem" }}>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              style={{ ...primaryButtonStyle, width: "auto", flex: 1 }}
+              disabled={submitting}
+            >
+              {submitting ? "Submitting..." : "Submit"}
+            </button>
+            <button type="button" onClick={handleRetake} style={retakeButtonStyle} disabled={submitting}>
+              Retake
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+const captureMediaStyle: React.CSSProperties = {
+  width: "100%",
+  maxWidth: "420px",
+  borderRadius: "var(--radius)",
+  background: "#000",
+  display: "block",
+};
+
+const retakeButtonStyle: React.CSSProperties = {
+  flex: 1,
+  padding: "0.8rem",
+  background: "transparent",
+  color: "var(--text)",
+  border: "1px solid var(--border)",
+  borderRadius: "var(--radius)",
+  fontWeight: 600,
+  fontSize: "0.95rem",
+  cursor: "pointer",
+};

@@ -10,6 +10,7 @@ interface CreatorApplication {
   status: string;
   appliedAt: string;
   applicantEmail: string;
+  captureReviewUrl: string | null;
   verificationChecks: { type: string; status: string; completedAt: string | null }[];
 }
 
@@ -2657,6 +2658,23 @@ function CreatorQueue() {
     }
   }
 
+  async function reviewVerification(id: string, decision: "PASSED" | "FAILED") {
+    const failureReason =
+      decision === "FAILED" ? window.prompt("Reason (shown to no one but admins, optional):") ?? undefined : undefined;
+    setBusyId(id);
+    const res = await fetch(`/api/admin/creators/${id}/verification-review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision, failureReason }),
+    });
+    setBusyId(null);
+    if (res.ok) reload();
+    else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error ?? "Couldn't submit verification review.");
+    }
+  }
+
   return (
     <section style={{ marginBottom: "3rem" }}>
       <h2 style={sectionHeadingStyle}>Creator applications</h2>
@@ -2678,8 +2696,33 @@ function CreatorQueue() {
                     ? "No verification checks started"
                     : app.verificationChecks.map((c) => `${c.type}: ${c.status}`).join(" · ")}
                 </div>
+                {app.captureReviewUrl && (
+                  <div style={{ marginTop: "0.4rem" }}>
+                    <a href={app.captureReviewUrl} target="_blank" rel="noreferrer" style={{ ...filterChipStyle, textDecoration: "none" }}>
+                      View selfie-with-ID capture ↗
+                    </a>
+                  </div>
+                )}
               </div>
-              <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
+              <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0, flexWrap: "wrap" }}>
+                {app.captureReviewUrl && (
+                  <>
+                    <button
+                      onClick={() => reviewVerification(app.creatorProfileId, "PASSED")}
+                      disabled={busyId === app.creatorProfileId}
+                      style={approveButtonStyle}
+                    >
+                      Approve verification
+                    </button>
+                    <button
+                      onClick={() => reviewVerification(app.creatorProfileId, "FAILED")}
+                      disabled={busyId === app.creatorProfileId}
+                      style={rejectButtonStyle}
+                    >
+                      Reject verification
+                    </button>
+                  </>
+                )}
                 {app.status === "UNDER_REVIEW" && (
                   <button onClick={() => approve(app.creatorProfileId)} disabled={busyId === app.creatorProfileId} style={approveButtonStyle}>
                     Approve

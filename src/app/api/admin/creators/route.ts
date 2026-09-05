@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
 import type { CreatorStatus } from "@prisma/client";
+import { getMediaStorageProvider } from "@/lib/providers/storage";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -45,22 +46,37 @@ export async function GET(req: NextRequest) {
       appliedAt: true,
       user: { select: { email: true } },
       verifications: {
-        select: { type: true, status: true, completedAt: true },
+        select: { type: true, status: true, completedAt: true, providerReference: true },
       },
     },
   });
 
-  return NextResponse.json({
-    applications: applications.map((app: (typeof applications)[number]) => ({
-      creatorProfileId: app.id,
-      status: app.status,
-      appliedAt: app.appliedAt,
-      applicantEmail: app.user.email,
-      verificationChecks: app.verifications.map((v: (typeof app.verifications)[number]) => ({
-        type: v.type,
-        status: v.status,
-        completedAt: v.completedAt,
-      })),
-    })),
-  });
+  // A MANUAL_REVIEW session's providerReference is a self-capture storage
+  // key (see POST /api/creator/verification/capture) — sign it once per
+  // application so an admin can actually see the evidence they're
+  // approving/rejecting. Never exposed to anyone but admins with
+  // creator:verify (enforced above).
+  const storage = getMediaStorageProvider();
+  const applicationsWithCaptureUrl = await Promise.all(
+    applications.map(async (app: (typeof applications)[number]) => {
+      const pending = app.verifications.find(
+        (v: (typeof app.verifications)[number]) => v.status === "MANUAL_REVIEW" && v.providerReference
+      );
+      const captureReviewUrl = pending ? await storage.getSignedReadUrl(pending.providerReference!) : null;
+      return {
+        creatorProfileId: app.id,
+        status: app.status,
+        appliedAt: app.appliedAt,
+        applicantEmail: app.user.email,
+        captureReviewUrl,
+        verificationChecks: app.verifications.map((v: (typeof app.verifications)[number]) => ({
+          type: v.type,
+          status: v.status,
+          completedAt: v.completedAt,
+        })),
+      };
+    })
+  );
+
+  return NextResponse.json({ applications: applicationsWithCaptureUrl });
 }
