@@ -5,7 +5,7 @@ import { AgeGate } from "@/components/age-gate";
 
 export const metadata: Metadata = {
   title: "baddies",
-  description: "Verified. Safe. Adult creator marketplace. 18+ only.",
+  description: "Verified. Safe. Africa's adult content network. 18+ only.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

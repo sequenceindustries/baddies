@@ -66,18 +66,22 @@ export default function LandingPage() {
           <img src="/baddies-wordmark-white.webp" alt="baddies" style={heroLogoStyle} />
         </h1>
         <p style={heroSubStyle}>
-          A premium platform where verified South African creators publish exclusive content and
-          get paid directly by the fans who support them. Browse free previews with no card
-          required, or subscribe to unlock more.
+          Africa&apos;s adult content network — where verified South African creators publish
+          exclusive content and get paid directly by the fans who support them. Browse free
+          previews with no card required, or subscribe to unlock more.
         </p>
         <Countdown target={LAUNCH_DATE} label="Launching in" />
       </HeroBanner>
 
       <section style={foundingBannerSectionStyle}>
         <Link href="/founding-baddies" style={foundingBannerStyle} className="hover-lift">
-          <span style={foundingBannerKickerStyle}>Now recruiting</span>
+          <span style={foundingBannerKickerStyle}>First generation</span>
           <span style={foundingBannerTitleStyle}>Become a Founding baddie</span>
-          <span style={foundingBannerArrowStyle}>Apply now →</span>
+          <p style={foundingBannerBodyStyle}>
+            Be part of baddies from the beginning. Join the first generation of creators helping
+            shape Africa&apos;s new adult content network.
+          </p>
+          <span style={foundingBannerArrowStyle}>Join baddies →</span>
         </Link>
       </section>
 
@@ -96,10 +100,30 @@ export default function LandingPage() {
 
       <HowItWorks />
 
-      <p style={footerLineStyle}>South Africa to the World!</p>
+      <footer style={footerStyle}>
+        <p style={footerTaglineStyle}>South Africa to the World!</p>
+        <nav style={footerLinksRowStyle}>
+          {FOOTER_LINKS.map((link) => (
+            <Link key={link.href} href={link.href} style={footerLinkStyle}>
+              {link.label}
+            </Link>
+          ))}
+        </nav>
+        <p style={footerCopyrightStyle}>© {new Date().getFullYear()} baddies. All rights reserved.</p>
+      </footer>
     </main>
   );
 }
+
+const FOOTER_LINKS: { href: string; label: string }[] = [
+  { href: "/terms", label: "Terms of Service" },
+  { href: "/privacy", label: "Privacy Policy" },
+  { href: "/creator-terms", label: "Creator Terms" },
+  { href: "/content-policy", label: "Content Policy" },
+  { href: "/age-policy", label: "18+ / Age Policy" },
+  { href: "/dmca", label: "DMCA / Copyright" },
+  { href: "/contact", label: "Contact" },
+];
 
 // Wraps the logo image rather than styling text directly now — h1 stays
 // for the page's heading semantics/accessible name (the img's alt covers
@@ -173,17 +197,49 @@ const foundingBannerTitleStyle: React.CSSProperties = {
   fontWeight: 600,
 };
 
+const foundingBannerBodyStyle: React.CSSProperties = {
+  color: "var(--text-muted)",
+  fontSize: "0.92rem",
+  lineHeight: 1.6,
+  maxWidth: "420px",
+  margin: 0,
+};
+
 const foundingBannerArrowStyle: React.CSSProperties = {
   color: "var(--accent)",
   fontWeight: 700,
   fontSize: "1rem",
 };
 
-const footerLineStyle: React.CSSProperties = {
+const footerStyle: React.CSSProperties = {
   textAlign: "center",
+  padding: "0 1.75rem 2.5rem",
+};
+
+const footerTaglineStyle: React.CSSProperties = {
   color: "var(--text-muted)",
   fontSize: "0.85rem",
   fontWeight: 600,
-  padding: "0 1.75rem 2.5rem",
+  margin: "0 0 1rem",
+};
+
+const footerLinksRowStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  justifyContent: "center",
+  gap: "0.4rem 1.1rem",
+  marginBottom: "1rem",
+};
+
+const footerLinkStyle: React.CSSProperties = {
+  color: "var(--text-muted)",
+  fontSize: "0.78rem",
+  textDecoration: "none",
+};
+
+const footerCopyrightStyle: React.CSSProperties = {
+  color: "var(--text-muted)",
+  fontSize: "0.75rem",
+  opacity: 0.75,
   margin: 0,
 };

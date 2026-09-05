@@ -48,8 +48,8 @@ export function HowItWorks() {
 export function HowItWorksForCreators() {
   const steps = [
     {
-      name: "Apply",
-      desc: "Submit your details as a Founding baddie — open to South African creators only, no exceptions. Get verified once accepted.",
+      name: "Join",
+      desc: "Join as a Founding baddie — open to South African creators only, no exceptions. Get verified once accepted.",
     },
     {
       name: "Publish & set your price",

@@ -41,8 +41,8 @@ export function AgeGate({ children }: { children: React.ReactNode }) {
         <div style={kickerStyle}>18+ only</div>
         <h1 style={titleStyle}>Age verification required</h1>
         <p style={bodyStyle}>
-          baddies is an adult content marketplace. You must be 18 years of age or older — or the
-          age of majority in your jurisdiction, whichever is higher — to enter.
+          baddies is Africa&apos;s adult content network. You must be 18 years of age or older —
+          or the age of majority in your jurisdiction, whichever is higher — to enter.
         </p>
         <div style={buttonRowStyle}>
           <button onClick={confirm} style={enterButtonStyle}>
