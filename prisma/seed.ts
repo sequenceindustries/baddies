@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { DEFAULT_BUSINESS_CONFIG } from "../src/lib/config/business";
 import { AGREEMENTS } from "./agreements";
+import { REVENUE_SHARE_RULES } from "./revenue-rules";
 import { hashPassword } from "../src/lib/auth/session";
 import { encryptField } from "../src/lib/security/field-encryption";
 
@@ -467,6 +468,19 @@ async function main() {
       // meaningful (see the Agreement model's own schema comment). A
       // real content change belongs in a new `version` entry, not an
       // edit here.
+      update: {},
+    });
+  }
+
+  console.log("Seeding revenue share rules...");
+  for (const rule of REVENUE_SHARE_RULES) {
+    await db.revenueShareRule.upsert({
+      where: { type_version: { type: rule.type, version: rule.version } },
+      create: { type: rule.type, version: rule.version, percentage: rule.percentage, notes: rule.notes },
+      // Never overwrite an existing version's percentage — LedgerEntry
+      // rows point at a specific version and that link should stay
+      // meaningful (same reasoning as Agreement, above). A real rate
+      // change belongs in a new `version` entry, not an edit here.
       update: {},
     });
   }

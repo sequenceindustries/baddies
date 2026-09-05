@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySessionToken } from "@/lib/auth/session";
 
-const PUBLIC_PATHS = new Set(["/", "/login", "/founding-baddies"]);
+// /partner-invite must be reachable pre-launch, same as /founding-baddies —
+// it's how an invited Founding Partner (who has no account yet) accepts.
+const PUBLIC_PATHS = new Set(["/", "/login", "/founding-baddies", "/partner-invite"]);
 
 const PUBLIC_PREFIXES = [
   "/api/founding/apply",
@@ -31,7 +33,10 @@ export async function middleware(req: NextRequest) {
   const token = req.cookies.get(cookieName)?.value;
   if (token) {
     const claims = await verifySessionToken(token);
-    if (claims?.role === "ADMIN") {
+    // A Founding Partner's dashboard is private and invite-only by
+    // construction (see PartnerInvitation) — it's reachable pre-launch
+    // for the same reason an admin is, not a general public surface.
+    if (claims?.role === "ADMIN" || claims?.role === "PARTNER") {
       return NextResponse.next();
     }
   }

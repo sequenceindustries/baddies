@@ -17,7 +17,7 @@ const DRAFT_NOTICE =
   "DRAFT — placeholder text pending review by a qualified attorney. Not final, not legally reviewed. Baddies will notify creators before any reviewed version replaces this one.";
 
 export interface AgreementSeed {
-  type: "CREATOR_TERMS" | "CONTENT_POLICY" | "PRIVACY_POLICY" | "PAYOUT_AGREEMENT";
+  type: "CREATOR_TERMS" | "CONTENT_POLICY" | "PRIVACY_POLICY" | "PAYOUT_AGREEMENT" | "PARTNER_AGREEMENT";
   version: string;
   title: string;
   bodyText: string;
@@ -84,6 +84,23 @@ export const AGREEMENTS: AgreementSeed[] = [
       "4. Baddies deducts its platform share (see the Creator Terms) before calculating your payout; the deduction is recorded against each earning at the time it's earned, not recalculated later.",
       "5. You're responsible for reporting and paying any tax owed on your Baddies income under South African law.",
       "6. If a payout fails because of incorrect banking details you provided, Baddies will attempt to reach you to correct them before retrying.",
+    ].join("\n"),
+  },
+  {
+    type: "PARTNER_AGREEMENT",
+    version: "v1",
+    title: "Founding Partner Agreement",
+    bodyText: [
+      DRAFT_NOTICE,
+      "",
+      "1. The programme. Baddies is inviting a small number of Founding Partners — no more than 10 at any time — to help bring the first generation of creators onto the platform.",
+      "2. Referral relationship. Each Founding Partner receives a unique referral link. A creator who applies through that link is attributed to that Partner for as long as the attribution stands; Baddies may correct an attribution, always with a recorded reason.",
+      "3. Creator revenue share. A creator attributed to a Founding Partner earns a higher revenue share than the platform's standard rate, exactly as shown in the current Revenue Share Rules; this does not entitle the Partner to any portion of that creator's earnings directly.",
+      "4. Profit-pool participation. Founding Partners collectively participate in a share of Baddies' annual distributable profit pool, split among however many Partners are active that year. This is calculated once a year from Baddies' real financial results — never estimated, projected, or paid in advance — and only after Baddies has actual distributable profit to allocate.",
+      "5. No guarantee. Nothing in this agreement guarantees any referral, any creator's success, or any profit-pool payout in a given year.",
+      "6. Confidentiality. Referral data, other Partners' information, and any commercial terms shared with you as a Partner are confidential and must not be shared outside the programme.",
+      "7. Standing. Baddies may suspend a Founding Partner's status for a violation of this agreement or of the Content Policy; suspension ends future referral attribution and profit-pool eligibility but does not undo attributions already recorded.",
+      "8. Changes. Baddies may update this agreement; continuing to participate in the programme after a new version takes effect means you accept it.",
     ].join("\n"),
   },
 ];

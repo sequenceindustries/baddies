@@ -25,6 +25,7 @@ enum UserRole {
   FAN
   CREATOR
   ADMIN
+  PARTNER
 }
 
 enum CreatorStatus {
@@ -133,6 +134,7 @@ enum AgreementType {
   CONTENT_POLICY
   PRIVACY_POLICY
   PAYOUT_AGREEMENT
+  PARTNER_AGREEMENT
 }
 
 enum VerificationType {
@@ -277,25 +279,27 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  profile              Profile?
-  creatorProfile       CreatorProfile?
-  wallet               Wallet?
-  sentMessages         Message[]               @relation("MessageSender")
-  reportsFiled         Report[]                @relation("ReportReporter")
-  auditLogs            AuditLog[]
-  sessions             Session[]
-  notifications        Notification[]
-  purchases            Purchase[]
-  tips                 Tip[]                   @relation("TipSender")
-  subscriptions        Subscription[]          @relation("FanSubscriptions")
-  unlimitedSubs        UnlimitedSubscription[]
-  follows              Follow[]                @relation("FanFollows")
-  contentLikes         ContentLike[]           @relation("ContentLikes")
+  profile                Profile?
+  creatorProfile         CreatorProfile?
+  wallet                 Wallet?
+  sentMessages           Message[]               @relation("MessageSender")
+  reportsFiled           Report[]                @relation("ReportReporter")
+  auditLogs              AuditLog[]
+  sessions               Session[]
+  notifications          Notification[]
+  purchases              Purchase[]
+  tips                   Tip[]                   @relation("TipSender")
+  subscriptions          Subscription[]          @relation("FanSubscriptions")
+  unlimitedSubs          UnlimitedSubscription[]
+  follows                Follow[]                @relation("FanFollows")
+  contentLikes           ContentLike[]           @relation("ContentLikes")
   // Not yet exercised by any route (Phase 3 only ever writes the
   // FoundingApplication side of AgreementAcceptance) — modeled now so a
   // real User re-accepting an updated agreement later needs no migration.
-  agreementAcceptances AgreementAcceptance[]
-  fanTrial             FanTrial?
+  agreementAcceptances   AgreementAcceptance[]
+  fanTrial               FanTrial?
+  foundingPartner        FoundingPartner?
+  partnerInvitationsSent PartnerInvitation[]     @relation("PartnerInvitationsSent")
 
   @@index([role])
   @@map("users")
@@ -848,6 +852,18 @@ model LedgerEntry {
   platformShareAmount Decimal? @db.Decimal(12, 2)
   paymentFeeAmount    Decimal? @db.Decimal(12, 2)
 
+  // Founding Partner referral attribution, frozen at write time — null
+  // for every ordinary (non-referred) event. foundingPartnerId is who
+  // gets credit; revenueShareRuleId records exactly which versioned
+  // RevenueShareRule row set creatorShareAmount/platformShareAmount
+  // above, so the split is always traceable to a specific rule version
+  // even after that rule is superseded. Never derive a partner's
+  // "reward history" from anything but querying this column directly.
+  foundingPartnerId  String?
+  foundingPartner    FoundingPartner?  @relation(fields: [foundingPartnerId], references: [id])
+  revenueShareRuleId String?
+  revenueShareRule   RevenueShareRule? @relation(fields: [revenueShareRuleId], references: [id])
+
   referenceType String? // "subscription" | "purchase" | "tip" | "payout" | ...
   referenceId   String? // FK-ish pointer to the source record
 
@@ -859,6 +875,7 @@ model LedgerEntry {
   @@index([creatorProfileId])
   @@index([type])
   @@index([referenceType, referenceId])
+  @@index([foundingPartnerId])
   @@map("ledger_entries")
 }
 
@@ -1004,6 +1021,7 @@ model FoundingApplication {
   location             Location?
   banking              Banking?
   documents            IdentityDocument[]
+  referralAttribution  ReferralAttribution?
 
   @@index([status])
   @@index([email])
@@ -1250,4 +1268,198 @@ model AuditLog {
   @@index([action])
   @@index([targetType, targetId])
   @@map("audit_logs")
+}
+
+// =========================================================================
+// FOUNDING PARTNERS — private, invitation-only referral programme
+//
+// A Founding Partner is a real User (role PARTNER) who reached that role
+// only by accepting an admin-issued invitation. A partner has a unique
+// referral link (ReferralAttribution.foundingPartnerId is where that
+// shows up on a FoundingApplication); referred creators earn a higher
+// revenue share (RevenueShareRule.PARTNER_REFERRED_CREATOR_SHARE) and,
+// separately, partners themselves participate in an ANNUAL profit pool
+// (RevenueShareRule.PARTNER_PROFIT_POOL_SHARE) — never a per-transaction
+// commission. Nothing in this section computes a dollar figure
+// automatically: AnnualProfitDistribution/PartnerProfitShare only ever
+// hold what an admin enters from real numbers (see that model's comment).
+// =========================================================================
+
+enum PartnerInvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+// The row itself (not a hashed token) is the revocable source of truth —
+// unlike Session.tokenHash, there is no bearer secret stored here at all.
+// The mailed link carries a signed JWT (src/lib/founding/partner-invite-token.ts)
+// that only references this row's id; verifying an invite checks BOTH the
+// token's signature and this row's live status/expiresAt, so admin
+// revocation always takes effect immediately regardless of what the link
+// itself still claims.
+model PartnerInvitation {
+  id     String                  @id @default(cuid())
+  email  String
+  status PartnerInvitationStatus @default(PENDING)
+
+  invitedBy     String // admin User.id
+  invitedByUser User   @relation("PartnerInvitationsSent", fields: [invitedBy], references: [id])
+
+  expiresAt   DateTime? // null = admin left it open; the token module defaults to 14 days when generating the link
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  revokedBy   String? // admin User.id
+  resentAt    DateTime?
+  resendCount Int       @default(0)
+
+  foundingPartner FoundingPartner?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([status])
+  @@map("partner_invitations")
+}
+
+enum FoundingPartnerStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+// Created exactly once, at invite-acceptance time. Reuses the partner's
+// own User.wallet for ledger/reward history — no separate Wallet row —
+// and AgreementAcceptance.userId (previously unused scaffolding) for the
+// partner agreement acceptance, rather than adding a new acceptance shape.
+model FoundingPartner {
+  id     String                @id @default(cuid())
+  userId String                @unique
+  user   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status FoundingPartnerStatus @default(ACTIVE)
+
+  invitationId String            @unique
+  invitation   PartnerInvitation @relation(fields: [invitationId], references: [id])
+
+  referralCode String @unique // short slug used in /founding-baddies?ref=<code>
+
+  activatedAt DateTime  @default(now())
+  suspendedAt DateTime?
+  suspendedBy String? // admin User.id
+
+  referralAttributions ReferralAttribution[]
+  ledgerEntries        LedgerEntry[]
+  profitShares         PartnerProfitShare[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@map("founding_partners")
+}
+
+// Exactly one attribution per application, set atomically when the
+// application is created (see the referral-link cookie flow) — never
+// derived or recomputed after the fact except by an explicit admin
+// correction, which always also writes an AuditLog row (old -> new,
+// with correctionReason) so this table is never the ONLY record of a
+// reassignment.
+model ReferralAttribution {
+  id                    String              @id @default(cuid())
+  foundingApplicationId String              @unique
+  foundingApplication   FoundingApplication @relation(fields: [foundingApplicationId], references: [id], onDelete: Cascade)
+
+  foundingPartnerId String
+  foundingPartner   FoundingPartner @relation(fields: [foundingPartnerId], references: [id])
+
+  attributedAt DateTime @default(now())
+  source       String   @default("referral_link") // plain field, not an enum — only one source exists today, more may later
+
+  // Populated only when an admin corrects attribution after the fact.
+  correctedBy      String? // admin User.id
+  correctedAt      DateTime?
+  correctionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([foundingPartnerId])
+  @@map("referral_attributions")
+}
+
+enum RevenueShareRuleType {
+  STANDARD_CREATOR_SHARE
+  PARTNER_REFERRED_CREATOR_SHARE
+  PARTNER_PROFIT_POOL_SHARE
+}
+
+// Versioned commercial rules — deliberately NOT another PlatformSetting
+// key/value pair, because PlatformSetting mutates in place and keeps no
+// history. A new row is added for a rule change; existing rows (and
+// every LedgerEntry.revenueShareRuleId that already points at one) are
+// never edited. See src/lib/config/revenue-rules.ts for the accessor and
+// prisma/revenue-rules.ts for the seeded v1 values.
+model RevenueShareRule {
+  id          String               @id @default(cuid())
+  type        RevenueShareRuleType
+  version     String
+  percentage  Decimal              @db.Decimal(5, 4) // e.g. 0.8000
+  effectiveAt DateTime             @default(now())
+  createdBy   String? // admin User.id; null for the seeded v1 rows
+  notes       String?
+
+  createdAt DateTime @default(now())
+
+  ledgerEntries LedgerEntry[]
+
+  @@unique([type, version])
+  @@index([type])
+  @@map("revenue_share_rules")
+}
+
+enum ProfitDistributionStatus {
+  DRAFT
+  FINALIZED
+}
+
+// One row per calendar year. totalDistributableProfitUsd is an admin-
+// entered real figure — this project deliberately never computes it
+// automatically, since no live payment provider exists yet to derive
+// "distributable profit" from. Stays empty/absent until an admin
+// performs that real, manual calculation.
+model AnnualProfitDistribution {
+  id     String                   @id @default(cuid())
+  year   Int                      @unique
+  status ProfitDistributionStatus @default(DRAFT)
+
+  totalDistributableProfitUsd Decimal? @db.Decimal(12, 2)
+
+  computedBy  String? // admin User.id
+  computedAt  DateTime?
+  finalizedBy String? // admin User.id
+  finalizedAt DateTime?
+
+  partnerShares PartnerProfitShare[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("annual_profit_distributions")
+}
+
+model PartnerProfitShare {
+  id             String                   @id @default(cuid())
+  distributionId String
+  distribution   AnnualProfitDistribution @relation(fields: [distributionId], references: [id], onDelete: Cascade)
+
+  foundingPartnerId String
+  foundingPartner   FoundingPartner @relation(fields: [foundingPartnerId], references: [id])
+
+  amountUsd Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+
+  @@unique([distributionId, foundingPartnerId])
+  @@map("partner_profit_shares")
 }

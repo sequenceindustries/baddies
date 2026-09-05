@@ -25,7 +25,8 @@ export type Permission =
   | "settings:write"
   | "audit:view"
   | "dashboard:view" // admin-only: aggregate stats + the member directory
-  | "banking:view"; // admin-only: creator/Founding Baddie banking details (masked in the UI regardless — see src/lib/security/mask.ts)
+  | "banking:view" // admin-only: creator/Founding Baddie banking details (masked in the UI regardless — see src/lib/security/mask.ts)
+  | "founding_partner:manage"; // admin-only: invite/revoke/resend partners, correct referral attribution, record annual profit distributions
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   FAN: ["creator:apply", "report:file", "ledger:view_own"],
@@ -51,7 +52,13 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "audit:view",
     "dashboard:view",
     "banking:view",
+    "founding_partner:manage",
   ],
+  // A partner's own dashboard routes authorize by role + row ownership
+  // (this FoundingPartner.userId === the current user's id) directly,
+  // not through this permission table — a partner never needs any of
+  // the above admin/creator/fan permissions.
+  PARTNER: [],
 };
 
 export function can(role: UserRole, permission: Permission): boolean {
