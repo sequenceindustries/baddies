@@ -495,7 +495,29 @@ async function main() {
   }
 
   await seedDummyCreators();
-  await cleanupStrayCreators();
+
+  // Production-only guard, not an environment-flavor preference: this
+  // used to run everywhere, including against the real production
+  // database on every single deploy (prisma/seed.ts is this app's
+  // preDeployCommand). Its own matching rule is "any account with a
+  // CreatorProfile whose email isn't one of the 8 hardcoded
+  // DUMMY_CREATORS" — which was never actually scoped to test/E2E
+  // debris, it was scoped to "not dummy," and a real, live, human
+  // creator on production is exactly as "not dummy" as leftover E2E
+  // test rows are. It surfaced the hard way: the first real account that
+  // was ALSO a Founding Partner (see prisma/schema.prisma's
+  // FoundingPartner/ReferralAttribution models) hit this on a deploy,
+  // and only a foreign-key constraint (a real ReferralAttribution
+  // pointing at that partner) stopped a real user's account from being
+  // silently deleted — it just failed the deploy loudly instead. A
+  // plain real creator with no such reference would have gone through
+  // with no error at all. This was always live user-data risk, not just
+  // today's deploy failure.
+  if (process.env.NODE_ENV !== "production") {
+    await cleanupStrayCreators();
+  } else {
+    console.log("Skipping stray-creator cleanup in production — see this function's own comment.");
+  }
 
   console.log("Done.");
 }
@@ -508,6 +530,11 @@ async function main() {
  * product decision to keep discovery limited to the known dummy roster.
  * Only ever touches accounts with a CreatorProfile — fans and admins are
  * never in scope here.
+ *
+ * Never call this against production (see the guard at this function's
+ * one call site) — it has no way to distinguish real registered
+ * creators from test debris beyond "not in the dummy list," which a
+ * real production account will always fail too.
  *
  * Content's Report/ModerationCase references are ON DELETE SET NULL
  * (see the init migration), so those cascade cleanly. LedgerEntry and
