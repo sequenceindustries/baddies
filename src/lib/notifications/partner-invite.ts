@@ -2,6 +2,22 @@ import { getNotificationProvider } from "@/lib/providers/notification";
 import { createPartnerInviteToken } from "@/lib/founding/partner-invite-token";
 
 /**
+ * The actual accept-invite URL for a given invitation — used both to
+ * mail it (sendPartnerInviteEmail below) and to hand it straight back to
+ * the admin UI in the invitations routes' own JSON response. Email
+ * delivery isn't guaranteed (a sandboxed notification provider, a typo'd
+ * address, a spam filter) and an invite has no other channel once it's
+ * gone, so the admin always gets the real, working link back regardless
+ * of whether the send itself succeeds — copyable and shareable through
+ * whatever channel actually reaches the invitee.
+ */
+export async function buildPartnerInviteUrl(invitationId: string, ttlSeconds?: number): Promise<string> {
+  const appUrl = process.env.APP_URL ?? "https://baddies.africa";
+  const token = await createPartnerInviteToken(invitationId, ttlSeconds);
+  return `${appUrl}/partner-invite?token=${encodeURIComponent(token)}`;
+}
+
+/**
  * Fired when an admin creates (or resends) a Founding Partner invitation.
  * Same shape as sendOnboardingApprovedEmail: a self-contained signed
  * token (src/lib/founding/partner-invite-token.ts) rather than a bare
@@ -34,21 +50,13 @@ export function buildPartnerInviteEmail(
 /**
  * Caller wraps this in its own try/catch, same as every other
  * notification send in this codebase — a delivery failure must never
- * fail or block the admin's invite/resend action itself.
- *
- * ttlSeconds should be derived from the invitation's own expiresAt (if
- * the admin set one); pass undefined to fall back to the token module's
- * own default.
+ * fail or block the admin's invite/resend action itself. Takes the
+ * already-built URL (buildPartnerInviteUrl above) rather than building
+ * its own, so a failed send and whatever link the admin ends up copying
+ * are always the exact same token, never two different ones from two
+ * separate signings.
  */
-export async function sendPartnerInviteEmail(
-  invitationId: string,
-  to: string,
-  expiresAt: Date | null,
-  ttlSeconds?: number
-): Promise<void> {
-  const appUrl = process.env.APP_URL ?? "https://baddies.africa";
-  const token = await createPartnerInviteToken(invitationId, ttlSeconds);
-  const inviteUrl = `${appUrl}/partner-invite?token=${encodeURIComponent(token)}`;
+export async function sendPartnerInviteEmail(inviteUrl: string, to: string, expiresAt: Date | null): Promise<void> {
   const { subject, text } = buildPartnerInviteEmail(inviteUrl, expiresAt);
   await getNotificationProvider().sendEmail({ to, subject, text });
 }

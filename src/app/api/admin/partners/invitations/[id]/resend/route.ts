@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
 import type { Prisma } from "@prisma/client";
-import { sendPartnerInviteEmail } from "@/lib/notifications/partner-invite";
+import { buildPartnerInviteUrl, sendPartnerInviteEmail } from "@/lib/notifications/partner-invite";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -57,11 +57,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const ttlSeconds = invitation.expiresAt
     ? Math.max(Math.floor((invitation.expiresAt.getTime() - Date.now()) / 1000), 1)
     : undefined;
+  const inviteUrl = await buildPartnerInviteUrl(invitation.id, ttlSeconds);
+  let emailSent = true;
   try {
-    await sendPartnerInviteEmail(invitation.id, invitation.email, invitation.expiresAt, ttlSeconds);
+    await sendPartnerInviteEmail(inviteUrl, invitation.email, invitation.expiresAt);
   } catch (err) {
     console.error("[partner-invitations] resend email failed", err);
+    emailSent = false;
   }
 
-  return NextResponse.json({ invitationId: updated.id, resendCount: updated.resendCount });
+  // Same reasoning as the create route: always return the real link,
+  // regardless of whether the email itself actually sent.
+  return NextResponse.json({ invitationId: updated.id, resendCount: updated.resendCount, inviteUrl, emailSent });
 }

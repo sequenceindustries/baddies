@@ -2754,6 +2754,15 @@ function FoundingPartnersPanel() {
   const [distYear, setDistYear] = useState(String(new Date().getFullYear()));
   const [distTotal, setDistTotal] = useState("");
   const [savingDist, setSavingDist] = useState(false);
+  // Surfaces the real, working invite link after sending/resending —
+  // never solely dependent on the email actually landing (see the
+  // invitations routes' own comment: a sandboxed provider, a typo, a
+  // spam filter can all silently eat the email with no other channel
+  // left). Copyable so it can go out via DM, WhatsApp, anywhere.
+  const [inviteLinkInfo, setInviteLinkInfo] = useState<{ email: string; url: string; emailSent: boolean } | null>(
+    null
+  );
+  const [linkCopied, setLinkCopied] = useState(false);
 
   function reload() {
     setLoading(true);
@@ -2775,6 +2784,7 @@ function FoundingPartnersPanel() {
   async function sendInvite(e: React.FormEvent) {
     e.preventDefault();
     setInviting(true);
+    const sentToEmail = email;
     const res = await fetch("/api/admin/partners/invitations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2782,6 +2792,11 @@ function FoundingPartnersPanel() {
     });
     setInviting(false);
     if (res.ok) {
+      const body = await res.json().catch(() => null);
+      if (body?.inviteUrl) {
+        setInviteLinkInfo({ email: sentToEmail, url: body.inviteUrl, emailSent: Boolean(body.emailSent) });
+        setLinkCopied(false);
+      }
       setEmail("");
       reload();
     } else {
@@ -2803,12 +2818,30 @@ function FoundingPartnersPanel() {
 
   async function resendInvite(id: string) {
     setBusyId(id);
+    const invitee = invitations.find((inv) => inv.id === id)?.email ?? "";
     const res = await fetch(`/api/admin/partners/invitations/${id}/resend`, { method: "POST" });
     setBusyId(null);
-    if (res.ok) reload();
-    else {
+    if (res.ok) {
+      const body = await res.json().catch(() => null);
+      if (body?.inviteUrl) {
+        setInviteLinkInfo({ email: invitee, url: body.inviteUrl, emailSent: Boolean(body.emailSent) });
+        setLinkCopied(false);
+      }
+      reload();
+    } else {
       const body = await res.json().catch(() => null);
       alert(body?.error ?? "Resend failed.");
+    }
+  }
+
+  async function copyInviteLink() {
+    if (!inviteLinkInfo) return;
+    try {
+      await navigator.clipboard.writeText(inviteLinkInfo.url);
+      setLinkCopied(true);
+    } catch {
+      // Clipboard permission denied or unavailable — the link is still
+      // selectable text in the banner below, so this isn't a dead end.
     }
   }
 
@@ -2884,6 +2917,46 @@ function FoundingPartnersPanel() {
           {inviting ? "Sending..." : "Send invitation"}
         </button>
       </form>
+
+      {inviteLinkInfo && (
+        <div
+          style={{
+            background: "var(--surface-raised)",
+            border: `1px solid ${inviteLinkInfo.emailSent ? "var(--border)" : "var(--danger)"}`,
+            borderRadius: "var(--radius)",
+            padding: "0.9rem 1rem",
+            marginBottom: "2rem",
+          }}
+        >
+          <div style={{ fontSize: "0.85rem", marginBottom: "0.5rem" }}>
+            {inviteLinkInfo.emailSent ? (
+              <>Invite link for <strong>{inviteLinkInfo.email}</strong> — the email was sent too, but you can copy this and send it yourself (DM, WhatsApp, wherever actually reaches them).</>
+            ) : (
+              <>
+                <span style={{ color: "var(--danger)", fontWeight: 600 }}>
+                  The invite email to {inviteLinkInfo.email} failed to send
+                </span>{" "}
+                — check the server logs for why (e.g. a sandboxed notification provider). The invitation itself
+                still exists — copy this link and send it directly instead.
+              </>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+            <input
+              readOnly
+              value={inviteLinkInfo.url}
+              onFocus={(e) => e.target.select()}
+              style={{ ...memberSearchInputStyle, flex: 1, minWidth: "260px", fontSize: "0.82rem" }}
+            />
+            <button type="button" onClick={copyInviteLink} style={approveButtonStyle}>
+              {linkCopied ? "Copied ✓" : "Copy link"}
+            </button>
+            <button type="button" onClick={() => setInviteLinkInfo(null)} style={rejectButtonStyle}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <p style={{ color: "var(--text-muted)" }}>Loading...</p>

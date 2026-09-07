@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
 import type { Prisma } from "@prisma/client";
-import { sendPartnerInviteEmail } from "@/lib/notifications/partner-invite";
+import { buildPartnerInviteUrl, sendPartnerInviteEmail } from "@/lib/notifications/partner-invite";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -117,11 +117,22 @@ export async function POST(req: NextRequest) {
   });
 
   const ttlSeconds = expiresAt ? Math.max(Math.floor((expiresAt.getTime() - Date.now()) / 1000), 1) : undefined;
+  const inviteUrl = await buildPartnerInviteUrl(invitation.id, ttlSeconds);
+  let emailSent = true;
   try {
-    await sendPartnerInviteEmail(invitation.id, email, expiresAt, ttlSeconds);
+    await sendPartnerInviteEmail(inviteUrl, email, expiresAt);
   } catch (err) {
     console.error("[partner-invitations] invite email send failed", err);
+    emailSent = false;
   }
 
-  return NextResponse.json({ invitationId: invitation.id, status: invitation.status }, { status: 201 });
+  // inviteUrl always comes back, whether or not the email actually
+  // landed — a real, working invite link with no other channel once
+  // it's gone shouldn't be solely dependent on delivery succeeding (a
+  // sandboxed provider, a typo, a spam filter). The admin UI surfaces it
+  // directly so it can be copied and sent through anything.
+  return NextResponse.json(
+    { invitationId: invitation.id, status: invitation.status, inviteUrl, emailSent },
+    { status: 201 }
+  );
 }
