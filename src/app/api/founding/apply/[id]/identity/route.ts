@@ -63,12 +63,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: "You must be 18 or older to apply." }, { status: 400 });
   }
 
+  // SELFIE/ID_HOLDING_PHOTO stay valid document types (existing
+  // applications already have them on file, and this stays the same
+  // storage/document model either way) — only ID_DOCUMENT is actually
+  // required now that the form itself only collects that one.
   const hasType = (t: string) => documents.some((d) => d.type === t);
-  if (!hasType("ID_DOCUMENT") || !hasType("SELFIE")) {
-    return NextResponse.json(
-      { error: "An ID document and a verification selfie are both required." },
-      { status: 400 }
-    );
+  if (!hasType("ID_DOCUMENT")) {
+    return NextResponse.json({ error: "An ID document is required." }, { status: 400 });
   }
 
   const decoded = documents.map((d) => {

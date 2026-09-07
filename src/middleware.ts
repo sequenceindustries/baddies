@@ -14,10 +14,35 @@ import { verifySessionToken } from "@/lib/auth/session";
 // every actual admin API route independently enforces its own
 // session+permission check regardless of this list — this entry only lets
 // that existing gate load and do its job instead of never being reached.
-const PUBLIC_PATHS = new Set(["/", "/login", "/founding-baddies", "/partner-invite", "/admin", "/terms", "/privacy", "/creator-terms", "/content-policy", "/age-policy", "/dmca", "/contact"]);
+// /founding-baddies/verify-email and /complete-onboarding are the same
+// story as /founding-baddies itself: an applicant with no account yet
+// following an emailed link. Both were missing here — a real gap, not a
+// deliberate choice — which meant clicking either link during coming-
+// soon mode got silently redirected to "/" before the page (which
+// already handles token verification + resumable status correctly) ever
+// rendered. "Only /founding-baddies is public" was never the intent;
+// every step of this specific, no-login flow is.
+const PUBLIC_PATHS = new Set([
+  "/",
+  "/login",
+  "/founding-baddies",
+  "/founding-baddies/verify-email",
+  "/founding-baddies/complete-onboarding",
+  "/partner-invite",
+  "/admin",
+  "/terms",
+  "/privacy",
+  "/creator-terms",
+  "/content-policy",
+  "/age-policy",
+  "/dmca",
+  "/contact",
+]);
 const PUBLIC_PREFIXES = [
   "/api/founding/apply",
   "/api/founding/referral", // sets the referral-attribution cookie from /founding-baddies?ref=<code>, called before the visitor has any account
+  "/api/founding/verify-email", // same gap as the page above — this is the call that page itself makes
+  "/api/founding/onboarding", // status + banking — backs /founding-baddies/complete-onboarding, same no-account reasoning
   "/api/partner-invite", // status + accept — an invited partner has no session yet either
   "/api/health",
   "/api/auth/login",

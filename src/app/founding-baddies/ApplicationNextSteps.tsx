@@ -93,34 +93,66 @@ function StepStatus({ done, label }: { done: boolean; label: string }) {
   );
 }
 
+/**
+ * Reads a South African 13-digit ID number's first 6 digits (YYMMDD) and
+ * returns the birthdate as "YYYY-MM-DD" for the date input above, or
+ * null if those digits don't form a real calendar date (a passport
+ * number, a still-incomplete ID number mid-typing, etc.) — the century
+ * itself isn't encoded in the number, so this uses the same two-digit-
+ * year heuristic every SA ID parser does: a YY greater than the current
+ * two-digit year is assumed to be 19XX, otherwise 20XX. It's an assist,
+ * not a source of truth — the date field stays editable so an applicant
+ * can correct it if the guess lands on the wrong century.
+ */
+export function parseSaIdDateOfBirth(idNumber: string): string | null {
+  const digits = idNumber.replace(/\s/g, "");
+  if (!/^\d{13}$/.test(digits)) return null;
+
+  const yy = Number(digits.slice(0, 2));
+  const mm = Number(digits.slice(2, 4));
+  const dd = Number(digits.slice(4, 6));
+  if (mm < 1 || mm > 12) return null;
+
+  const currentYY = new Date().getFullYear() % 100;
+  const century = yy > currentYY ? 1900 : 2000;
+  const year = century + yy;
+
+  const parsed = new Date(Date.UTC(year, mm - 1, dd));
+  const isRealDate =
+    parsed.getUTCFullYear() === year && parsed.getUTCMonth() === mm - 1 && parsed.getUTCDate() === dd;
+  if (!isRealDate) return null;
+
+  return `${year}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+}
+
 function IdentityForm({ applicationId, onSubmitted }: { applicationId: string; onSubmitted: () => void }) {
   const [legalName, setLegalName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [nationality, setNationality] = useState("");
   const [idNumber, setIdNumber] = useState("");
   const [idDocument, setIdDocument] = useState<File | null>(null);
-  const [selfie, setSelfie] = useState<File | null>(null);
-  const [idHoldingPhoto, setIdHoldingPhoto] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function handleIdNumberChange(value: string) {
+    setIdNumber(value);
+    const parsedDob = parseSaIdDateOfBirth(value);
+    if (parsedDob) setDateOfBirth(parsedDob);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
-    if (!idDocument || !selfie) {
-      setError("An ID document and a verification selfie are both required.");
+    if (!idDocument) {
+      setError("An ID document is required.");
       return;
     }
 
     setSubmitting(true);
     try {
       const documents = await Promise.all(
-        [
-          { type: "ID_DOCUMENT" as const, file: idDocument },
-          { type: "SELFIE" as const, file: selfie },
-          ...(idHoldingPhoto ? [{ type: "ID_HOLDING_PHOTO" as const, file: idHoldingPhoto }] : []),
-        ].map(async (d) => ({
+        [{ type: "ID_DOCUMENT" as const, file: idDocument }].map(async (d) => ({
           type: d.type,
           mimeType: d.file.type,
           base64Data: await fileToBase64(d.file),
@@ -153,9 +185,9 @@ function IdentityForm({ applicationId, onSubmitted }: { applicationId: string; o
       </p>
       <input
         type="text"
-        placeholder="Legal name"
-        value={legalName}
-        onChange={(e) => setLegalName(e.target.value)}
+        placeholder="ID / passport number"
+        value={idNumber}
+        onChange={(e) => handleIdNumberChange(e.target.value)}
         style={identityInputStyle}
         required
       />
@@ -169,17 +201,17 @@ function IdentityForm({ applicationId, onSubmitted }: { applicationId: string; o
       />
       <input
         type="text"
-        placeholder="Nationality"
-        value={nationality}
-        onChange={(e) => setNationality(e.target.value)}
+        placeholder="Legal name"
+        value={legalName}
+        onChange={(e) => setLegalName(e.target.value)}
         style={identityInputStyle}
         required
       />
       <input
         type="text"
-        placeholder="ID / passport number"
-        value={idNumber}
-        onChange={(e) => setIdNumber(e.target.value)}
+        placeholder="Nationality"
+        value={nationality}
+        onChange={(e) => setNationality(e.target.value)}
         style={identityInputStyle}
         required
       />
@@ -187,17 +219,9 @@ function IdentityForm({ applicationId, onSubmitted }: { applicationId: string; o
         ID document (required)
         <input type="file" accept="image/*" onChange={(e) => setIdDocument(e.target.files?.[0] ?? null)} required />
       </label>
-      <label style={fileLabelStyle}>
-        Verification selfie (required)
-        <input type="file" accept="image/*" onChange={(e) => setSelfie(e.target.files?.[0] ?? null)} required />
-      </label>
-      <label style={fileLabelStyle}>
-        Photo holding your ID (optional, may be requested later if not provided now)
-        <input type="file" accept="image/*" onChange={(e) => setIdHoldingPhoto(e.target.files?.[0] ?? null)} />
-      </label>
       {error && <p style={identityErrorStyle}>{error}</p>}
       <button type="submit" disabled={submitting} style={identitySubmitStyle}>
-        {submitting ? "Uploading…" : "Submit for review"}
+        {submitting ? "Uploading…" : "Submit"}
       </button>
     </form>
   );

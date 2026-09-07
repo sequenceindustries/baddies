@@ -177,7 +177,7 @@ function Section({
 // Application form
 // ---------------------------------------------------------------------
 
-const SOCIAL_PLATFORMS = ["Instagram", "TikTok", "X", "YouTube", "Snapchat", "Facebook", "Reddit", "Other"];
+const SOCIAL_PLATFORMS = ["Instagram", "TikTok", "X", "YouTube", "Facebook"];
 const CREATOR_PLATFORMS = ["OnlyFans", "Fansly", "ManyVids", "JustForFans", "LoyalFans", "Patreon", "Other"];
 
 interface PlatformEntry {
@@ -204,7 +204,6 @@ function ApplicationForm() {
 
   const [audienceSize, setAudienceSize] = useState("");
   const [creatingSince, setCreatingSince] = useState("");
-  const [currentlyMonetising, setCurrentlyMonetising] = useState("");
 
   const [confirmsAdult, setConfirmsAdult] = useState(false);
   const [agreesToVerification, setAgreesToVerification] = useState(false);
@@ -286,7 +285,6 @@ function ApplicationForm() {
         platforms,
         audienceSize: audienceSize || undefined,
         creatingSince: creatingSince || undefined,
-        currentlyMonetising: currentlyMonetising ? currentlyMonetising === "yes" : undefined,
         confirmsAdult,
         agreesToVerification,
         website,
@@ -405,13 +403,6 @@ function ApplicationForm() {
               onChange={(e) => setCreatingSince(e.target.value)}
               placeholder="e.g. 2 years"
             />
-          </FormField>
-          <FormField label="Are you currently monetising your audience?">
-            <select style={inputStyle} value={currentlyMonetising} onChange={(e) => setCurrentlyMonetising(e.target.value)}>
-              <option value="">Prefer not to say</option>
-              <option value="yes">Yes</option>
-              <option value="no">Not yet</option>
-            </select>
           </FormField>
         </FormFieldset>
 
