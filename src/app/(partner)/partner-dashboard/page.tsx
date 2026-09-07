@@ -42,10 +42,13 @@ interface DashboardData {
 /**
  * A Founding Partner's private dashboard — real data only, own data only
  * (see GET /api/partner/dashboard's own comment on why there's no id
- * parameter anywhere here to tamper with). Reachable pre-launch for a
- * PARTNER-role session (see src/middleware.ts), but this page itself
- * still checks the role client-side too, same defense-in-depth pattern
- * every other role-gated page in this app already uses.
+ * parameter anywhere here to tamper with). Reachable pre-launch for any
+ * authenticated session (see src/middleware.ts), but this page itself
+ * still checks real ownership client-side too, same defense-in-depth
+ * pattern every other gated page in this app already uses — via
+ * user.foundingPartner, not role, since role alone can't tell "is this
+ * account a Founding Partner" once it's also applied as a creator (role
+ * becomes CREATOR then — see /api/partner/dashboard's own comment).
  */
 export default function PartnerDashboardPage() {
   const { user, loading } = useSession();
@@ -53,7 +56,7 @@ export default function PartnerDashboardPage() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (!user || user.role !== "PARTNER") return;
+    if (!user || !user.foundingPartner) return;
     fetch("/api/partner/dashboard")
       .then((r) => (r.ok ? r.json() : null))
       .then(setData);
@@ -61,7 +64,7 @@ export default function PartnerDashboardPage() {
 
   if (loading) return <main style={pageWrapStyle} />;
 
-  if (!user || user.role !== "PARTNER") {
+  if (!user || !user.foundingPartner) {
     return (
       <main style={pageWrapStyle}>
         <h1 style={displayHeadingStyle}>Founding Partner dashboard</h1>

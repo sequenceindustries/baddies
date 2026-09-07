@@ -28,7 +28,7 @@ export default function SettingsPage() {
   return (
     <main style={mainStyle}>
       <h1 style={displayHeadingStyle}>Settings</h1>
-      <AccountTypePanel role={user.role} creatorProfile={user.creatorProfile} />
+      <AccountTypePanel role={user.role} creatorProfile={user.creatorProfile} foundingPartner={user.foundingPartner} />
       <ProfileSettings />
     </main>
   );
@@ -42,16 +42,29 @@ export default function SettingsPage() {
 function AccountTypePanel({
   role,
   creatorProfile,
+  foundingPartner,
 }: {
   role: "FAN" | "CREATOR" | "ADMIN" | "PARTNER";
   creatorProfile: { id: string; status: string } | null;
+  foundingPartner: { id: string; status: string } | null;
 }) {
+  // foundingPartner and creatorProfile are independent — an account can
+  // hold both (a Founding Partner who's also applied as a creator; see
+  // /api/partner/dashboard's comment on why role alone can't tell "is
+  // this a partner" once that happens), so this panel describes whatever
+  // combination is actually true rather than picking just one.
   let heading = "Fan account";
   let body = "You can browse, subscribe, and tip creators.";
   if (role === "ADMIN") {
     heading = "Admin account";
     body = "You have platform administration access.";
-  } else if (role === "PARTNER") {
+  } else if (foundingPartner && creatorProfile) {
+    heading = "Founding Partner + Creator account";
+    body =
+      creatorProfile.status === "VERIFIED"
+        ? "You have your private Founding Partner dashboard, and you're a verified creator — your uploads publish immediately."
+        : `You have your private Founding Partner dashboard. Your creator application is in progress (status: ${creatorProfile.status}).`;
+  } else if (foundingPartner) {
     heading = "Founding Partner account";
     body = "You have access to your private Founding Partner dashboard.";
   } else if (creatorProfile) {
@@ -62,36 +75,31 @@ function AccountTypePanel({
         : `Application in progress (status: ${creatorProfile.status}).`;
   }
 
+  const linkStyle: React.CSSProperties = {
+    display: "inline-block",
+    marginTop: "0.6rem",
+    fontSize: "0.85rem",
+    color: "var(--accent)",
+    fontWeight: 600,
+  };
+
   return (
     <div style={{ ...cardStyle, marginBottom: "2rem" }}>
       <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>{heading}</h2>
       <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", margin: 0 }}>{body}</p>
-      {!creatorProfile && role !== "ADMIN" && role !== "PARTNER" && (
-        <Link
-          href="/apply"
-          style={{
-            display: "inline-block",
-            marginTop: "0.6rem",
-            fontSize: "0.85rem",
-            color: "var(--accent)",
-            fontWeight: 600,
-          }}
-        >
+      {!creatorProfile && role !== "ADMIN" && (
+        <Link href="/apply" style={linkStyle}>
           Become a creator →
         </Link>
       )}
       {creatorProfile && (
-        <Link
-          href="/creator-dashboard"
-          style={{
-            display: "inline-block",
-            marginTop: "0.6rem",
-            fontSize: "0.85rem",
-            color: "var(--accent)",
-            fontWeight: 600,
-          }}
-        >
+        <Link href="/creator-dashboard" style={{ ...linkStyle, display: "block" }}>
           Manage pricing, privacy, and content from your Dashboard →
+        </Link>
+      )}
+      {foundingPartner && (
+        <Link href="/partner-dashboard" style={{ ...linkStyle, display: "block" }}>
+          Go to your Partner dashboard →
         </Link>
       )}
     </div>

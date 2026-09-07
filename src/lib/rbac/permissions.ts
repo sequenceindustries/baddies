@@ -54,11 +54,18 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "banking:view",
     "founding_partner:manage",
   ],
-  // A partner's own dashboard routes authorize by role + row ownership
-  // (this FoundingPartner.userId === the current user's id) directly,
-  // not through this permission table — a partner never needs any of
-  // the above admin/creator/fan permissions.
-  PARTNER: [],
+  // A partner's own dashboard routes authorize by row ownership (this
+  // FoundingPartner.userId === the current user's id) directly, not
+  // through this permission table. "creator:apply" is the one real
+  // exception: a Founding Partner can also apply as a creator (the same
+  // account holds both a FoundingPartner row and, once approved, a
+  // CreatorProfile — see /api/creator/apply, which flips role to
+  // CREATOR the same way it does for a FAN applicant). Once that
+  // happens the account's role becomes CREATOR and picks up the normal
+  // CREATOR permissions below; PARTNER-ness itself is tracked by the
+  // FoundingPartner row's own existence from then on, not by this role
+  // field — see /api/partner/dashboard's own comment.
+  PARTNER: ["creator:apply"],
 };
 
 export function can(role: UserRole, permission: Permission): boolean {

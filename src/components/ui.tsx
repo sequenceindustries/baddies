@@ -10,6 +10,11 @@ export interface SessionUser {
   role: "FAN" | "CREATOR" | "ADMIN" | "PARTNER";
   displayName: string | null;
   creatorProfile: { id: string; status: string } | null;
+  // Independent of role, same reason creatorProfile is: an account can
+  // hold both a FoundingPartner row and (once applied) a CreatorProfile
+  // at once, since applying as a creator flips role to CREATOR the same
+  // way it does for a plain FAN — see /api/partner/dashboard's comment.
+  foundingPartner: { id: string; status: string } | null;
 }
 
 export interface DetectedLocation {
@@ -246,20 +251,26 @@ function NavLinks({
         {/* Deliberately different link sets per role (not one big list
             with items hidden) — a creator lands on tools for running
             their page, a fan lands on tools for browsing/paying, per
-            "creators shouldn't see what fans see." */}
+            "creators shouldn't see what fans see." Dashboard and Partner
+            Dashboard both key off the relevant row's own existence
+            (creatorProfile / foundingPartner), not role — the two are
+            independent: a Founding Partner who's also applied as a
+            creator gets both links at once, since applying flips role to
+            CREATOR the same way it does for a plain FAN (see
+            /api/partner/dashboard's comment). */}
         {user.role === "ADMIN" && (
           <Link href="/admin" style={linkStyle}>
             Admin
           </Link>
         )}
-        {user.role === "CREATOR" && (
-          <Link href="/creator-dashboard" style={linkStyle}>
-            Dashboard
-          </Link>
-        )}
-        {user.role === "PARTNER" && (
+        {user.foundingPartner && (
           <Link href="/partner-dashboard" style={linkStyle}>
             Partner Dashboard
+          </Link>
+        )}
+        {user.creatorProfile && (
+          <Link href="/creator-dashboard" style={linkStyle}>
+            Dashboard
           </Link>
         )}
         {user.role === "FAN" && (
@@ -277,7 +288,7 @@ function NavLinks({
             Discover
           </Link>
         )}
-        {user.role === "FAN" && !user.creatorProfile && (
+        {(user.role === "FAN" || user.role === "PARTNER") && !user.creatorProfile && (
           <Link href="/apply" style={primaryLinkStyle}>
             Become a creator
           </Link>
@@ -331,7 +342,7 @@ function MobileAccountBlock({ user, onLogout }: { user: SessionUser; onLogout: (
       <div style={{ fontWeight: 600, fontSize: "0.92rem" }}>{user.displayName ?? user.email}</div>
       <div style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginTop: "0.15rem" }}>{user.email}</div>
       <div style={{ marginTop: "0.5rem" }}>
-        <AccountTypeBadge role={user.role} creatorProfile={user.creatorProfile} />
+        <AccountTypeBadge role={user.role} creatorProfile={user.creatorProfile} foundingPartner={user.foundingPartner} />
       </div>
       <Link href="/settings" style={accountMenuLinkStyle}>
         Settings
@@ -383,7 +394,7 @@ function AccountMenu({ user, onLogout }: { user: SessionUser; onLogout: () => vo
             <div style={{ fontWeight: 600, fontSize: "0.92rem" }}>{user.displayName ?? "Unnamed"}</div>
             <div style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginTop: "0.15rem" }}>{user.email}</div>
             <div style={{ marginTop: "0.5rem" }}>
-              <AccountTypeBadge role={user.role} creatorProfile={user.creatorProfile} />
+              <AccountTypeBadge role={user.role} creatorProfile={user.creatorProfile} foundingPartner={user.foundingPartner} />
             </div>
           </div>
           <Link href="/settings" style={accountMenuLinkStyle} onClick={() => setOpen(false)}>
@@ -434,24 +445,37 @@ export function VerifiedBadge() {
 function AccountTypeBadge({
   role,
   creatorProfile,
+  foundingPartner,
 }: {
   role: SessionUser["role"];
   creatorProfile: SessionUser["creatorProfile"];
+  foundingPartner: SessionUser["foundingPartner"];
 }) {
   if (role === "ADMIN") {
     return <span style={accountBadgeStyle("var(--accent)")}>Admin</span>;
   }
-  if (role === "PARTNER") {
-    return <span style={accountBadgeStyle("var(--accent)")}>Founding Partner</span>;
+
+  // foundingPartner and creatorProfile are independent (see SessionUser's
+  // own comment) — an account can hold both at once, and gets both
+  // badges at once rather than one hiding the other.
+  const badges: React.ReactNode[] = [];
+  if (foundingPartner) {
+    badges.push(
+      <span key="partner" style={accountBadgeStyle("var(--accent)")}>
+        Founding Partner
+      </span>
+    );
   }
   if (creatorProfile) {
     const verified = creatorProfile.status === "VERIFIED";
-    const statusLabel = verified ? "Verified" : "Pending";
-    return (
-      <span style={accountBadgeStyle(verified ? "var(--success)" : "var(--text-muted)")}>
-        Creator · {statusLabel}
+    badges.push(
+      <span key="creator" style={accountBadgeStyle(verified ? "var(--success)" : "var(--text-muted)")}>
+        Creator · {verified ? "Verified" : "Pending"}
       </span>
     );
+  }
+  if (badges.length > 0) {
+    return <span style={{ display: "inline-flex", gap: "0.4rem", flexWrap: "wrap" }}>{badges}</span>;
   }
   return <span style={accountBadgeStyle("var(--accent)")}>Fan</span>;
 }

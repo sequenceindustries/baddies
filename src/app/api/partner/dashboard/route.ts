@@ -6,20 +6,20 @@ import { db } from "@/lib/db/client";
 export const dynamic = "force-dynamic";
 
 /**
- * A Founding Partner's own dashboard data — authorized by role + row
- * ownership (this FoundingPartner.userId === the current user's id),
- * not a Permission (see src/lib/rbac/permissions.ts's comment on why
- * PARTNER has an empty permission list). Never accepts a partner id from
- * the caller — always resolves "my own" FoundingPartner row server-side,
- * so there is no parameter to tamper with to see another partner's data.
+ * A Founding Partner's own dashboard data — authorized by row ownership
+ * (this FoundingPartner.userId === the current user's id) directly, not
+ * a role check. A Founding Partner can also apply as a creator (see
+ * /api/creator/apply), which flips User.role to CREATOR the same way it
+ * does for a FAN applicant — so role alone can no longer tell "is this
+ * account a Founding Partner," only the FoundingPartner row's own
+ * existence can. Never accepts a partner id from the caller — always
+ * resolves "my own" FoundingPartner row server-side, so there is no
+ * parameter to tamper with to see another partner's data.
  */
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
-  }
-  if (user.role !== "PARTNER") {
-    return NextResponse.json({ error: "This dashboard is only available to Founding Partners." }, { status: 403 });
   }
 
   const partner = await db.foundingPartner.findUnique({
