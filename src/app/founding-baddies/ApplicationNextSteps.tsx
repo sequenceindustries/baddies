@@ -1,49 +1,42 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 /**
  * The "verify & upload" step shown right after a successful application
  * submission, AND reused as the resume path when someone arrives later
  * via the emailed verification link (see /founding-baddies/verify-email)
- * — same component, same three sub-steps (email, WhatsApp, identity +
- * documents), driven by GET /api/founding/apply/[id]/status so it always
- * reflects the real current state rather than assuming a fresh
- * application. No account/login exists for a Founding Baddie yet — see
- * the plan's "resumability" note — so this status fetch, keyed only by
- * the unguessable applicationId, is the whole mechanism.
+ * — same component, same two sub-steps (email, identity + document),
+ * driven by GET /api/founding/apply/[id]/status so it always reflects
+ * the real current state rather than assuming a fresh application. No
+ * account/login exists for a Founding Baddie yet — see the plan's
+ * "resumability" note — so this status fetch, keyed only by the
+ * unguessable applicationId, is the whole mechanism.
+ *
+ * WhatsApp confirmation is no longer a step shown here — it's dropped
+ * from the applicant-facing flow entirely (per explicit request), not
+ * from the platform: CONTACT_CONFIRMED stays a real
+ * FoundingApplicationStatus stage admin can still reach via its own
+ * confirm-whatsapp action, and advanceFoundingStatus already treats it
+ * as informational rather than a gate on anything else (see that
+ * module's own comment) — nothing here or on the admin side depended on
+ * an applicant seeing this step.
  */
-export default function ApplicationNextSteps({
-  applicationId,
-  whatsappLink: initialWhatsappLink,
-}: {
-  applicationId: string;
-  whatsappLink?: string | null;
-}) {
+export default function ApplicationNextSteps({ applicationId }: { applicationId: string }) {
   const [loading, setLoading] = useState(true);
   const [emailVerified, setEmailVerified] = useState(false);
-  const [whatsappVerified, setWhatsappVerified] = useState(false);
   const [identitySubmitted, setIdentitySubmitted] = useState(false);
-  const [whatsappLink, setWhatsappLink] = useState<string | null>(initialWhatsappLink ?? null);
 
   function reloadStatus() {
     setLoading(true);
     fetch(`/api/founding/apply/${applicationId}/status`)
       .then((r) => (r.ok ? r.json() : null))
-      .then(
-        (body: {
-          emailVerified?: boolean;
-          whatsappVerified?: boolean;
-          identitySubmitted?: boolean;
-          whatsappLink?: string;
-        } | null) => {
-          if (!body) return;
-          setEmailVerified(body.emailVerified ?? false);
-          setWhatsappVerified(body.whatsappVerified ?? false);
-          setIdentitySubmitted(body.identitySubmitted ?? false);
-          if (body.whatsappLink) setWhatsappLink(body.whatsappLink);
-        }
-      )
+      .then((body: { emailVerified?: boolean; identitySubmitted?: boolean } | null) => {
+        if (!body) return;
+        setEmailVerified(body.emailVerified ?? false);
+        setIdentitySubmitted(body.identitySubmitted ?? false);
+      })
       .finally(() => setLoading(false));
   }
 
@@ -51,7 +44,7 @@ export default function ApplicationNextSteps({
 
   return (
     <div style={nextStepsWrapStyle}>
-      <h3 style={nextStepsHeadingStyle}>Two more things speed up your review</h3>
+      <h3 style={nextStepsHeadingStyle}>One more thing speeds up your review</h3>
 
       <div style={stepCardStyle}>
         <StepStatus done={emailVerified} label="Verify your email" />
@@ -63,19 +56,8 @@ export default function ApplicationNextSteps({
       </div>
 
       <div style={stepCardStyle}>
-        <StepStatus done={whatsappVerified} label="Confirm on WhatsApp" />
-        {!whatsappVerified && whatsappLink && (
-          <a href={whatsappLink} target="_blank" rel="noreferrer" style={whatsappButtonStyle}>
-            Message us on WhatsApp
-          </a>
-        )}
-      </div>
-
-      <div style={stepCardStyle}>
         <StepStatus done={identitySubmitted} label="Identity & ID document" />
-        {!identitySubmitted && !loading && (
-          <IdentityForm applicationId={applicationId} onSubmitted={reloadStatus} />
-        )}
+        {!identitySubmitted && !loading && <IdentityForm applicationId={applicationId} onSubmitted={reloadStatus} />}
         {identitySubmitted && (
           <p style={stepHintStyle}>Submitted — our team will review it as part of your application.</p>
         )}
@@ -126,6 +108,7 @@ export function parseSaIdDateOfBirth(idNumber: string): string | null {
 }
 
 function IdentityForm({ applicationId, onSubmitted }: { applicationId: string; onSubmitted: () => void }) {
+  const router = useRouter();
   const [legalName, setLegalName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [nationality, setNationality] = useState("");
@@ -172,6 +155,12 @@ function IdentityForm({ applicationId, onSubmitted }: { applicationId: string; o
       }
 
       onSubmitted();
+      // Head straight to the applicant's own status dashboard instead of
+      // staying on whichever page this form happened to be reached from
+      // (the original application page, or the emailed verify-email
+      // link) — one canonical place to check progress from here on,
+      // reachable again any time via the same unguessable id.
+      router.push(`/founding-baddies/dashboard?id=${applicationId}`);
     } finally {
       setSubmitting(false);
     }
@@ -215,10 +204,22 @@ function IdentityForm({ applicationId, onSubmitted }: { applicationId: string; o
         style={identityInputStyle}
         required
       />
-      <label style={fileLabelStyle}>
-        ID document (required)
-        <input type="file" accept="image/*" onChange={(e) => setIdDocument(e.target.files?.[0] ?? null)} required />
-      </label>
+      <div style={fileFieldWrapStyle}>
+        <span style={fileFieldLabelStyle}>ID document (required)</span>
+        <div style={fileFieldRowStyle}>
+          <label style={fileUploadButtonStyle}>
+            {idDocument ? "Change file" : "Choose file"}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setIdDocument(e.target.files?.[0] ?? null)}
+              required
+              style={hiddenFileInputStyle}
+            />
+          </label>
+          <span style={fileNameStyle}>{idDocument ? idDocument.name : "No file chosen"}</span>
+        </div>
+      </div>
       {error && <p style={identityErrorStyle}>{error}</p>}
       <button type="submit" disabled={submitting} style={identitySubmitStyle}>
         {submitting ? "Uploading…" : "Submit"}
@@ -247,9 +248,16 @@ const stepBadgeStyle: React.CSSProperties = { display: "inline-flex", alignItems
 const stepBadgeDoneStyle: React.CSSProperties = { background: "var(--accent)", borderColor: "var(--accent)", color: "#fff" };
 const stepLabelStyle: React.CSSProperties = { fontWeight: 500 };
 const stepHintStyle: React.CSSProperties = { fontSize: "0.85rem", color: "var(--text-muted)", margin: "0.5rem 0 0" };
-const whatsappButtonStyle: React.CSSProperties = { display: "inline-block", marginTop: "0.6rem", padding: "0.5rem 1rem", borderRadius: "8px", background: "#25D366", color: "#0b0b0b", fontWeight: 600, fontSize: "0.85rem", textDecoration: "none" };
 const identityFormStyle: React.CSSProperties = { marginTop: "0.6rem", display: "flex", flexDirection: "column", gap: "0.6rem" };
 const identityInputStyle: React.CSSProperties = { padding: "0.55rem 0.7rem", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: "0.9rem" };
-const fileLabelStyle: React.CSSProperties = { fontSize: "0.85rem", display: "flex", flexDirection: "column", gap: "0.3rem" };
+const fileFieldWrapStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: "0.4rem" };
+const fileFieldLabelStyle: React.CSSProperties = { fontSize: "0.85rem", color: "var(--text-muted)" };
+const fileFieldRowStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: "0.7rem", flexWrap: "wrap" };
+// Same ghost-accent-button treatment as the rest of the app's secondary
+// controls (e.g. LocationField's "Detect my location" in components/ui.tsx)
+// — a real button, not the browser's own unstyled file-input chrome.
+const fileUploadButtonStyle: React.CSSProperties = { display: "inline-block", padding: "0.5rem 1rem", borderRadius: "8px", border: "1px solid var(--accent)", color: "var(--accent)", background: "transparent", fontWeight: 600, fontSize: "0.85rem", cursor: "pointer", flexShrink: 0 };
+const hiddenFileInputStyle: React.CSSProperties = { display: "none" };
+const fileNameStyle: React.CSSProperties = { fontSize: "0.82rem", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "220px" };
 const identityErrorStyle: React.CSSProperties = { fontSize: "0.85rem", color: "var(--danger)", margin: 0 };
 const identitySubmitStyle: React.CSSProperties = { padding: "0.6rem 1.2rem", borderRadius: "8px", border: "none", background: "var(--accent)", color: "#fff", fontWeight: 600, fontSize: "0.9rem", cursor: "pointer", alignSelf: "flex-start" };

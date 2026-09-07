@@ -213,11 +213,9 @@ function ApplicationForm() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Set on a successful submit — drives the step-2 "verify & upload"
-  // panel below (see ApplicationNextSteps). Nothing here is sensitive:
-  // the id is an unguessable cuid, and the WhatsApp link just points at
-  // Baddies' own number with a pre-filled message.
+  // panel below (see ApplicationNextSteps). Not sensitive: it's an
+  // unguessable cuid.
   const [applicationId, setApplicationId] = useState<string | null>(null);
-  const [whatsappLink, setWhatsappLink] = useState<string | null>(null);
 
   // Client-side heads-up only, not the enforcement — fails open (assumes
   // eligible) on a slow/failed check so a network hiccup never blocks a
@@ -298,9 +296,8 @@ function ApplicationForm() {
       return;
     }
 
-    const body: { applicationId?: string; whatsappLink?: string } = await res.json().catch(() => ({}));
+    const body: { applicationId?: string } = await res.json().catch(() => ({}));
     setApplicationId(body.applicationId ?? null);
-    setWhatsappLink(body.whatsappLink ?? null);
     setSubmitted(true);
   }
 
@@ -314,7 +311,7 @@ function ApplicationForm() {
             personally — we&apos;ll reach out by email or WhatsApp once yours has been reviewed.
           </p>
         </div>
-        {applicationId && <ApplicationNextSteps applicationId={applicationId} whatsappLink={whatsappLink} />}
+        {applicationId && <ApplicationNextSteps applicationId={applicationId} />}
       </section>
     );
   }

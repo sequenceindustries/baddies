@@ -28,6 +28,7 @@ const PUBLIC_PATHS = new Set([
   "/founding-baddies",
   "/founding-baddies/verify-email",
   "/founding-baddies/complete-onboarding",
+  "/founding-baddies/dashboard", // reached right after the identity step; same no-login, unguessable-id model as the two above
   "/partner-invite",
   "/admin",
   "/terms",
