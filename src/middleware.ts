@@ -34,10 +34,20 @@ export async function middleware(req: NextRequest) {
   const token = req.cookies.get(cookieName)?.value;
   if (token) {
     const claims = await verifySessionToken(token);
-    // A Founding Partner's dashboard is private and invite-only by
-    // construction (see PartnerInvitation) — it's reachable pre-launch
-    // for the same reason an admin is, not a general public surface.
-    if (claims?.role === "ADMIN" || claims?.role === "PARTNER") {
+    // Coming-soon mode is meant to block anonymous/new-visitor access
+    // (browsing, registering) — not lock existing accounts out of pages
+    // their own account already has. Any already-authenticated session,
+    // any role, bypasses the gate here.
+    //
+    // This used to only admit ADMIN/PARTNER, which left fans/creators
+    // with a real bug, not just a blocked feature: Nav renders signed-in
+    // state fine (its own /api/auth/me fetch is in PUBLIC_PREFIXES below),
+    // but the page content silently came back as "/" — see the next-url
+    // rewrite below — whose landing page does `if (user) return null` and
+    // waits on a client-side redirect that never fires, because the URL
+    // bar never actually changed. Net effect: a signed-in fan clicking
+    // "Home" landed on a permanently blank /fan-home.
+    if (claims) {
       return NextResponse.next();
     }
   }

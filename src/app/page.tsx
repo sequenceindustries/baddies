@@ -109,6 +109,15 @@ export default function LandingPage() {
             </Link>
           ))}
         </nav>
+        <a
+          href="https://www.instagram.com/baddest.africa/"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="baddies on Instagram"
+          style={footerSocialLinkStyle}
+        >
+          <InstagramIcon />
+        </a>
         <p style={footerCopyrightStyle}>© {new Date().getFullYear()} baddies. All rights reserved.</p>
       </footer>
     </main>
@@ -236,6 +245,25 @@ const footerLinkStyle: React.CSSProperties = {
   fontSize: "0.78rem",
   textDecoration: "none",
 };
+
+// A small, muted icon rather than a prominent button — matches the
+// legal-link row's own understated weight, just one more quiet way to
+// find the page.
+const footerSocialLinkStyle: React.CSSProperties = {
+  display: "inline-flex",
+  color: "var(--text-muted)",
+  marginBottom: "1rem",
+};
+
+function InstagramIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="12" cy="12" r="4.2" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="17.4" cy="6.6" r="1.1" fill="currentColor" />
+    </svg>
+  );
+}
 
 const footerCopyrightStyle: React.CSSProperties = {
   color: "var(--text-muted)",

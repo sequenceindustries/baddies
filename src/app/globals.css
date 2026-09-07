@@ -168,6 +168,35 @@ a[href]:hover {
     }
 }
 
+/* Nav's mobile hamburger (components/ui.tsx, Nav/MenuIcon) — hidden by
+   default, swapped for the desktop inline links only under the mobile
+   breakpoint. .nav-links-desktop needs !important in the media rule
+   because it's fighting that element's own inline `display: flex`
+   (inline styles otherwise always win over an external class); the
+   hamburger button carries no inline `display` at all, so plain cascade
+   order is enough for it. .nav-mobile-menu only ever mounts while its
+   button is toggled open, but the min-width rule guards the edge case of
+   resizing back to desktop without a route change first. */
+.nav-hamburger {
+    display: none;
+}
+
+@media (max-width: 680px) {
+    .nav-links-desktop {
+        display: none !important;
+    }
+
+    .nav-hamburger {
+        display: inline-flex;
+    }
+}
+
+@media (min-width: 681px) {
+    .nav-mobile-menu {
+        display: none !important;
+    }
+}
+
 ::selection {
     background: var(--accent);
     color: var(--bg);

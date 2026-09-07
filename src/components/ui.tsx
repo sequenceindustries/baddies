@@ -132,19 +132,43 @@ export function roleHomePath(role: SessionUser["role"]): string {
 
 const NO_AUTH_LINKS_PATHS = new Set(["/", "/founding-baddies"]);
 
-export function Nav() {
+export function Nav({ comingSoon = false }: { comingSoon?: boolean }) {
   const { user, loading, refresh } = useSession();
+  const pathname = usePathname();
   // Both the landing page and the Founding Baddies campaign page keep
   // only their own single "Apply"/"Apply now" CTA — no Sign in/Join
   // here either, or a signed-out visitor would have a second way in
   // past that one deliberate button.
-  const hideAuthLinks = NO_AUTH_LINKS_PATHS.has(usePathname());
+  const hideAuthLinks = NO_AUTH_LINKS_PATHS.has(pathname);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close on route change — a link tap should never leave the dropdown
+  // hanging open over the next page.
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    function onPointerDown(e: MouseEvent) {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target as Node)) {
+        setMobileOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [mobileOpen]);
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
     refresh();
     window.location.href = "/";
   }
+
+  // Nothing to show at all (signed out, on a hideAuthLinks page) — no
+  // point rendering a hamburger for an empty dropdown.
+  const hasNavContent = !(hideAuthLinks && !user);
 
   return (
     <div style={navWrapStyle}>
@@ -153,76 +177,173 @@ export function Nav() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/baddies-wordmark-white.webp" alt="baddies" style={brandLogoStyle} />
       </Link>
-      <div style={{ display: "flex", gap: "1.25rem", alignItems: "center" }}>
-        {loading ? null : user ? (
-          <>
-            {/* Deliberately different link sets per role (not one big list
-                with items hidden) — a creator lands on tools for running
-                their page, a fan lands on tools for browsing/paying, per
-                "creators shouldn't see what fans see." */}
-            {user.role === "ADMIN" && (
-              <Link href="/admin" style={linkStyle}>
-                Admin
-              </Link>
-            )}
-            {user.role === "CREATOR" && (
-              <Link href="/creator-dashboard" style={linkStyle}>
-                Dashboard
-              </Link>
-            )}
-            {user.role === "PARTNER" && (
-              <Link href="/partner-dashboard" style={linkStyle}>
-                Partner Dashboard
-              </Link>
-            )}
-            {user.role === "FAN" && (
-              <>
-                <Link href="/fan-home" style={linkStyle}>
-                  Home
-                </Link>
-                <Link href="/fan-subscriptions" style={linkStyle}>
-                  My subscriptions
-                </Link>
-              </>
-            )}
-            {user.role !== "ADMIN" && user.role !== "PARTNER" && (
-              <>
-                <Link href="/discovery" style={linkStyle}>
-                  Discover
-                </Link>
-                <Link href="/messages" style={linkStyle}>
-                  Messages
-                </Link>
-              </>
-            )}
-            {user.role === "FAN" && !user.creatorProfile && (
-              <Link href="/apply" style={primaryLinkStyle}>
-                Become a creator
-              </Link>
-            )}
-            {user.creatorProfile?.status === "VERIFIED" && <VerifiedBadge />}
-            <AccountMenu user={user} onLogout={handleLogout} />
-          </>
-        ) : (
-          // No "Discover" link here — Discover, creator profiles, and
-          // search are all gated behind sign-in (see SignInGate's
-          // comment), so linking to them for a signed-out visitor would
-          // just be a dead end. The landing page's own Top Baddies row
-          // is the one thing they get to browse first.
-          !hideAuthLinks && (
-            <>
-              <Link href="/login" style={linkStyle}>
-                Sign in
-              </Link>
-              <Link href="/register" style={primaryLinkStyle}>
-                Join
-              </Link>
-            </>
-          )
+
+      <div className="nav-links-desktop" style={navDesktopLinksStyle}>
+        {!loading && (
+          <NavLinks
+            user={user ?? null}
+            hideAuthLinks={hideAuthLinks}
+            comingSoon={comingSoon}
+            onLogout={handleLogout}
+            layout="row"
+          />
         )}
       </div>
+
+      {!loading && hasNavContent && (
+        <button
+          type="button"
+          className="nav-hamburger"
+          aria-label={mobileOpen ? "Close menu" : "Open menu"}
+          aria-expanded={mobileOpen}
+          onClick={() => setMobileOpen((v) => !v)}
+          style={hamburgerButtonStyle}
+        >
+          <MenuIcon open={mobileOpen} />
+        </button>
+      )}
     </nav>
     <div style={navAccentBarStyle} aria-hidden="true" />
+    {mobileOpen && (
+      <div ref={mobileMenuRef} className="nav-mobile-menu" style={mobileMenuStyle}>
+        <NavLinks
+          user={user ?? null}
+          hideAuthLinks={hideAuthLinks}
+          comingSoon={comingSoon}
+          onLogout={handleLogout}
+          layout="column"
+        />
+      </div>
+    )}
+    </div>
+  );
+}
+
+/**
+ * The actual link set for a given auth state, shared verbatim between
+ * the desktop row and the mobile dropdown (layout only changes how the
+ * signed-in account controls render — AccountMenu's floating popover
+ * doesn't make sense nested inside a dropdown that's already floating,
+ * so the mobile column gets the same identity/Settings/Sign out content
+ * laid out flat instead).
+ */
+function NavLinks({
+  user,
+  hideAuthLinks,
+  comingSoon,
+  onLogout,
+  layout,
+}: {
+  user: SessionUser | null;
+  hideAuthLinks: boolean;
+  comingSoon: boolean;
+  onLogout: () => void;
+  layout: "row" | "column";
+}) {
+  if (user) {
+    return (
+      <>
+        {/* Deliberately different link sets per role (not one big list
+            with items hidden) — a creator lands on tools for running
+            their page, a fan lands on tools for browsing/paying, per
+            "creators shouldn't see what fans see." */}
+        {user.role === "ADMIN" && (
+          <Link href="/admin" style={linkStyle}>
+            Admin
+          </Link>
+        )}
+        {user.role === "CREATOR" && (
+          <Link href="/creator-dashboard" style={linkStyle}>
+            Dashboard
+          </Link>
+        )}
+        {user.role === "PARTNER" && (
+          <Link href="/partner-dashboard" style={linkStyle}>
+            Partner Dashboard
+          </Link>
+        )}
+        {user.role === "FAN" && (
+          <>
+            <Link href="/fan-home" style={linkStyle}>
+              Home
+            </Link>
+            <Link href="/fan-subscriptions" style={linkStyle}>
+              My subscriptions
+            </Link>
+          </>
+        )}
+        {user.role !== "ADMIN" && user.role !== "PARTNER" && (
+          <>
+            <Link href="/discovery" style={linkStyle}>
+              Discover
+            </Link>
+            <Link href="/messages" style={linkStyle}>
+              Messages
+            </Link>
+          </>
+        )}
+        {user.role === "FAN" && !user.creatorProfile && (
+          <Link href="/apply" style={primaryLinkStyle}>
+            Become a creator
+          </Link>
+        )}
+        {user.creatorProfile?.status === "VERIFIED" && <VerifiedBadge />}
+        {layout === "row" ? (
+          <AccountMenu user={user} onLogout={onLogout} />
+        ) : (
+          <MobileAccountBlock user={user} onLogout={onLogout} />
+        )}
+      </>
+    );
+  }
+
+  // No "Discover" link here — Discover, creator profiles, and search are
+  // all gated behind sign-in (see SignInGate's comment), so linking to
+  // them for a signed-out visitor would just be a dead end. The landing
+  // page's own Top Baddies row is the one thing they get to browse first.
+  if (hideAuthLinks) return null;
+
+  return (
+    <>
+      <Link href="/login" style={linkStyle}>
+        Sign in
+      </Link>
+      {comingSoon ? (
+        // /register is fully gated by middleware while LAUNCH_MODE is
+        // coming_soon (see src/middleware.ts) — a "Join" link here would
+        // be clickable and look live but silently bounce back to "/".
+        // Founding Baddies is the one fan/creator-facing path that
+        // actually works right now, so that's the CTA new visitors get
+        // instead.
+        <Link href="/founding-baddies" style={primaryLinkStyle}>
+          Become a Founding Baddie
+        </Link>
+      ) : (
+        <Link href="/register" style={primaryLinkStyle}>
+          Join
+        </Link>
+      )}
+    </>
+  );
+}
+
+/** Mobile-dropdown equivalent of AccountMenu's popover — same identity/
+ * Settings/Sign out content, laid out inline instead of behind a second,
+ * nested floating panel. */
+function MobileAccountBlock({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
+  return (
+    <div style={mobileAccountBlockStyle}>
+      <div style={{ fontWeight: 600, fontSize: "0.92rem" }}>{user.displayName ?? user.email}</div>
+      <div style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginTop: "0.15rem" }}>{user.email}</div>
+      <div style={{ marginTop: "0.5rem" }}>
+        <AccountTypeBadge role={user.role} creatorProfile={user.creatorProfile} />
+      </div>
+      <Link href="/settings" style={accountMenuLinkStyle}>
+        Settings
+      </Link>
+      <button onClick={onLogout} style={accountMenuButtonStyle}>
+        Sign out
+      </button>
     </div>
   );
 }
@@ -730,10 +851,68 @@ export const errorBannerStyle: React.CSSProperties = {
   marginBottom: "1.2rem",
 };
 
+/** Hamburger/X glyph — two fixed SVGs rather than an animated morph,
+ * matching this file's plain-and-legible style over decorative motion. */
+function MenuIcon({ open }: { open: boolean }) {
+  return open ? (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  ) : (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 const navWrapStyle: React.CSSProperties = {
   position: "sticky",
   top: 0,
   zIndex: 20,
+};
+
+const navDesktopLinksStyle: React.CSSProperties = {
+  display: "flex",
+  gap: "1.25rem",
+  alignItems: "center",
+};
+
+// No `display` set here on purpose — visibility is owned entirely by the
+// .nav-hamburger CSS class (globals.css), which only shows it under the
+// mobile breakpoint. An inline `display` here would out-rank that
+// class's base (non-!important) "display: none" and show the button at
+// every width.
+const hamburgerButtonStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "none",
+  color: "var(--text)",
+  cursor: "pointer",
+  padding: "0.3rem",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const mobileMenuStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "100%",
+  left: 0,
+  right: 0,
+  background: "var(--surface)",
+  borderBottom: "1px solid var(--border)",
+  boxShadow: "var(--glow)",
+  padding: "1rem 1.75rem 1.25rem",
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.9rem",
+  zIndex: 25,
+};
+
+const mobileAccountBlockStyle: React.CSSProperties = {
+  borderTop: "1px solid var(--border)",
+  paddingTop: "0.9rem",
+  marginTop: "0.2rem",
+  display: "flex",
+  flexDirection: "column",
 };
 
 const navStyle: React.CSSProperties = {
