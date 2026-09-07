@@ -273,14 +273,9 @@ function NavLinks({
           </>
         )}
         {user.role !== "ADMIN" && user.role !== "PARTNER" && (
-          <>
-            <Link href="/discovery" style={linkStyle}>
-              Discover
-            </Link>
-            <Link href="/messages" style={linkStyle}>
-              Messages
-            </Link>
-          </>
+          <Link href="/discovery" style={linkStyle}>
+            Discover
+          </Link>
         )}
         {user.role === "FAN" && !user.creatorProfile && (
           <Link href="/apply" style={primaryLinkStyle}>

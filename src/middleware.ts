@@ -3,7 +3,18 @@ import { verifySessionToken } from "@/lib/auth/session";
 
 // /partner-invite must be reachable pre-launch, same as /founding-baddies —
 // it's how an invited Founding Partner (who has no account yet) accepts.
-const PUBLIC_PATHS = new Set(["/", "/login", "/founding-baddies", "/partner-invite", "/terms", "/privacy", "/creator-terms", "/content-policy", "/age-policy", "/dmca", "/contact"]);
+// /admin is here for a related reason, not because it's actually public:
+// without a session this gate used to redirect straight to "/" before the
+// page itself ever rendered, so an admin visiting on a fresh browser (no
+// session cookie yet) just got silently bounced home with zero
+// explanation — indistinguishable from the site being broken. The page's
+// own client-side gate already handles every real authorization case
+// (SignInGate for no session, an explicit "Admin only" message for a
+// signed-in non-admin, the real dashboard only for role === "ADMIN") and
+// every actual admin API route independently enforces its own
+// session+permission check regardless of this list — this entry only lets
+// that existing gate load and do its job instead of never being reached.
+const PUBLIC_PATHS = new Set(["/", "/login", "/founding-baddies", "/partner-invite", "/admin", "/terms", "/privacy", "/creator-terms", "/content-policy", "/age-policy", "/dmca", "/contact"]);
 const PUBLIC_PREFIXES = [
   "/api/founding/apply",
   "/api/founding/referral", // sets the referral-attribution cookie from /founding-baddies?ref=<code>, called before the visitor has any account

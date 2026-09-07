@@ -49,11 +49,19 @@ const nextConfig = {
           // Explicit allow/deny list rather than leaving browser
           // defaults implicit. `geolocation=(self)` matches real usage
           // (the register page's location-detect button, see
-          // src/components/ui.tsx) — camera/microphone/payment are
-          // blocked outright since nothing in this app uses them.
+          // src/components/ui.tsx). `camera=(self)` matches the other
+          // real usage this policy was blocking outright until now: the
+          // live selfie-holding-ID and liveness-video capture on /apply
+          // and the creator dashboard (src/components/verification-
+          // capture.tsx) call getUserMedia directly — a blanket
+          // `camera=()` disables `navigator.mediaDevices` entirely,
+          // which is a stricter block than any per-site browser
+          // permission and can't be worked around by allowing the site
+          // in Chrome's own settings. Microphone/payment stay blocked;
+          // the liveness capture is explicitly `audio: false`.
           {
             key: "Permissions-Policy",
-            value: "camera=(), microphone=(), payment=(), geolocation=(self)",
+            value: "camera=(self), microphone=(), payment=(), geolocation=(self)",
           },
         ],
       },
