@@ -3,8 +3,7 @@ import { verifySessionToken } from "@/lib/auth/session";
 
 // /partner-invite must be reachable pre-launch, same as /founding-baddies —
 // it's how an invited Founding Partner (who has no account yet) accepts.
-const PUBLIC_PATHS = new Set(["/", "/login", "/founding-baddies", "/partner-invite"]);
-
+const PUBLIC_PATHS = new Set(["/", "/login", "/founding-baddies", "/partner-invite", "/terms", "/privacy", "/creator-terms", "/content-policy", "/age-policy", "/dmca", "/contact"]);
 const PUBLIC_PREFIXES = [
   "/api/founding/apply",
   "/api/founding/referral", // sets the referral-attribution cookie from /founding-baddies?ref=<code>, called before the visitor has any account
