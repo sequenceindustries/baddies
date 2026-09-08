@@ -12,7 +12,7 @@ export async function GET() {
 
   const creatorProfile = await db.creatorProfile.findUnique({
         where: { userId: user.id },
-        select: { id: true, status: true },
+        select: { id: true, status: true, isFoundingBaddie: true },
   });
 
   // Looked up unconditionally, same as creatorProfile above — an

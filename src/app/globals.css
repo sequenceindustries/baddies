@@ -252,3 +252,25 @@ a[href]:hover {
     margin: 0 auto;
     text-align: center;
 }
+
+/* Admin Command Centre's sidebar shell (src/app/(admin)/admin/page.tsx)
+   is a fixed-width sticky sidebar + content flex row — fine down to
+   tablet width, but at phone width the 230px sidebar plus the content's
+   own min-width squeezed the content nearly off-screen entirely (real,
+   confirmed breakage, not a guess). Below 860px it stacks instead: the
+   full nav renders above the content, unsticky (a sticky nav this tall
+   would just pin itself over most of the screen while scrolling past
+   it) and full width, so nothing needs horizontal scrolling to reach —
+   not the eventual ideal (a collapsible drawer would be nicer) but a
+   real, fully usable page today rather than a broken one. */
+@media (max-width: 860px) {
+    .admin-shell {
+        flex-direction: column;
+    }
+
+    .admin-sidebar {
+        width: 100% !important;
+        position: static !important;
+        top: auto !important;
+    }
+}

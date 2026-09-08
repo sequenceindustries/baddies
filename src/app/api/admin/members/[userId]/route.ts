@@ -184,8 +184,6 @@ export async function GET(_req: Request, { params }: { params: { userId: string 
           status: user.creatorProfile.status,
           appliedAt: user.creatorProfile.appliedAt,
           approvedAt: user.creatorProfile.approvedAt,
-          vvipPriceOverride: user.creatorProfile.vvipPriceOverride?.toString() ?? null,
-          isLive: user.creatorProfile.isLive,
           contentCount,
           activeSubscribers,
           revenueUsd: (revenueSum?._sum.creatorShareAmount ? Number(revenueSum._sum.creatorShareAmount) : 0).toFixed(2),

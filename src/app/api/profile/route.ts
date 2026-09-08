@@ -13,9 +13,11 @@ export const dynamic = "force-dynamic";
  * /api/creator/settings for the creator-only fields (pricing overrides,
  * privacy toggles, Unlimited opt-in).
  *
- * country/city are mandatory (see Profile's comment in
- * prisma/schema.prisma) — unlike bio/avatarUrl, they cannot be cleared
- * back to null once set, only replaced with another non-empty value.
+ * country/city come only from real geolocation detection (LocationField
+ * in components/ui.tsx has no text input at all) — the client omits
+ * them from this PATCH entirely whenever unset/undetected, so `.min(1)`
+ * here only ever rejects a genuinely malformed request, never a normal
+ * "location not detected yet" save.
  */
 const UpdateProfileSchema = z.object({
   displayName: z.string().min(2).max(50).optional(),

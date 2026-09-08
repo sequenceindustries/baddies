@@ -9,7 +9,7 @@ export interface SessionUser {
   email: string;
   role: "FAN" | "CREATOR" | "ADMIN" | "PARTNER";
   displayName: string | null;
-  creatorProfile: { id: string; status: string } | null;
+  creatorProfile: { id: string; status: string; isFoundingBaddie: boolean } | null;
   // Independent of role, same reason creatorProfile is: an account can
   // hold both a FoundingPartner row and (once applied) a CreatorProfile
   // at once, since applying as a creator flips role to CREATOR the same
@@ -32,9 +32,10 @@ export interface DetectedLocation {
  * server round trip, no API key to provision.
  *
  * This can't be airtight (permission can be denied, a VPN can lie to the
- * browser too) so callers still show the result in an editable field
- * rather than a hard-locked one — but the default is always the real,
- * detected value, not a blank box inviting a fabrication.
+ * browser too), but there is deliberately no typed-in fallback either —
+ * see LocationField below, which has no text input at all: a denied/
+ * failed detection just leaves country/city unset rather than inviting
+ * a fabrication.
  */
 export function useLocationDetector() {
   const [status, setStatus] = useState<"idle" | "detecting" | "done" | "error">("idle");
@@ -44,7 +45,7 @@ export function useLocationDetector() {
     return new Promise((resolve) => {
       if (typeof navigator === "undefined" || !navigator.geolocation) {
         setStatus("error");
-        setError("Location isn't available in this browser — enter it manually.");
+        setError("Location isn't available in this browser.");
         resolve(null);
         return;
       }
@@ -65,13 +66,13 @@ export function useLocationDetector() {
             resolve({ country, city });
           } catch {
             setStatus("error");
-            setError("Couldn't determine your location — enter it manually.");
+            setError("Couldn't determine your location.");
             resolve(null);
           }
         },
         () => {
           setStatus("error");
-          setError("Location permission denied — enter your location manually.");
+          setError("Location permission denied.");
           resolve(null);
         },
         { timeout: 10000 }
@@ -293,7 +294,9 @@ function NavLinks({
             Become a creator
           </Link>
         )}
-        {user.creatorProfile?.status === "VERIFIED" && <VerifiedBadge />}
+        {user.creatorProfile?.status === "VERIFIED" && (
+          <VerifiedBadge isFoundingPartner={Boolean(user.foundingPartner)} isFoundingBaddie={user.creatorProfile.isFoundingBaddie} />
+        )}
         {layout === "row" ? (
           <AccountMenu user={user} onLogout={onLogout} />
         ) : (
@@ -409,25 +412,48 @@ function AccountMenu({ user, onLogout }: { user: SessionUser; onLogout: () => vo
   );
 }
 
-// Deliberately --success (green), not --accent — this is the one badge
-// in the app that means "account type," not "brand color," so it stays
-// visually distinct from every blue button/border/glow elsewhere. Paired
-// with AccountTypeBadge's Fan color (--accent, blue) below, that's the
-// "two different colours" account-type indicator in the nav's top right.
-export function VerifiedBadge() {
+// Three real, distinct creator standings, not a decorative palette —
+// each one traces to real data (FoundingPartner row / CreatorProfile.
+// isFoundingBaddie / plain VERIFIED status), never a guess. Gold is
+// reserved for Founding Partner specifically per product decision; the
+// other two get their own colors so all three read as different at a
+// glance, same "two different colours" reasoning AccountTypeBadge's own
+// comment gives for the nav's account-type indicator.
+const CREATOR_BADGE_KIND = {
+  partner: { label: "Founding Partner", color: "#d4af37" },
+  founding: { label: "Founding baddie", color: "var(--accent)" },
+  baddie: { label: "baddie", color: "var(--success)" },
+} as const;
+
+export function CheckTick({ color, size = 13 }: { color: string; size?: number }) {
   return (
-    <span style={{ ...badgeStyle, color: "var(--success)" }}>
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <circle cx="12" cy="12" r="10" fill="var(--success)" />
-        <path
-          d="M9 12.5l2 2 4.5-5"
-          stroke="var(--bg)"
-          strokeWidth="2.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      baddie
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" fill={color} />
+      <path d="M9 12.5l2 2 4.5-5" stroke="var(--bg)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/**
+ * isFoundingPartner takes priority over isFoundingBaddie when a creator
+ * somehow holds both (the same dual-role shape FoundingPartner/
+ * CreatorProfile already allow elsewhere in this app) — a real Founding
+ * Partner badge is the more specific, more significant fact. Neither
+ * flag set falls back to the plain "baddie" badge every verified
+ * creator had before this distinction existed.
+ */
+export function VerifiedBadge({
+  isFoundingPartner = false,
+  isFoundingBaddie = false,
+}: {
+  isFoundingPartner?: boolean;
+  isFoundingBaddie?: boolean;
+}) {
+  const kind = isFoundingPartner ? CREATOR_BADGE_KIND.partner : isFoundingBaddie ? CREATOR_BADGE_KIND.founding : CREATOR_BADGE_KIND.baddie;
+  return (
+    <span style={{ ...badgeStyle, color: kind.color }}>
+      <CheckTick color={kind.color} />
+      {kind.label}
     </span>
   );
 }
@@ -494,16 +520,18 @@ function accountBadgeStyle(color: string): React.CSSProperties {
 }
 
 /**
- * Country/city input built around useLocationDetector. On signup
+ * Country/city display built around useLocationDetector — no text input
+ * at all, by explicit product decision: location is either the real,
+ * detected value or it's unset, never something typed in. On signup
  * (autoDetect, the default) it detects on mount, since there's no
- * existing value yet and the common path shouldn't show a blank box
- * someone has to decide what to type into. In settings (autoDetect=false)
- * it only detects when the "Detect" button is clicked — a returning
- * visitor's already-saved, already-correct location shouldn't trigger a
- * geolocation permission prompt just from opening the page. Either way
- * the fields stay editable as the fallback for denied permission or a
- * wrong reverse-geocode, with a note making clear where the value came
- * from.
+ * existing value yet and the common path shouldn't need an extra click.
+ * In settings (autoDetect=false) it only detects when "Detect my
+ * location" is clicked — a returning visitor's already-saved location
+ * shouldn't trigger a geolocation permission prompt just from opening
+ * the page. If detection is denied or fails, the field simply stays
+ * unset (country/city are optional downstream — see each caller) rather
+ * than falling back to a manual box; the error is shown so it's clear
+ * why nothing filled in, with a way to retry.
  */
 export function LocationField({
   country,
@@ -517,67 +545,53 @@ export function LocationField({
   autoDetect?: boolean;
 }) {
   const { status, error, detect } = useLocationDetector();
-  const [autoFilled, setAutoFilled] = useState(false);
   const triedRef = useRef(false);
 
   useEffect(() => {
     if (!autoDetect || triedRef.current) return;
     triedRef.current = true;
     detect().then((loc) => {
-      if (loc) {
-        onChange(loc);
-        setAutoFilled(true);
-      }
+      if (loc) onChange(loc);
     });
     // Only ever auto-fires once per mounted field.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function redetect() {
-    setAutoFilled(false);
     const loc = await detect();
-    if (loc) {
-      onChange(loc);
-      setAutoFilled(true);
-    }
+    if (loc) onChange(loc);
   }
+
+  const hasLocation = Boolean(country || city);
 
   return (
     <div style={{ marginBottom: "1.1rem" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.4rem" }}>
         <span style={fieldLabelStyle}>Location</span>
         <button type="button" onClick={redetect} disabled={status === "detecting"} style={detectButtonStyle}>
-          {status === "detecting" ? "Detecting..." : "Detect my location"}
+          {status === "detecting" ? "Detecting..." : hasLocation ? "Detect again" : "Detect my location"}
         </button>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
-        <input
-          style={inputStyle}
-          value={country}
-          onChange={(e) => onChange({ country: e.target.value, city })}
-          placeholder="Country"
-          maxLength={100}
-          required
-        />
-        <input
-          style={inputStyle}
-          value={city}
-          onChange={(e) => onChange({ country, city: e.target.value })}
-          placeholder="City"
-          maxLength={100}
-          required
-        />
+      <div style={locationDisplayStyle}>
+        {hasLocation ? [city, country].filter(Boolean).join(", ") : "Not set — location is detected automatically, never typed in."}
       </div>
       <span style={hintStyle}>
-        {autoFilled
-          ? "Detected from your device location. Edit if it's wrong."
-          : error
-            ? `${error} (you can still enter it manually)`
-            : "We use your real location — this can't be a made-up city."}
+        {error
+          ? `${error} Location stays unset until detection succeeds — try again above.`
+          : "We use your real, detected location — it's never a typed-in value."}
       </span>
     </div>
   );
 }
+
+const locationDisplayStyle: React.CSSProperties = {
+  padding: "0.7rem 0.8rem",
+  background: "var(--surface-raised)",
+  border: "1px solid var(--border)",
+  borderRadius: "var(--radius)",
+  color: "var(--text)",
+  fontSize: "0.92rem",
+};
 
 const detectButtonStyle: React.CSSProperties = {
   background: "transparent",
@@ -588,6 +602,78 @@ const detectButtonStyle: React.CSSProperties = {
   fontSize: "0.76rem",
   fontWeight: 600,
   cursor: "pointer",
+};
+
+/**
+ * "Continue with Google" — renders nothing at all until
+ * GET /api/auth/google/status confirms the server actually has Google
+ * credentials configured (see src/lib/auth/google.ts), so this never
+ * shows a button that would just 404 when clicked. A plain link, not a
+ * fetch-triggered action — /api/auth/google/start is a real page
+ * navigation (redirects on to Google's own consent screen).
+ * `returnTo` (e.g. the page that required sign-in) is passed straight
+ * through as a query param; the start route only ever accepts an
+ * on-site path for it.
+ */
+export function GoogleSignInButton({ returnTo, label = "Continue with Google" }: { returnTo?: string; label?: string }) {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/google/status")
+      .then((r) => (r.ok ? r.json() : { enabled: false }))
+      .then((body) => {
+        if (!cancelled) setEnabled(Boolean(body.enabled));
+      })
+      .catch(() => {
+        if (!cancelled) setEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!enabled) return null;
+
+  const href = `/api/auth/google/start${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`;
+
+  return (
+    <a href={href} style={googleButtonStyle}>
+      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          fill="#4285F4"
+          d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.47a5.53 5.53 0 0 1-2.4 3.63v3h3.87c2.27-2.09 3.58-5.17 3.58-8.82Z"
+        />
+        <path
+          fill="#34A853"
+          d="M12 24c3.24 0 5.95-1.07 7.94-2.91l-3.87-3c-1.08.72-2.45 1.15-4.07 1.15-3.13 0-5.78-2.11-6.73-4.96H1.27v3.11A12 12 0 0 0 12 24Z"
+        />
+        <path fill="#FBBC05" d="M5.27 14.28A7.2 7.2 0 0 1 4.89 12c0-.79.14-1.56.38-2.28V6.61H1.27A12 12 0 0 0 0 12c0 1.94.46 3.77 1.27 5.39l4-3.11Z" />
+        <path
+          fill="#EA4335"
+          d="M12 4.77c1.76 0 3.34.6 4.58 1.79l3.44-3.44C17.94 1.19 15.24 0 12 0A12 12 0 0 0 1.27 6.61l4 3.11C6.22 6.88 8.87 4.77 12 4.77Z"
+        />
+      </svg>
+      {label}
+    </a>
+  );
+}
+
+const googleButtonStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "0.6rem",
+  width: "100%",
+  padding: "0.7rem 1rem",
+  background: "#fff",
+  color: "#1f1f1f",
+  border: "1px solid var(--border)",
+  borderRadius: "var(--radius)",
+  fontWeight: 600,
+  fontSize: "0.9rem",
+  textDecoration: "none",
+  boxSizing: "border-box",
 };
 
 export function Field(props: {

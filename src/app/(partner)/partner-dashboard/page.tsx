@@ -67,7 +67,7 @@ export default function PartnerDashboardPage() {
   if (!user || !user.foundingPartner) {
     return (
       <main style={pageWrapStyle}>
-        <h1 style={displayHeadingStyle}>Founding Partner dashboard</h1>
+        <h1 style={displayHeadingStyle}>Founding Partner Dashboard</h1>
         <p style={{ color: "var(--text-muted)" }}>This dashboard is only available to Founding Partners.</p>
       </main>
     );
@@ -87,7 +87,7 @@ export default function PartnerDashboardPage() {
 
   return (
     <main style={dashboardWrapStyle}>
-      <h1 style={displayHeadingStyle}>Founding Partner dashboard</h1>
+      <h1 style={displayHeadingStyle}>Founding Partner Dashboard</h1>
       <p style={{ color: "var(--text-muted)", marginBottom: "1.75rem", fontSize: "0.92rem" }}>
         Status: <strong style={{ color: "var(--text)" }}>{data.status}</strong> · activated{" "}
         {new Date(data.activatedAt).toLocaleDateString()}

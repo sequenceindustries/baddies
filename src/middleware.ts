@@ -49,6 +49,7 @@ const PUBLIC_PREFIXES = [
   "/api/auth/login",
   "/api/auth/logout",
   "/api/auth/me",
+  "/api/auth/google", // start/callback/status — a signed-out visitor on /login has no session yet either
   ];
 
 function isPublic(pathname: string): boolean {

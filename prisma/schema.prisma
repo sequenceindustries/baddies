@@ -360,21 +360,25 @@ model CreatorProfile {
   legalNameEncrypted String? // encrypted at rest; never returned to clients directly
 
   coverImageUrl     String?
-  vvipPriceOverride Decimal? @db.Decimal(10, 2) // this creator's own subscription price; null = use PlatformSetting default
+  // Deliberately unread now — Exclusive (VVIP) pricing is a fixed
+  // $9.99/mo for every creator, not creator-settable. See
+  // EXCLUSIVE_PRICE_USD in src/lib/creator/pricing.ts for why the
+  // column stays (no historical LedgerEntry needs it removed) but
+  // nothing writes or reads it anymore.
+  vvipPriceOverride Decimal? @db.Decimal(10, 2)
   unlimitedOptedIn  Boolean  @default(false) // opts this creator's VIP-tier content into the platform-wide VIP pass
+
+  // True only for the original founding cohort (today: the seeded
+  // DUMMY_CREATORS roster — see src/lib/founding/dummy-creators.ts) or a
+  // real creator an admin has manually designated as such. There is no
+  // automated FoundingApplication -> CreatorProfile pipeline yet (see
+  // that model's own comment), so this is admin/seed-set, never
+  // inferred — drives the "Founding baddie" vs. plain "baddie" verified
+  // badge (see VerifiedBadge in src/components/ui.tsx).
+  isFoundingBaddie Boolean @default(false)
 
   subscriberCountVisible Boolean @default(false)
   locationVisible        Boolean @default(false)
-
-  // "Live videos" (an Exclusive-subscription benefit) — a status flag a
-  // creator toggles, not a video transport. There is no real streaming
-  // pipeline behind this (that needs a WebRTC/media-server provider —
-  // LiveKit, Agora, etc. — with real credentials this project doesn't
-  // have), so it's deliberately just "is this creator live right now,"
-  // shown as a badge. Upgrading it to actual video later only needs a
-  // player wired to isLive, not a data model change.
-  isLive        Boolean   @default(false)
-  liveStartedAt DateTime?
 
   appliedAt  DateTime  @default(now())
   approvedAt DateTime?

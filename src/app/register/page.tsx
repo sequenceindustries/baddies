@@ -13,6 +13,7 @@ import {
   primaryButtonStyle,
   errorBannerStyle,
   LocationField,
+  GoogleSignInButton,
 } from "@/components/ui";
 
 type Intent = "FAN" | "CREATOR";
@@ -146,6 +147,17 @@ export default function RegisterPage() {
             {submitting ? "Creating account..." : "Create account"}
           </button>
         </form>
+
+        {/* Always creates a fan account regardless of the Fan/Creator
+            picker above — Google's consent screen has no room for that
+            choice mid-flow. "Become a creator" in the nav afterward is
+            the same next step a plain Fan signup already points at. */}
+        <div style={dividerRowStyle}>
+          <span style={dividerLineStyle} />
+          <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>or</span>
+          <span style={dividerLineStyle} />
+        </div>
+        <GoogleSignInButton />
       </div>
       <p style={{ marginTop: "1.25rem", fontSize: "0.88rem", color: "var(--text-muted)" }}>
         Already have an account?{" "}
@@ -182,6 +194,19 @@ const introLabelStyle: React.CSSProperties = {
   color: "var(--text-muted)",
   fontWeight: 500,
   marginBottom: "0.5rem",
+};
+
+const dividerRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.75rem",
+  margin: "1.1rem 0",
+};
+
+const dividerLineStyle: React.CSSProperties = {
+  flex: 1,
+  height: "1px",
+  background: "var(--border)",
 };
 
 const intentRowStyle: React.CSSProperties = {

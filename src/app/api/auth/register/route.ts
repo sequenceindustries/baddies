@@ -15,10 +15,14 @@ const RegisterSchema = z.object({
   email: z.string().email(),
   password: z.string().min(10, "Password must be at least 10 characters"),
   displayName: z.string().min(2).max(50),
-  // Mandatory at signup — see Profile.country/city's comment in
-  // prisma/schema.prisma for why these stay nullable at the DB level.
-  country: z.string().min(1, "Country is required").max(100),
-  city: z.string().min(1, "City is required").max(100),
+  // Optional, by explicit product decision: location comes only from
+  // real geolocation detection (LocationField in components/ui.tsx) —
+  // there is no typed-in fallback, so a visitor who denies the browser
+  // permission (or whose detection fails) must still be able to
+  // register with these left unset, rather than being blocked. See
+  // Profile.country/city's comment in prisma/schema.prisma.
+  country: z.string().max(100).optional(),
+  city: z.string().max(100).optional(),
   // Explicit self-attestation checkbox is required before any account is
   // created. This is NOT the age-verification workflow itself (see
   // src/lib/providers/verification) — it's the initial gate per build
@@ -35,7 +39,13 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { email, password, displayName, country, city } = parsed.data;
+  const { email, password, displayName } = parsed.data;
+  // Blank -> undefined (Prisma writes NULL, not an empty string) — the
+  // client never sends a typed value here (LocationField has no text
+  // input at all), but an empty string from an un-detected field should
+  // read the same as "never set" everywhere else in the app does.
+  const country = parsed.data.country || undefined;
+  const city = parsed.data.city || undefined;
 
   const existing = await db.user.findUnique({ where: { email } });
   if (existing) {

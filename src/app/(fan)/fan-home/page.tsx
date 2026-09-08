@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CreatorCardRow, ContentGrid, type CreatorCardData, type ContentCardData } from "@/components/cards";
 import { HowItWorks } from "@/components/how-it-works";
+import { displayHeadingStyle } from "@/components/ui";
 
 interface RawContentItem {
   id?: string;
@@ -78,6 +79,7 @@ export default function FanHomePage() {
 
   return (
     <main style={mainStyle}>
+      <h1 style={displayHeadingStyle}>Fan Dashboard</h1>
       {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
       {!data && !error && <p style={{ color: "var(--text-muted)" }}>Loading...</p>}
 

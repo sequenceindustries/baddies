@@ -12,6 +12,7 @@ import {
   primaryButtonStyle,
   errorBannerStyle,
   roleHomePath,
+  GoogleSignInButton,
   type SessionUser,
 } from "@/components/ui";
 
@@ -132,6 +133,20 @@ export function LoginForm({ comingSoon }: { comingSoon: boolean }) {
             {submitting ? "Signing in..." : COPY[intent].cta}
           </button>
         </form>
+
+        {/* Admin sign-in stays email/password only, same reasoning as
+            the Fan/Creator picker being hidden above — no self-serve
+            path into an admin account, Google or otherwise. */}
+        {!isAdminIntent && (
+          <>
+            <div style={dividerRowStyle}>
+              <span style={dividerLineStyle} />
+              <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>or</span>
+              <span style={dividerLineStyle} />
+            </div>
+            <GoogleSignInButton />
+          </>
+        )}
       </div>
       {!isAdminIntent && (
         <p style={{ marginTop: "1.25rem", fontSize: "0.88rem", color: "var(--text-muted)" }}>
@@ -178,6 +193,19 @@ function IntentOption({
     </button>
   );
 }
+
+const dividerRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.75rem",
+  margin: "1.1rem 0",
+};
+
+const dividerLineStyle: React.CSSProperties = {
+  flex: 1,
+  height: "1px",
+  background: "var(--border)",
+};
 
 const intentRowStyle: React.CSSProperties = {
   display: "grid",

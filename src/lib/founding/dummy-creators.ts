@@ -37,7 +37,6 @@ export interface DummyCreatorSpec {
   bio: string;
   country: string;
   city: string;
-  vvipPriceUsd: string;
   colorA: string;
   colorB: string;
   // Same no-people rule as post photos (see fetchPhotoBytes) — a real
@@ -64,7 +63,6 @@ export const DUMMY_CREATORS: DummyCreatorSpec[] = [
     bio: "Cape Town born and raised. Golden hour on the promenade, always. New here — say hi.",
     country: "South Africa",
     city: "Cape Town",
-    vvipPriceUsd: "7.99",
     colorA: "#c9a961",
     colorB: "#0e0e11",
     avatarPhotoId: "1506905925346-21bda4d32df4",
@@ -86,7 +84,6 @@ export const DUMMY_CREATORS: DummyCreatorSpec[] = [
     bio: "Joburg energy, always. Fitness, fashion, and everything in between. Verified Baddie.",
     country: "South Africa",
     city: "Johannesburg",
-    vvipPriceUsd: "12.99",
     colorA: "#7c2d3b",
     colorB: "#1e1e25",
     avatarPhotoId: "1449824913935-59a10b8d2000",
@@ -108,7 +105,6 @@ export const DUMMY_CREATORS: DummyCreatorSpec[] = [
     bio: "London based, South African at heart. Global Baddie, local roots. New account, big plans.",
     country: "United Kingdom",
     city: "London",
-    vvipPriceUsd: "9.99",
     colorA: "#4c5faf",
     colorB: "#0e0e11",
     avatarPhotoId: "1477959858617-67f85cf4f1df",
@@ -130,7 +126,6 @@ export const DUMMY_CREATORS: DummyCreatorSpec[] = [
     bio: "Durban humidity, beachfront sunrises. Surf, sun, and content drops every week.",
     country: "South Africa",
     city: "Durban",
-    vvipPriceUsd: "8.99",
     colorA: "#1f7a8c",
     colorB: "#0e0e11",
     avatarPhotoId: "1490645935967-10de6ba17061",
@@ -152,7 +147,6 @@ export const DUMMY_CREATORS: DummyCreatorSpec[] = [
     bio: "Pretoria based. Jacaranda season is my favourite season. New here, be kind.",
     country: "South Africa",
     city: "Pretoria",
-    vvipPriceUsd: "10.99",
     colorA: "#6a4c93",
     colorB: "#1e1e25",
     avatarPhotoId: "1441986300917-64674bd600d8",
@@ -313,7 +307,7 @@ export async function seedDummyCreators(db: PrismaClient): Promise<void> {
         userId: user.id,
         status: "VERIFIED",
         legalNameEncrypted,
-        vvipPriceOverride: spec.vvipPriceUsd,
+        isFoundingBaddie: true,
         unlimitedOptedIn: true,
         subscriberCountVisible: true,
         locationVisible: true,
@@ -323,7 +317,7 @@ export async function seedDummyCreators(db: PrismaClient): Promise<void> {
       },
       update: {
         status: "VERIFIED",
-        vvipPriceOverride: spec.vvipPriceUsd,
+        isFoundingBaddie: true,
         unlimitedOptedIn: true,
         subscriberCountVisible: true,
         locationVisible: true,

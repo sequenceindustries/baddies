@@ -13,7 +13,8 @@ export interface CreatorCardData {
   city: string | null;
   verifiedBadge: true;
   vvipPriceUsd: number;
-  isLive?: boolean;
+  isFoundingPartner?: boolean;
+  isFoundingBaddie?: boolean;
   // This creator's latest Free post — always safe to show on a
   // discovery card (Free is public the moment it's live, see
   // src/lib/discovery/creator-card.ts), unlike VIP/Exclusive media.
@@ -67,16 +68,14 @@ export function CreatorCard({ creator, size = "md" }: { creator: CreatorCardData
 
         {/* Stacked and centered, not side-by-side — the badge sits
             directly under the name rather than racing it for horizontal
-            space, which is what made a long name collide with "● LIVE"
-            before. */}
+            space next to a long display name. */}
         <div style={creatorCardTopScrimStyle}>
           <span style={{ ...cardCreatorLinkStyle, width: "100%" }}>
             <CardAvatar url={creator.avatarUrl} initial={initial} />
             <span style={cardCreatorNameStyle}>{creator.displayName ?? "Unnamed creator"}</span>
           </span>
           <div style={cardTopScrimBadgeStyle}>
-            {creator.isLive && <span style={liveBadgeStyle}>● LIVE</span>}
-            <VerifiedBadge />
+            <VerifiedBadge isFoundingPartner={creator.isFoundingPartner} isFoundingBaddie={creator.isFoundingBaddie} />
           </div>
         </div>
 
@@ -335,7 +334,8 @@ export function ContentCard({ item }: { item: ContentCardData }) {
           {item.publishedAt && <span style={cardTimeStyle}>{timeAgo(item.publishedAt)}</span>}
           <div style={cardFooterActionsStyle} onClick={(e) => e.stopPropagation()}>
             <button onClick={toggleLike} disabled={likeBusy} style={likeButtonStyle(liked)}>
-              {liked ? "♥" : "♡"} {likeCount}
+              <HeartIcon filled={liked} />
+              {likeCount}
             </button>
             <ReportButton contentId={item.contentId} />
           </div>
@@ -360,9 +360,20 @@ export function ContentCard({ item }: { item: ContentCardData }) {
  */
 function MediaLightbox({ mimeType, url, onClose }: { mimeType: string; url: string; onClose: () => void }) {
   if (typeof document === "undefined") return null;
+  // Every click handler here calls stopPropagation before onClose: this
+  // is rendered via createPortal straight onto document.body, but React
+  // still bubbles synthetic events through the *component* tree, not the
+  // DOM tree — so an un-stopped click bubbles past this portal boundary
+  // to ContentCard's own onClick (which sets expanded back to true),
+  // undoing the close in the same tick. Without this, the ✕ button
+  // looked like it did nothing at all.
+  function handleClose(e: React.MouseEvent) {
+    e.stopPropagation();
+    onClose();
+  }
   return createPortal(
-    <div style={lightboxBackdropStyle} onClick={onClose} role="dialog" aria-modal="true">
-      <button onClick={onClose} style={lightboxCloseStyle} aria-label="Close">
+    <div style={lightboxBackdropStyle} onClick={handleClose} role="dialog" aria-modal="true">
+      <button onClick={handleClose} style={lightboxCloseStyle} aria-label="Close">
         ✕
       </button>
       <div style={lightboxContentStyle} onClick={(e) => e.stopPropagation()}>
@@ -628,19 +639,6 @@ function CardAvatar({ url, initial }: { url?: string | null; initial: string }) 
     </span>
   );
 }
-
-// Inline now (sits in a flex row next to VerifiedBadge in the top scrim,
-// not absolutely positioned over the photo) — see CreatorCard.
-const liveBadgeStyle: React.CSSProperties = {
-  background: "var(--danger)",
-  color: "#fff",
-  fontSize: "0.68rem",
-  fontWeight: 800,
-  letterSpacing: "0.02em",
-  padding: "0.15rem 0.5rem",
-  borderRadius: "999px",
-  flexShrink: 0,
-};
 
 const priceRowStyle: React.CSSProperties = {
   position: "relative",
@@ -915,6 +913,9 @@ const cardFooterStyle: React.CSSProperties = {
 
 function likeButtonStyle(liked: boolean): React.CSSProperties {
   return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "0.3rem",
     background: "none",
     border: "none",
     color: liked ? "var(--accent-wine)" : "var(--text-muted)",
@@ -924,6 +925,26 @@ function likeButtonStyle(liked: boolean): React.CSSProperties {
     fontWeight: liked ? 600 : 400,
     textShadow: "0 1px 4px rgba(0, 0, 0, 0.7)",
   };
+}
+
+// A real drawn heart (rounded twin-lobe top, pointed base) instead of the
+// Unicode ♥/♡ glyphs previously used here — those render inconsistently
+// across platforms (a flat, dated shape on most systems) and can't take
+// the button's own currentColor. filled swaps a solid fill for an
+// outline stroke; both share one path so liking never shifts the glyph's
+// proportions, only how it's painted.
+function HeartIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M12 20.2l-1.35-1.23C5.9 14.9 3 12.28 3 9.06 3 6.43 5.09 4.4 7.75 4.4c1.5 0 2.94.7 3.85 1.8h.8c.91-1.1 2.35-1.8 3.85-1.8 2.66 0 4.75 2.03 4.75 4.66 0 3.22-2.9 5.84-7.65 9.92L12 20.2z"
+        fill={filled ? "currentColor" : "none"}
+        stroke="currentColor"
+        strokeWidth={filled ? 0 : 1.8}
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 // --- Timeline (large, Twitter-style post) styles ---

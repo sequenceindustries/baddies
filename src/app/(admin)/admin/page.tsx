@@ -250,8 +250,8 @@ export default function AdminDashboardPage() {
   const activeGroup = NAV_GROUPS.find((g) => g.items.some((i) => i.tab === tab));
 
   return (
-    <div style={adminShellStyle}>
-      <aside style={adminSidebarStyle}>
+    <div className="admin-shell" style={adminShellStyle}>
+      <aside className="admin-sidebar" style={adminSidebarStyle}>
         <div style={adminBrandRowStyle}>
           <span style={adminBrandMarkStyle} aria-hidden="true" />
           <span style={adminBrandTextStyle}>Command Centre</span>
@@ -860,8 +860,6 @@ interface MemberDetailData {
     status: string;
     appliedAt: string;
     approvedAt: string | null;
-    vvipPriceOverride: string | null;
-    isLive: boolean;
     contentCount: number;
     activeSubscribers: number;
     revenueUsd: string;
@@ -1021,7 +1019,6 @@ function MemberDetailView({ userId, onBack, onChanged }: { userId: string; onBac
                     <Stat label="Content" value={data.creatorProfile.contentCount} />
                     <Stat label="Active subscribers" value={data.creatorProfile.activeSubscribers} />
                     <Stat label="Revenue (earned)" value={money(data.creatorProfile.revenueUsd)} />
-                    <Stat label="Live now" value={data.creatorProfile.isLive ? "Yes" : "No"} />
                     {data.creatorProfile.approvedAt && (
                       <Stat label="Approved" value={new Date(data.creatorProfile.approvedAt).toLocaleDateString()} />
                     )}

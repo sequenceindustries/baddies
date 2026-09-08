@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { NOT_SOUTH_AFRICA_MESSAGE } from "@/lib/security/geo";
+import { LocationField } from "@/components/ui";
 import ApplicationNextSteps from "./ApplicationNextSteps";
 
 /**
@@ -359,14 +360,8 @@ function ApplicationForm() {
               <input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value)} required />
             </FormField>
           </FormRow>
-          <FormRow>
-            <FormField label="Country" hint="South Africa only — this cohort has no exceptions.">
-              <input style={inputStyle} value={country} onChange={(e) => setCountry(e.target.value)} required />
-            </FormField>
-            <FormField label="City">
-              <input style={inputStyle} value={city} onChange={(e) => setCity(e.target.value)} required />
-            </FormField>
-          </FormRow>
+          <LocationField country={country} city={city} onChange={(v) => { setCountry(v.country); setCity(v.city); }} />
+          <p style={fieldHintStyle}>South Africa only — this cohort has no exceptions.</p>
         </FormFieldset>
 
         <FormFieldset legend="Platforms" hint="Select every platform you currently use.">

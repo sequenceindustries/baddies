@@ -20,7 +20,7 @@ export async function GET(
 ) {
   const creator = await db.creatorProfile.findUnique({
     where: { id: params.creatorProfileId },
-    include: { user: { include: { profile: true } } },
+    include: { user: { include: { profile: true, foundingPartner: true } } },
   });
 
   if (!creator || creator.status !== "VERIFIED") {
@@ -50,6 +50,7 @@ export async function GET(
     unlimitedParticipant: creator.unlimitedOptedIn,
     followerCount,
     subscriberCount,
-    isLive: creator.isLive,
+    isFoundingPartner: creator.user.foundingPartner !== null,
+    isFoundingBaddie: creator.isFoundingBaddie,
   });
 }
