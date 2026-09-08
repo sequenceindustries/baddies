@@ -3,7 +3,6 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
-import { canMonetise } from "@/lib/creator/status";
 import { assertContentTransition } from "@/lib/content/status";
 import { getMediaStorageProvider } from "@/lib/providers/storage";
 
@@ -138,16 +137,15 @@ export async function POST(req: NextRequest) {
   }
   const { mediaType, mimeType, base64Data, accessLevel, caption } = parsed.data;
 
-  if (accessLevel !== "FREE" && !canMonetise(creatorProfile.status)) {
-    return NextResponse.json(
-      { error: "Only verified creators can publish monetised (VIP/VVIP) content." },
-      { status: 403 }
-    );
-  }
+  // Deliberately no "verified creators only" gate on VIP/Exclusive here —
+  // a creator can post at any access level as soon as they can upload at
+  // all (see the identity+liveness check above, which still applies to
+  // every access level equally). Verification affects review/trust
+  // signals shown elsewhere, not which tiers a creator is allowed to use.
 
   const storage = getMediaStorageProvider();
   const buffer = Buffer.from(base64Data, "base64");
-  const MAX_BYTES = 500 * 1024 * 1024; // 500MB — placeholder ceiling, revisit per media type in Sprint 2 hardening
+  const MAX_BYTES = 100 * 1024 * 1024; // 100MB per file
   if (buffer.byteLength > MAX_BYTES) {
     return NextResponse.json({ error: "File exceeds maximum allowed size." }, { status: 413 });
   }

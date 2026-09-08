@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The Free/VIP/Exclusive tier explainer — shared between the landing
+ * The Teasers/VIP/Exclusive tier explainer — shared between the landing
  * page (signed-out visitors) and fan Home (signed-in fans, as a
  * reminder at the bottom of the page). One definition so the copy for
  * what each tier means can't drift between the two. Named "for fans"
@@ -14,7 +14,7 @@ export function HowItWorks() {
       <h2 style={sectionHeadingStyle}>How it works for fans</h2>
       <div style={tierGridStyle}>
         <div className="hover-lift" style={fansTierCardStyle}>
-          <div style={tierNameStyle}>Free</div>
+          <div style={tierNameStyle}>Teasers</div>
           <p style={tierDescStyle}>Browse public previews from every verified creator. No cost, no card required.</p>
         </div>
         <div className="hover-lift" style={fansTierCardStyle}>
@@ -27,8 +27,8 @@ export function HowItWorks() {
         <div className="hover-lift" style={fansTierCardStyle}>
           <div style={tierNameStyle}>Exclusive</div>
           <p style={tierDescStyle}>
-            Subscribe directly to a creator, at the price they set: subscriber-only posts, direct
-            messaging, live videos, tipping, and 1-on-1 video calls.
+            Subscribe directly to a creator, at the price they set: subscriber-only posts, live
+            videos, and more.
           </p>
         </div>
       </div>

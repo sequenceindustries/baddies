@@ -26,7 +26,7 @@ export interface CreatorCardData {
  * cardMediaLayerStyle/the two gradient scrims) so every card on the
  * platform — a post or a creator — reads as one visual system: the photo
  * fills the card, byline centered top, status pinned top-right, location
- * and a plain "Get Exclusive" CTA (no price — see priceRowStyle) in the
+ * and a plain "Subscribe" CTA (no price — see priceRowStyle) in the
  * bottom scrim. Unlike ContentCard the whole card is a single Link
  * (there's no separate "expand" affordance to protect from a click), so
  * the byline here is a plain span, not a nested Link.
@@ -83,7 +83,7 @@ export function CreatorCard({ creator, size = "md" }: { creator: CreatorCardData
         <div style={cardBottomScrimStyle}>
           {location && <div style={cardTimeStyle}>{location}</div>}
           <div style={priceRowStyle}>
-            <span>Get Exclusive</span>
+            <span>Subscribe</span>
           </div>
         </div>
       </div>
@@ -181,8 +181,8 @@ export interface ContentCardData {
   creatorAvatarUrl?: string | null;
 }
 
-const ACCESS_LABEL: Record<ContentCardData["accessLevel"], string> = {
-  FREE: "Free",
+export const ACCESS_LABEL: Record<ContentCardData["accessLevel"], string> = {
+  FREE: "Teasers",
   VIP: "VIP",
   VVIP: "Exclusive",
   PPV: "Pay per view",
@@ -424,7 +424,7 @@ export function ContentTimeline({ items, vvipPriceUsd }: { items: ContentCardDat
   }
 
   const TAB_LABEL: Record<"FREE" | "VIP" | "VVIP", string> = {
-    FREE: "Free",
+    FREE: "Teasers",
     VIP: "VIP",
     VVIP: vvipPriceUsd ? `Exclusive · $${vvipPriceUsd.toFixed(2)}/mo` : "Exclusive",
   };

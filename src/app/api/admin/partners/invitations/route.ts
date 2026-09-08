@@ -10,14 +10,12 @@ import { buildPartnerInviteUrl, sendPartnerInviteEmail } from "@/lib/notificatio
 // and must never be statically prerendered or cached at build time.
 export const dynamic = "force-dynamic";
 
-const MAX_PARTNERS = 10;
-
 const CreateInvitationSchema = z.object({
   email: z.string().email(),
   expiresInDays: z.number().int().positive().max(90).optional(),
 });
 
-/** Lists every invitation (any status), newest first — a small admin table, not paginated (the whole programme is capped at 10 partners). */
+/** Lists every invitation (any status), newest first — a small admin table, not paginated (the Founding Partner programme has no partner-count limit). */
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) {
@@ -53,10 +51,9 @@ export async function GET() {
 }
 
 /**
- * Creates a new Founding Partner invitation. Enforces the 10-partner cap
- * at creation time — counted as ACTIVE FoundingPartners plus still-PENDING
- * invitations, so admin can never promise more than 10 slots even if a
- * few invites are outstanding.
+ * Creates a new Founding Partner invitation. No cap on how many partners
+ * the programme can have — per explicit product decision, the earlier
+ * 10-partner limit is removed outright, not just raised.
  */
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
@@ -76,17 +73,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
   const { email, expiresInDays } = parsed.data;
-
-  const [activePartnerCount, pendingInviteCount] = await Promise.all([
-    db.foundingPartner.count({ where: { status: "ACTIVE" } }),
-    db.partnerInvitation.count({ where: { status: "PENDING" } }),
-  ]);
-  if (activePartnerCount + pendingInviteCount >= MAX_PARTNERS) {
-    return NextResponse.json(
-      { error: `The Founding Partner programme is limited to ${MAX_PARTNERS} partners — no room for a new invitation right now.` },
-      { status: 409 }
-    );
-  }
 
   const existingPending = await db.partnerInvitation.findFirst({ where: { email, status: "PENDING" } });
   if (existingPending) {

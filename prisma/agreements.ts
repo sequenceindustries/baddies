@@ -103,4 +103,27 @@ export const AGREEMENTS: AgreementSeed[] = [
       "8. Changes. Baddies may update this agreement; continuing to participate in the programme after a new version takes effect means you accept it.",
     ].join("\n"),
   },
+  {
+    // v2, not an edit of v1's bodyText — this model is versioned
+    // specifically so a past acceptance always refers to the exact text
+    // that was actually accepted (see the Agreement model's own schema
+    // comment). This version exists solely to drop the "no more than 10
+    // at any time" partner-count limit from point 1, now that the
+    // programme has no cap — every other point is unchanged.
+    type: "PARTNER_AGREEMENT",
+    version: "v2",
+    title: "Founding Partner Agreement",
+    bodyText: [
+      DRAFT_NOTICE,
+      "",
+      "1. The programme. Baddies is inviting Founding Partners to help bring the first generation of creators onto the platform.",
+      "2. Referral relationship. Each Founding Partner receives a unique referral link. A creator who applies through that link is attributed to that Partner for as long as the attribution stands; Baddies may correct an attribution, always with a recorded reason.",
+      "3. Creator revenue share. A creator attributed to a Founding Partner earns a higher revenue share than the platform's standard rate, exactly as shown in the current Revenue Share Rules; this does not entitle the Partner to any portion of that creator's earnings directly.",
+      "4. Profit-pool participation. Founding Partners collectively participate in a share of Baddies' annual distributable profit pool, split among however many Partners are active that year. This is calculated once a year from Baddies' real financial results — never estimated, projected, or paid in advance — and only after Baddies has actual distributable profit to allocate.",
+      "5. No guarantee. Nothing in this agreement guarantees any referral, any creator's success, or any profit-pool payout in a given year.",
+      "6. Confidentiality. Referral data, other Partners' information, and any commercial terms shared with you as a Partner are confidential and must not be shared outside the programme.",
+      "7. Standing. Baddies may suspend a Founding Partner's status for a violation of this agreement or of the Content Policy; suspension ends future referral attribution and profit-pool eligibility but does not undo attributions already recorded.",
+      "8. Changes. Baddies may update this agreement; continuing to participate in the programme after a new version takes effect means you accept it.",
+    ].join("\n"),
+  },
 ];

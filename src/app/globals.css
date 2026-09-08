@@ -226,77 +226,29 @@ a[href]:hover {
     }
 }
 
-/* Landing page's full-width hero banner (see components/hero-visual.tsx,
-   HeroBanner, for the mousemove handler that drives
-   --px/--py/--spot-x/--spot-y). Kept as real CSS, not inline styles,
-   for the same reason .hover-lift is: :hover and pseudo-elements can't
-   be expressed inline.
-
-   The left/right/margin trick breaks the banner out of whatever
+/* Landing page's full-width hero — plain black, no image (the previous
+   version's photo + cursor-parallax effect, components/hero-visual.tsx,
+   was removed outright rather than left dead). Kept as real CSS, not
+   inline styles, for the same left/right/margin full-bleed trick
+   .hover-lift's neighbors use: it breaks the section out of whatever
    max-width container it's rendered inside (this app's pages don't use
    a single shared shell, each page sets its own per-section maxWidth —
    see page.tsx's sectionStyle) so it spans the full viewport edge to
-   edge without needing a special page-level layout just for this one
-   section. */
-.hero-banner {
-    --px: 0;
-    --py: 0;
-    --spot-x: 50%;
-    --spot-y: 50%;
-    position: relative;
+   edge without a special page-level layout just for this one section. */
+.hero-plain {
+    background: #000;
     width: 100vw;
     margin-left: calc(50% - 50vw);
     margin-right: calc(50% - 50vw);
     min-height: min(64vh, 560px);
-    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-.hero-banner-img {
-    position: absolute;
-    top: -4%;
-    left: -4%;
-    width: 108%;
-    height: 108%;
-    object-fit: cover;
-    filter: brightness(0.6) saturate(1.05);
-    transform: scale(1) translate(calc(var(--px) * -16px), calc(var(--py) * -16px));
-    transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), filter 0.5s ease;
-}
-
-.hero-banner:hover .hero-banner-img {
-    filter: brightness(0.72) saturate(1.1);
-    transform: scale(1.06) translate(calc(var(--px) * -24px), calc(var(--py) * -24px));
-}
-
-.hero-banner-scrim {
-    position: absolute;
-    inset: 0;
-    background:
-        radial-gradient(700px 500px at var(--spot-x) var(--spot-y), rgba(59, 130, 246, 0.18), transparent 60%),
-        linear-gradient(180deg, rgba(11, 11, 16, 0.25) 0%, rgba(11, 11, 16, 0.45) 55%, var(--bg) 100%);
-    opacity: 0.7;
-    transition: opacity 0.4s ease;
-    pointer-events: none;
-}
-
-.hero-banner:hover .hero-banner-scrim {
-    opacity: 1;
-}
-
-.hero-banner-content {
-    position: relative;
-    z-index: 1;
+.hero-plain-content {
     padding: 5rem 1.75rem 4rem;
     max-width: 760px;
     margin: 0 auto;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .hero-banner-img,
-    .hero-banner:hover .hero-banner-img {
-        transform: none !important;
-    }
+    text-align: center;
 }

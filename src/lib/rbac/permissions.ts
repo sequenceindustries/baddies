@@ -26,7 +26,8 @@ export type Permission =
   | "audit:view"
   | "dashboard:view" // admin-only: aggregate stats + the member directory
   | "banking:view" // admin-only: creator/Founding Baddie banking details (masked in the UI regardless — see src/lib/security/mask.ts)
-  | "founding_partner:manage"; // admin-only: invite/revoke/resend partners, correct referral attribution, record annual profit distributions
+  | "founding_partner:manage" // admin-only: invite/revoke/resend partners, correct referral attribution, record annual profit distributions
+  | "system:reset_founding_roster"; // admin-only, separate from founding_partner:manage — irreversibly deletes every real partner/creator/application and reseeds the 5-account demo roster (see src/app/api/admin/system/reset-founding-roster/route.ts)
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   FAN: ["creator:apply", "report:file", "ledger:view_own"],
@@ -53,6 +54,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "dashboard:view",
     "banking:view",
     "founding_partner:manage",
+    "system:reset_founding_roster",
   ],
   // A partner's own dashboard routes authorize by row ownership (this
   // FoundingPartner.userId === the current user's id) directly, not

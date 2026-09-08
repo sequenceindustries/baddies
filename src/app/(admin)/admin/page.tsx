@@ -28,7 +28,7 @@ interface ContentQueueItem {
   participantCount: number;
 }
 
-const TABS = ["Overview", "Members", "Creators", "Applications", "Founding Partners", "Content", "Revenue", "Payouts", "Trust & Safety", "Audit Log", "System Health"] as const;
+const TABS = ["Overview", "Members", "Creators", "Applications", "Founding Partners", "Content", "Revenue", "Payouts", "Trust & Safety", "Audit Log", "System Health", "Reset Roster"] as const;
 type Tab = (typeof TABS)[number];
 
 type RangeKey = "today" | "7d" | "30d" | "90d" | "all";
@@ -88,13 +88,21 @@ interface NavLeaf {
 }
 interface NavGroup {
   label: string;
+  // Each group gets its own accent — a deliberate, functional use of
+  // color (category identity, scannable at a glance in the sidebar), not
+  // decoration: everywhere else in this app stays the single blue brand
+  // accent (see components/ui.tsx's own comment on why), but the admin
+  // shell is an internal tool where color-coding real information
+  // (which part of the business a section belongs to) earns its keep.
+  color: string;
   items: NavLeaf[];
 }
 
 const NAV_GROUPS: NavGroup[] = [
-  { label: "Command Centre", items: [{ label: "Overview", tab: "Overview" }] },
+  { label: "Command Centre", color: "#3b82f6", items: [{ label: "Overview", tab: "Overview" }] },
   {
     label: "People",
+    color: "#a855f7",
     items: [
       { label: "Members", tab: "Members" },
       { label: "Creators", tab: "Creators" },
@@ -102,37 +110,66 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Founding Partners", tab: "Founding Partners" },
     ],
   },
-  { label: "Content", items: [{ label: "Content", tab: "Content", badgeKey: "content" }] },
-  { label: "Business", items: [{ label: "Revenue", tab: "Revenue" }, { label: "Payouts", tab: "Payouts", badgeKey: "payouts" }] },
-  { label: "Insights", items: [{ label: "Trust & Safety", tab: "Trust & Safety", badgeKey: "trustSafety" }, { label: "Audit Log", tab: "Audit Log" }] },
-  { label: "System", items: [{ label: "System Health", tab: "System Health" }] },
+  { label: "Content", color: "#e0a626", items: [{ label: "Content", tab: "Content", badgeKey: "content" }] },
+  {
+    label: "Business",
+    color: "#22c55e",
+    items: [{ label: "Revenue", tab: "Revenue" }, { label: "Payouts", tab: "Payouts", badgeKey: "payouts" }],
+  },
+  {
+    label: "Insights",
+    color: "#22b8cf",
+    items: [{ label: "Trust & Safety", tab: "Trust & Safety", badgeKey: "trustSafety" }, { label: "Audit Log", tab: "Audit Log" }],
+  },
+  {
+    label: "System",
+    color: "#94a3b8",
+    items: [
+      { label: "System Health", tab: "System Health" },
+      { label: "Reset Roster", tab: "Reset Roster" },
+    ],
+  },
 ];
 
+/** Vertical sidebar nav — grouped sections, each with its own color dot
+ * on the group label and a matching left-border/background tint on its
+ * active item, so "which part of the business am I in" reads at a glance
+ * without having to read every label. */
 function NavGroups({ tab, onSelect, badges }: { tab: Tab; onSelect: (t: Tab) => void; badges?: CommandCentreData["badges"] }) {
   return (
-    <div style={navGroupsWrapStyle}>
+    <nav style={navGroupsWrapStyle}>
       {NAV_GROUPS.map((group) => (
-        <div key={group.label} style={navGroupRowStyle}>
-          <span style={navGroupLabelStyle}>{group.label}</span>
-          {group.items.map((item) => {
-            if (!item.tab) {
+        <div key={group.label} style={navGroupSectionStyle}>
+          <span style={navGroupLabelStyle}>
+            <span style={{ ...navGroupDotStyle, background: group.color }} aria-hidden="true" />
+            {group.label}
+          </span>
+          <div style={navGroupItemsStyle}>
+            {group.items.map((item) => {
+              if (!item.tab) {
+                return (
+                  <span key={item.label} style={sidebarTabDisabledStyle}>
+                    {item.label} · soon
+                  </span>
+                );
+              }
+              const count = item.badgeKey && badges ? badges[item.badgeKey] : 0;
+              const active = item.tab === tab;
               return (
-                <span key={item.label} style={tabButtonDisabledStyle}>
-                  {item.label} · soon
-                </span>
+                <button
+                  key={item.label}
+                  onClick={() => onSelect(item.tab!)}
+                  style={sidebarTabStyle(active, group.color)}
+                >
+                  {item.label}
+                  {count > 0 && <span style={navBadgeStyle}>{count}</span>}
+                </button>
               );
-            }
-            const count = item.badgeKey && badges ? badges[item.badgeKey] : 0;
-            return (
-              <button key={item.label} onClick={() => onSelect(item.tab!)} style={item.tab === tab ? tabButtonActiveStyle : tabButtonStyle}>
-                {item.label}
-                {count > 0 && <span style={navBadgeStyle}>{count}</span>}
-              </button>
-            );
-          })}
+            })}
+          </div>
         </div>
       ))}
-    </div>
+    </nav>
   );
 }
 
@@ -210,48 +247,65 @@ export default function AdminDashboardPage() {
     );
   }
 
-  return (
-    <main style={mainStyle}>
-      <h1 style={displayHeadingStyle}>Baddies Command Centre</h1>
-      <NavGroups tab={tab} onSelect={setTab} badges={ccData?.badges} />
+  const activeGroup = NAV_GROUPS.find((g) => g.items.some((i) => i.tab === tab));
 
-      {tab === "Overview" && (
-        <OverviewPanel
-          data={ccData}
-          loading={ccLoading}
-          error={ccError}
-          range={range}
-          onRangeChange={setRange}
-          onNavigate={setTab}
-          onDrillFounding={goToFoundingStage}
-        />
-      )}
-      {tab === "Members" && <MembersPanel />}
-      {tab === "Creators" && <MembersPanel lockedRole="CREATOR" />}
-      {tab === "Applications" && (
-        <>
-          <FoundingApplicationsQueue statusFilter={foundingFilter} onClearFilter={() => setFoundingFilter(null)} />
-          <CreatorQueue />
-        </>
-      )}
-      {tab === "Founding Partners" && <FoundingPartnersPanel />}
-      {tab === "Content" && (
-        <>
-          <ContentQueue />
-          <ContentLibrary />
-        </>
-      )}
-      {tab === "Revenue" && <RevenuePanel onNavigate={setTab} />}
-      {tab === "Payouts" && (
-        <>
-          <PayoutQueue />
-          <PayoutHistory />
-        </>
-      )}
-      {tab === "Trust & Safety" && <TrustAndSafetyPanel />}
-      {tab === "Audit Log" && <AuditLogPanel />}
-      {tab === "System Health" && <SystemHealthPanel />}
-    </main>
+  return (
+    <div style={adminShellStyle}>
+      <aside style={adminSidebarStyle}>
+        <div style={adminBrandRowStyle}>
+          <span style={adminBrandMarkStyle} aria-hidden="true" />
+          <span style={adminBrandTextStyle}>Command Centre</span>
+        </div>
+        <NavGroups tab={tab} onSelect={setTab} badges={ccData?.badges} />
+      </aside>
+
+      <main style={adminContentStyle}>
+        <div style={{ ...adminContentHeaderStyle, borderColor: activeGroup?.color ?? "var(--border)" }}>
+          <span style={{ ...adminContentEyebrowStyle, color: activeGroup?.color ?? "var(--accent)" }}>
+            {activeGroup?.label ?? "Command Centre"}
+          </span>
+          <h1 style={{ ...displayHeadingStyle, margin: 0 }}>{tab}</h1>
+        </div>
+
+        {tab === "Overview" && (
+          <OverviewPanel
+            data={ccData}
+            loading={ccLoading}
+            error={ccError}
+            range={range}
+            onRangeChange={setRange}
+            onNavigate={setTab}
+            onDrillFounding={goToFoundingStage}
+          />
+        )}
+        {tab === "Members" && <MembersPanel />}
+        {tab === "Creators" && <MembersPanel lockedRole="CREATOR" />}
+        {tab === "Applications" && (
+          <>
+            <FoundingApplicationsQueue statusFilter={foundingFilter} onClearFilter={() => setFoundingFilter(null)} />
+            <CreatorQueue />
+          </>
+        )}
+        {tab === "Founding Partners" && <FoundingPartnersPanel />}
+        {tab === "Content" && (
+          <>
+            <ContentQueue />
+            <ContentLibrary />
+          </>
+        )}
+        {tab === "Revenue" && <RevenuePanel onNavigate={setTab} />}
+        {tab === "Payouts" && (
+          <>
+            <PayoutQueue />
+            <PayoutHistory />
+          </>
+        )}
+        {tab === "Trust & Safety" && <TrustAndSafetyPanel />}
+        {tab === "Audit Log" && <AuditLogPanel />}
+        {tab === "System Health" && <SystemHealthPanel />}
+        {tab === "Reset Roster" && <ResetRosterPanel />}
+      </main>
+    </div>
   );
 }
 
@@ -674,49 +728,53 @@ function MembersPanel({ lockedRole }: { lockedRole?: "CREATOR" }) {
   return (
     <section>
       <h2 style={sectionHeadingStyle}>{lockedRole === "CREATOR" ? "Creators" : "Members"}</h2>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          reload();
-        }}
-        style={memberFilterBarStyle}
-      >
-        <input
-          style={memberSearchInputStyle}
-          placeholder="Search by email or display name..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        {!lockedRole && (
-          <select style={statusSelectStyle} value={role} onChange={(e) => setRole(e.target.value)}>
-            <option value="">All roles</option>
-            <option value="FAN">Fan</option>
-            <option value="CREATOR">Creator</option>
-            <option value="ADMIN">Admin</option>
+
+      <div style={filterCardStyle}>
+        <span style={filterCardLabelStyle}>Filter</span>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            reload();
+          }}
+          style={memberFilterBarStyle}
+        >
+          <input
+            style={memberSearchInputStyle}
+            placeholder="Search by email or display name..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {!lockedRole && (
+            <select style={statusSelectStyle} value={role} onChange={(e) => setRole(e.target.value)}>
+              <option value="">All roles</option>
+              <option value="FAN">Fan</option>
+              <option value="CREATOR">Creator</option>
+              <option value="ADMIN">Admin</option>
+            </select>
+          )}
+          <select style={statusSelectStyle} value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="">Active + suspended</option>
+            <option value="active">Active only</option>
+            <option value="suspended">Suspended only</option>
           </select>
-        )}
-        <select style={statusSelectStyle} value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">Active + suspended</option>
-          <option value="active">Active only</option>
-          <option value="suspended">Suspended only</option>
-        </select>
-        <select style={statusSelectStyle} value={newDays} onChange={(e) => setNewDays(e.target.value)}>
-          <option value="">Any join date</option>
-          <option value="7">New (7d)</option>
-          <option value="30">New (30d)</option>
-        </select>
-        <label style={filterCheckboxLabelStyle}>
-          <input type="checkbox" checked={founding} onChange={(e) => setFounding(e.target.checked)} /> Founding Baddie
-        </label>
-        {(lockedRole === "CREATOR" || role === "CREATOR") && (
+          <select style={statusSelectStyle} value={newDays} onChange={(e) => setNewDays(e.target.value)}>
+            <option value="">Any join date</option>
+            <option value="7">New (7d)</option>
+            <option value="30">New (30d)</option>
+          </select>
           <label style={filterCheckboxLabelStyle}>
-            <input type="checkbox" checked={verified} onChange={(e) => setVerified(e.target.checked)} /> Verified only
+            <input type="checkbox" checked={founding} onChange={(e) => setFounding(e.target.checked)} /> Founding Baddie
           </label>
-        )}
-        <button type="submit" style={approveButtonStyle}>
-          Search
-        </button>
-      </form>
+          {(lockedRole === "CREATOR" || role === "CREATOR") && (
+            <label style={filterCheckboxLabelStyle}>
+              <input type="checkbox" checked={verified} onChange={(e) => setVerified(e.target.checked)} /> Verified only
+            </label>
+          )}
+          <button type="submit" style={approveButtonStyle}>
+            Search
+          </button>
+        </form>
+      </div>
 
       {error && <p style={{ color: "var(--danger)", fontSize: "0.85rem" }}>{error}</p>}
 
@@ -726,12 +784,17 @@ function MembersPanel({ lockedRole }: { lockedRole?: "CREATOR" }) {
         <p style={{ color: "var(--text-muted)" }}>No {lockedRole === "CREATOR" ? "creators" : "members"} match.</p>
       ) : (
         <>
+          <p style={mutedSmallStyle}>
+            Showing {members.length} {members.length === 1 ? (lockedRole === "CREATOR" ? "creator" : "member") : lockedRole === "CREATOR" ? "creators" : "members"}
+            {cursor ? " (more available)" : ""}.
+          </p>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
             {members.map((m) => (
               <div key={m.userId} style={rowCardStyle}>
                 <div style={{ cursor: "pointer", flex: 1 }} onClick={() => setSelectedUserId(m.userId)} role="button">
-                  <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>
-                    {m.displayName ?? m.email} · {humanizeKey(m.role)}
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 600, fontSize: "0.9rem" }}>
+                    {m.displayName ?? m.email}
+                    <span style={roleBadgeStyle(m.role)}>{humanizeKey(m.role)}</span>
                     {m.foundingBaddie && <span style={foundingBadgeStyle}>Founding Baddie</span>}
                   </div>
                   <div style={mutedSmallStyle}>
@@ -2679,6 +2742,121 @@ function SystemHealthPanel() {
   );
 }
 
+interface ResetRosterResult {
+  deleted: {
+    usersRemoved: number;
+    partnersRemoved: number;
+    creatorsRemoved: number;
+    applicationsRemoved: number;
+  };
+  reseeded: boolean;
+  reseedError: string | null;
+  seededCreatorCount: number;
+}
+
+const RESET_CONFIRM_PHRASE = "RESET FOUNDING ROSTER";
+
+/**
+ * The one genuinely irreversible admin action in this app — see
+ * POST /api/admin/system/reset-founding-roster's own doc comment for the
+ * full deletion order and safety model (everything in one transaction;
+ * rolls back whole, never partial, if anything blocks it). This panel's
+ * only job is to make triggering it deliberate: typing the exact phrase
+ * is required before the button even enables, matching the server's own
+ * check — a slipped click alone can never fire this.
+ */
+function ResetRosterPanel() {
+  const [phrase, setPhrase] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<ResetRosterResult | null>(null);
+
+  const canSubmit = phrase === RESET_CONFIRM_PHRASE && !busy;
+
+  async function submit() {
+    if (!canSubmit) return;
+    if (!window.confirm("This permanently deletes every real partner, application, and creator account. Continue?")) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch("/api/admin/system/reset-founding-roster", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: phrase }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? "Reset failed.");
+      setResult(body);
+      setPhrase("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Reset failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section>
+      <h2 style={sectionHeadingStyle}>Reset Roster</h2>
+      <p style={mutedSmallStyle}>
+        Permanently deletes every real Founding Partner, every Founding Baddie application, and every creator
+        account (including the current dummy roster) — then reseeds exactly 5 demo creator accounts. This cannot be
+        undone. Financial history (ledger entries, payouts) tied to any removed account is deleted as part of this,
+        not archived.
+      </p>
+
+      <div style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch", gap: "0.75rem", marginTop: "1rem" }}>
+        <label style={{ fontSize: "0.82rem", fontWeight: 600 }}>
+          Type <code>{RESET_CONFIRM_PHRASE}</code> to enable the reset button
+        </label>
+        <input
+          type="text"
+          value={phrase}
+          onChange={(e) => setPhrase(e.target.value)}
+          placeholder={RESET_CONFIRM_PHRASE}
+          style={{ ...memberSearchInputStyle, flex: "none" }}
+          disabled={busy}
+        />
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!canSubmit}
+          style={{
+            ...rejectButtonStyle,
+            background: canSubmit ? "var(--danger)" : "transparent",
+            color: canSubmit ? "#fff" : "var(--text-muted)",
+            borderColor: canSubmit ? "var(--danger)" : "var(--border)",
+            cursor: canSubmit ? "pointer" : "not-allowed",
+            opacity: busy ? 0.7 : 1,
+          }}
+        >
+          {busy ? "Resetting..." : "Permanently reset roster"}
+        </button>
+      </div>
+
+      {error && <p style={{ color: "var(--danger)", marginTop: "0.75rem" }}>{error}</p>}
+
+      {result && (
+        <div style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch", gap: "0.4rem", marginTop: "1rem" }}>
+          <span style={{ fontWeight: 600, color: "var(--success)" }}>Reset complete.</span>
+          <span style={mutedSmallStyle}>
+            Removed {result.deleted.usersRemoved} account(s) — {result.deleted.partnersRemoved} partner(s),{" "}
+            {result.deleted.creatorsRemoved} creator(s) — and {result.deleted.applicationsRemoved} application(s).
+          </span>
+          <span style={mutedSmallStyle}>
+            {result.reseeded
+              ? `Reseeded ${result.seededCreatorCount} demo creator accounts.`
+              : `Reseed did not fully complete: ${result.reseedError}. Safe to trigger this reset again — the reseed step is idempotent.`}
+          </span>
+        </div>
+      )}
+    </section>
+  );
+}
+
 interface PartnerInvitationRow {
   id: string;
   email: string;
@@ -2732,8 +2910,6 @@ interface ProfitDistributionRow {
   finalizedAt: string | null;
   partnerShares: { foundingPartnerId: string; partnerEmail: string; amountUsd: string }[];
 }
-
-const MAX_FOUNDING_PARTNERS = 10;
 
 /**
  * The private Founding Partner programme: invitation CRUD (create/revoke/
@@ -2888,14 +3064,12 @@ function FoundingPartnersPanel() {
 
   const activePartnerCount = partners.filter((p) => p.status === "ACTIVE").length;
   const pendingInviteCount = invitations.filter((i) => i.status === "PENDING").length;
-  const slotsRemaining = MAX_FOUNDING_PARTNERS - activePartnerCount - pendingInviteCount;
 
   return (
     <section style={{ marginBottom: "3rem" }}>
       <h2 style={sectionHeadingStyle}>Founding Partners</h2>
       <p style={mutedSmallStyle}>
-        {activePartnerCount} active · {pendingInviteCount} pending invitation{pendingInviteCount === 1 ? "" : "s"} ·{" "}
-        {slotsRemaining} slot{slotsRemaining === 1 ? "" : "s"} remaining (programme capped at {MAX_FOUNDING_PARTNERS})
+        {activePartnerCount} active · {pendingInviteCount} pending invitation{pendingInviteCount === 1 ? "" : "s"}
       </p>
 
       <form onSubmit={sendInvite} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", margin: "1rem 0 2rem" }}>
@@ -2913,7 +3087,7 @@ function FoundingPartnersPanel() {
           <option value="14">Expires in 14 days</option>
           <option value="30">Expires in 30 days</option>
         </select>
-        <button type="submit" style={approveButtonStyle} disabled={inviting || slotsRemaining <= 0}>
+        <button type="submit" style={approveButtonStyle} disabled={inviting}>
           {inviting ? "Sending..." : "Send invitation"}
         </button>
       </form>
@@ -3675,43 +3849,134 @@ function ContentDetailView({ contentId, onBack }: { contentId: string; onBack: (
   );
 }
 
+// mainStyle stays in use for the pre-dashboard states (loading/sign-in-
+// required/wrong-role) above — only the real dashboard below switches to
+// the two-column shell.
 const mainStyle: React.CSSProperties = { padding: "2.5rem 1.75rem", maxWidth: "1100px", margin: "0 auto" };
+
+const adminShellStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: "2rem",
+  maxWidth: "1400px",
+  margin: "0 auto",
+  padding: "2rem 1.75rem 4rem",
+};
+
+const adminSidebarStyle: React.CSSProperties = {
+  width: "230px",
+  flexShrink: 0,
+  position: "sticky",
+  top: "1.5rem",
+};
+
+const adminBrandRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.6rem",
+  padding: "0.2rem 0.2rem 1.25rem",
+};
+
+const adminBrandMarkStyle: React.CSSProperties = {
+  width: "10px",
+  height: "10px",
+  borderRadius: "3px",
+  background: "linear-gradient(135deg, var(--accent), #a855f7)",
+  flexShrink: 0,
+};
+
+const adminBrandTextStyle: React.CSSProperties = {
+  fontFamily: "var(--font-display)",
+  fontSize: "0.98rem",
+  fontWeight: 600,
+};
+
+const adminContentStyle: React.CSSProperties = { flex: 1, minWidth: 0 };
+
+const adminContentHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.2rem",
+  paddingBottom: "1.1rem",
+  marginBottom: "2rem",
+  borderBottom: "2px solid var(--border)",
+};
+
+const adminContentEyebrowStyle: React.CSSProperties = {
+  fontSize: "0.72rem",
+  fontWeight: 700,
+  letterSpacing: "0.07em",
+  textTransform: "uppercase",
+};
 
 const navGroupsWrapStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
-  gap: "0.6rem",
-  margin: "1.5rem 0 2rem",
-  paddingBottom: "1rem",
-  borderBottom: "1px solid var(--border)",
+  gap: "1.35rem",
 };
 
-const navGroupRowStyle: React.CSSProperties = {
+const navGroupSectionStyle: React.CSSProperties = {
   display: "flex",
-  flexWrap: "wrap",
-  alignItems: "center",
-  gap: "0.4rem",
+  flexDirection: "column",
+  gap: "0.25rem",
+};
+
+const navGroupItemsStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.1rem",
 };
 
 const navGroupLabelStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.5rem",
   fontSize: "0.68rem",
   fontWeight: 700,
   letterSpacing: "0.06em",
   textTransform: "uppercase",
   color: "var(--text-muted)",
-  minWidth: "6.5rem",
+  padding: "0 0.6rem 0.35rem",
 };
 
-const tabButtonDisabledStyle: React.CSSProperties = {
-  background: "transparent",
-  border: "1px dashed var(--border)",
+const navGroupDotStyle: React.CSSProperties = {
+  width: "6px",
+  height: "6px",
+  borderRadius: "50%",
+  flexShrink: 0,
+};
+
+/** A full-width sidebar row rather than a pill — active state borrows
+ * the owning group's own color (left border + soft background tint)
+ * instead of the single blue accent everything else in the shell uses,
+ * so a glance at the sidebar alone says which part of the business is
+ * open. */
+function sidebarTabStyle(active: boolean, groupColor: string): React.CSSProperties {
+  return {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+    textAlign: "left",
+    background: active ? `${groupColor}1a` : "transparent",
+    border: "none",
+    borderLeft: `2px solid ${active ? groupColor : "transparent"}`,
+    color: active ? "var(--text)" : "var(--text-muted)",
+    borderRadius: "0 8px 8px 0",
+    padding: "0.5rem 0.6rem",
+    fontSize: "0.85rem",
+    fontWeight: active ? 600 : 500,
+    cursor: "pointer",
+  };
+}
+
+const sidebarTabDisabledStyle: React.CSSProperties = {
+  display: "block",
   color: "var(--text-muted)",
-  borderRadius: "999px",
-  padding: "0.4rem 0.95rem",
-  fontSize: "0.82rem",
-  fontWeight: 600,
+  borderLeft: "2px solid transparent",
+  padding: "0.5rem 0.6rem",
+  fontSize: "0.85rem",
   opacity: 0.5,
-  cursor: "default",
 };
 
 const navBadgeStyle: React.CSSProperties = {
@@ -3865,12 +4130,48 @@ const statValueStyle: React.CSSProperties = {
   marginBottom: "0.2rem",
 };
 
+const filterCardStyle: React.CSSProperties = {
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: "12px",
+  padding: "1rem 1.1rem 0.4rem",
+  marginBottom: "1.25rem",
+};
+
+const filterCardLabelStyle: React.CSSProperties = {
+  display: "block",
+  fontSize: "0.68rem",
+  fontWeight: 700,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  color: "var(--text-muted)",
+  marginBottom: "0.7rem",
+};
+
 const memberFilterBarStyle: React.CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
   gap: "0.6rem",
-  marginBottom: "1.25rem",
+  marginBottom: "0.85rem",
 };
+
+// Same People-section purple as the sidebar (see NAV_GROUPS) for
+// CREATOR/PARTNER — role is exactly the kind of at-a-glance category
+// this admin shell's new color system exists for; FAN/ADMIN stay
+// neutral since there's nothing to distinguish them by color for.
+function roleBadgeStyle(role: string): React.CSSProperties {
+  const isSpecial = role === "CREATOR" || role === "PARTNER";
+  return {
+    fontSize: "0.68rem",
+    fontWeight: 700,
+    letterSpacing: "0.03em",
+    textTransform: "uppercase",
+    color: isSpecial ? "#a855f7" : "var(--text-muted)",
+    border: `1px solid ${isSpecial ? "#a855f7" : "var(--border)"}`,
+    borderRadius: "999px",
+    padding: "0.1rem 0.5rem",
+  };
+}
 
 const memberSearchInputStyle: React.CSSProperties = {
   flex: "1 1 220px",

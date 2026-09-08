@@ -13,6 +13,7 @@ import {
   ImageUploadField,
 } from "@/components/ui";
 import { VerificationFlow } from "@/components/verification-capture";
+import { ACCESS_LABEL } from "@/components/cards";
 
 type CreatorStatus =
   | "PENDING"
@@ -101,7 +102,7 @@ export default function CreatorDashboardPage() {
               <WalletPanel />
             </>
           )}
-          {tab === "content" && <ContentPanel canMonetise={canMonetise} />}
+          {tab === "content" && <ContentPanel />}
           {tab === "golive" && canMonetise && <LivePanel />}
           {tab === "settings" && <CreatorSettingsPanel />}
         </>
@@ -231,7 +232,7 @@ function OnboardingChecklist() {
         { label: "Profile picture", done: Boolean(profile?.avatarUrl) },
         { label: "Featured image", done: Boolean(settings?.coverImageUrl) },
         { label: "Creator bio", done: Boolean(profile?.bio) },
-        { label: "Free content", done: tiers.has("FREE") },
+        { label: "Teasers content", done: tiers.has("FREE") },
         { label: "VIP content", done: tiers.has("VIP") },
         { label: "Exclusive content", done: tiers.has("VVIP") },
       ]);
@@ -567,7 +568,7 @@ function FeaturedImagePanel() {
       <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Featured image</h2>
       <p style={{ ...mutedSmallStyle, marginTop: "-0.6rem", marginBottom: "1.1rem" }}>
         What shows on The Baddest, baddies near you, and other discovery cards. Keep it
-        non-explicit. Leave blank to use your latest Free post instead.
+        non-explicit. Leave blank to use your latest Teasers post instead.
       </p>
       <ImageUploadField label="Featured image" value={featuredImageUrl} onChange={save} shape="rect" />
       {saving && <p style={{ ...mutedSmallStyle, marginBottom: 0 }}>Saving...</p>}
@@ -577,7 +578,7 @@ function FeaturedImagePanel() {
   );
 }
 
-function ContentPanel({ canMonetise }: { canMonetise: boolean }) {
+function ContentPanel() {
   const [items, setItems] = useState<OwnContentItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -608,7 +609,7 @@ function ContentPanel({ canMonetise }: { canMonetise: boolean }) {
   return (
     <>
       <FeaturedImagePanel />
-      <UploadForm canMonetise={canMonetise} onUploaded={reload} />
+      <UploadForm onUploaded={reload} />
 
       <h2 style={sectionHeadingStyle}>Content history</h2>
       {loadingItems ? (
@@ -624,7 +625,7 @@ function ContentPanel({ canMonetise }: { canMonetise: boolean }) {
                 <div style={{ opacity: removed ? 0.55 : 1 }}>
                   <div style={{ fontSize: "0.9rem" }}>{item.caption || "(no caption)"}</div>
                   <div style={mutedSmallStyle}>
-                    {item.mediaType} · {item.accessLevel} ·{" "}
+                    {item.mediaType} · {ACCESS_LABEL[item.accessLevel]} ·{" "}
                     {removed ? "removed" : item.publishedAt ? "live" : item.status.toLowerCase()} · ♥{" "}
                     {item.likeCount}
                   </div>
@@ -657,30 +658,33 @@ function ContentPanel({ canMonetise }: { canMonetise: boolean }) {
   );
 }
 
-function UploadForm({ canMonetise, onUploaded }: { canMonetise: boolean; onUploaded: () => void }) {
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100MB per file — matches the API route's own ceiling
+
+function UploadForm({ onUploaded }: { onUploaded: () => void }) {
   const [caption, setCaption] = useState("");
   const [accessLevel, setAccessLevel] = useState<AccessLevel>("FREE");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!file) {
-      setError("Choose a file to upload.");
-      return;
-    }
-    setSubmitting(true);
+  function handleFilesChosen(fileList: FileList | null) {
     setError(null);
+    const chosen = Array.from(fileList ?? []);
+    const tooLarge = chosen.filter((f) => f.size > MAX_UPLOAD_BYTES);
+    if (tooLarge.length > 0) {
+      setError(`${tooLarge.length === 1 ? "One file exceeds" : `${tooLarge.length} files exceed`} the 100MB limit and won't be included: ${tooLarge.map((f) => f.name).join(", ")}`);
+    }
+    setFiles(chosen.filter((f) => f.size <= MAX_UPLOAD_BYTES));
+  }
 
+  async function uploadOne(file: File): Promise<string | null> {
     const mediaType = file.type.startsWith("video/")
       ? "VIDEO"
       : file.type.startsWith("audio/")
         ? "AUDIO"
         : "IMAGE";
-
     const base64Data = await fileToBase64(file);
-
     const res = await fetch("/api/creator/content", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -692,15 +696,41 @@ function UploadForm({ canMonetise, onUploaded }: { canMonetise: boolean; onUploa
         caption: caption || undefined,
       }),
     });
+    if (res.ok) return null;
+    const body = await res.json().catch(() => null);
+    return typeof body?.error === "string" ? body.error : "Upload failed.";
+  }
 
-    setSubmitting(false);
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      setError(body?.error ?? "Upload failed.");
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (files.length === 0) {
+      setError("Choose at least one file to upload.");
       return;
     }
+    setSubmitting(true);
+    setError(null);
+
+    // Sequential, not parallel — this is one creator's own upload queue,
+    // not a race; keeping it sequential also keeps "Uploading 2 of 5..."
+    // an honest, literal count rather than an approximation.
+    const failures: string[] = [];
+    for (const [i, currentFile] of files.entries()) {
+      setProgress({ done: i, total: files.length });
+      const err = await uploadOne(currentFile);
+      if (err) failures.push(`${currentFile.name}: ${err}`);
+    }
+    setProgress(null);
+    setSubmitting(false);
+
+    if (failures.length > 0) {
+      setError(
+        failures.length === files.length
+          ? `Upload failed for all ${files.length} file(s).\n${failures.join("\n")}`
+          : `${files.length - failures.length} of ${files.length} uploaded. ${failures.length} failed:\n${failures.join("\n")}`
+      );
+    }
     setCaption("");
-    setFile(null);
+    setFiles([]);
     onUploaded();
   }
 
@@ -711,42 +741,51 @@ function UploadForm({ canMonetise, onUploaded }: { canMonetise: boolean; onUploa
         Goes live immediately — no admin approval, no waiting.
       </p>
       <form onSubmit={handleSubmit}>
-        {error && <div style={errorBannerStyle}>{error}</div>}
+        {error && <div style={{ ...errorBannerStyle, whiteSpace: "pre-line" }}>{error}</div>}
 
-        <Field label="File">
-          <input
-            type="file"
-            accept="image/*,video/*,audio/*"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            style={{ marginTop: "0.4rem" }}
-          />
+        <Field label="Files" hint="Up to 100MB per file. Select more than one to upload them all at once.">
+          <div style={fileFieldRowStyle}>
+            <label style={fileUploadButtonStyle}>
+              {files.length > 0 ? "Change files" : "Choose files"}
+              <input
+                type="file"
+                accept="image/*,video/*,audio/*"
+                multiple
+                onChange={(e) => handleFilesChosen(e.target.files)}
+                style={hiddenFileInputStyle}
+              />
+            </label>
+            <span style={mutedSmallStyle}>
+              {files.length === 0
+                ? "No files chosen"
+                : files.length === 1
+                  ? files[0]?.name
+                  : `${files.length} files chosen`}
+            </span>
+          </div>
         </Field>
 
-        <Field label="Caption" hint="Optional.">
+        <Field label="Caption" hint="Optional. Applied to every file in this batch.">
           <input style={inputStyle} value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={2000} />
         </Field>
 
         <Field
           label="Access level"
-          hint="Free: anyone. VIP: unlocked by the platform-wide VIP pass. Exclusive: only your own subscribers."
+          hint="Teasers: anyone. VIP: unlocked by the platform-wide VIP pass. Exclusive: only your own subscribers."
         >
           <select
             style={inputStyle}
             value={accessLevel}
             onChange={(e) => setAccessLevel(e.target.value as AccessLevel)}
           >
-            <option value="FREE">Free</option>
-            <option value="VIP" disabled={!canMonetise}>
-              VIP {canMonetise ? "" : "(verified creators only)"}
-            </option>
-            <option value="VVIP" disabled={!canMonetise}>
-              Exclusive {canMonetise ? "" : "(verified creators only)"}
-            </option>
+            <option value="FREE">Teasers</option>
+            <option value="VIP">VIP</option>
+            <option value="VVIP">Exclusive</option>
           </select>
         </Field>
 
         <button type="submit" style={primaryButtonStyle} disabled={submitting}>
-          {submitting ? "Uploading..." : "Upload"}
+          {submitting && progress ? `Uploading ${progress.done + 1} of ${progress.total}...` : submitting ? "Uploading..." : "Upload"}
         </button>
       </form>
     </div>
@@ -810,4 +849,31 @@ const deleteButtonStyle: React.CSSProperties = {
   cursor: "pointer",
   flexShrink: 0,
 };
+
+const fileFieldRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.7rem",
+  flexWrap: "wrap",
+  marginTop: "0.4rem",
+};
+
+// Same ghost-accent-button treatment used for the ID upload on
+// /founding-baddies (src/app/founding-baddies/ApplicationNextSteps.tsx)
+// and LocationField's "Detect my location" in components/ui.tsx — a real
+// button, not the browser's own unstyled file-input chrome.
+const fileUploadButtonStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "0.5rem 1rem",
+  borderRadius: "var(--radius)",
+  border: "1px solid var(--accent)",
+  color: "var(--accent)",
+  background: "transparent",
+  fontWeight: 600,
+  fontSize: "0.85rem",
+  cursor: "pointer",
+  flexShrink: 0,
+};
+
+const hiddenFileInputStyle: React.CSSProperties = { display: "none" };
 

@@ -50,7 +50,7 @@ export default function ApplyPage() {
       <main style={pageWrapStyle}>
         <h1 style={displayHeadingStyle}>Sign in required</h1>
         <p style={{ color: "var(--text-muted)" }}>
-          You need an account before applying to become a creator.
+          You need an account before joining as a creator.
         </p>
       </main>
     );
@@ -108,7 +108,7 @@ export default function ApplyPage() {
 
   return (
     <main style={pageWrapStyle}>
-      <h1 style={displayHeadingStyle}>Apply to become a creator</h1>
+      <h1 style={displayHeadingStyle}>Join as a creator</h1>
       <p style={{ color: "var(--text-muted)", marginBottom: "0.5rem", fontSize: "0.92rem" }}>
         Your legal name is encrypted and never shown publicly. Your stage name is what fans see.
       </p>

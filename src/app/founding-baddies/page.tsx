@@ -50,7 +50,7 @@ function Hero() {
         Join the first generation of African creators building the future of the creator economy.
       </p>
       <a href="#apply" style={heroCtaStyle}>
-        Apply Now
+        Join Now
       </a>
     </section>
   );
@@ -108,7 +108,7 @@ function Monetisation() {
     <Section title="How You Earn" subtitle="Three tiers. You decide what goes where.">
       <div style={tierGridStyle}>
         <div className="hover-lift" style={tierCardStyle}>
-          <div style={tierNameStyle}>Free</div>
+          <div style={tierNameStyle}>Teasers</div>
           <p style={tierDescStyle}>
             Fans discover you here first — public previews, no cost, no card required.
           </p>
@@ -120,11 +120,11 @@ function Monetisation() {
             creator. You decide what content goes into VIP.
           </p>
         </div>
-        <div className="hover-lift" style={{ ...tierCardStyle, borderColor: "var(--accent)" }}>
+        <div className="hover-lift" style={tierCardStyle}>
           <div style={tierNameStyle}>Exclusive</div>
           <p style={tierDescStyle}>
-            Fans subscribe directly to you, at the price you set — subscriber-only posts, direct
-            messaging, and more.
+            Fans subscribe directly to you, at the price you set — subscriber-only posts, live
+            videos, and more.
           </p>
         </div>
       </div>
@@ -177,8 +177,8 @@ function Section({
 // Application form
 // ---------------------------------------------------------------------
 
-const SOCIAL_PLATFORMS = ["Instagram", "TikTok", "X", "YouTube", "Facebook"];
-const CREATOR_PLATFORMS = ["OnlyFans", "Fansly", "ManyVids", "JustForFans", "LoyalFans", "Patreon", "Other"];
+const SOCIAL_PLATFORMS = ["Instagram", "X", "Facebook"];
+const CREATOR_PLATFORMS = ["OnlyFans", "Fansly", "JustForFans"];
 
 interface PlatformEntry {
   handle: string;
@@ -203,7 +203,6 @@ function ApplicationForm() {
   const [creatorPlats, setCreatorPlats] = useState<PlatformState>({});
 
   const [audienceSize, setAudienceSize] = useState("");
-  const [creatingSince, setCreatingSince] = useState("");
 
   const [confirmsAdult, setConfirmsAdult] = useState(false);
   const [agreesToVerification, setAgreesToVerification] = useState(false);
@@ -282,7 +281,6 @@ function ApplicationForm() {
         city,
         platforms,
         audienceSize: audienceSize || undefined,
-        creatingSince: creatingSince || undefined,
         confirmsAdult,
         agreesToVerification,
         website,
@@ -332,7 +330,7 @@ function ApplicationForm() {
 
   return (
     <section id="apply" style={{ ...sectionStyle, ...formSectionStyle }}>
-      <h2 style={sectionHeadingStyle}>Apply to become a Founding baddie</h2>
+      <h2 style={sectionHeadingStyle}>Join as a Founding baddie</h2>
       <p style={sectionSubStyle}>Takes about five minutes. No documents required at this stage.</p>
 
       <form onSubmit={handleSubmit} style={formStyle}>
@@ -388,17 +386,6 @@ function ApplicationForm() {
               value={audienceSize}
               onChange={(e) => setAudienceSize(e.target.value)}
               placeholder="e.g. ~50k across platforms"
-            />
-          </FormField>
-        </FormFieldset>
-
-        <FormFieldset legend="About you">
-          <FormField label="How long have you been creating content?">
-            <input
-              style={inputStyle}
-              value={creatingSince}
-              onChange={(e) => setCreatingSince(e.target.value)}
-              placeholder="e.g. 2 years"
             />
           </FormField>
         </FormFieldset>

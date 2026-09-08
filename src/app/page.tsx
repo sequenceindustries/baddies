@@ -7,7 +7,6 @@ import { useSession, roleHomePath } from "@/components/ui";
 import { CreatorCardRow, type CreatorCardData } from "@/components/cards";
 import { HowItWorks, HowItWorksForCreators } from "@/components/how-it-works";
 import { Countdown } from "@/components/countdown";
-import { HeroBanner } from "@/components/hero-visual";
 
 interface DiscoveryResponse {
   creators: CreatorCardData[];
@@ -60,18 +59,20 @@ export default function LandingPage() {
 
   return (
     <main>
-      <HeroBanner>
-        <h1 style={heroTitleStyle}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/baddies-wordmark-white.webp" alt="baddies" style={heroLogoStyle} />
-        </h1>
-        <p style={heroSubStyle}>
-          Africa&apos;s adult content network — where verified South African creators publish
-          exclusive content and get paid directly by the fans who support them. Browse free
-          previews with no card required, or subscribe to unlock more.
-        </p>
-        <Countdown target={LAUNCH_DATE} label="Launching in" />
-      </HeroBanner>
+      <section className="hero-plain">
+        <div className="hero-plain-content">
+          <h1 style={heroTitleStyle}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/baddies-wordmark-white.webp" alt="baddies" style={heroLogoStyle} />
+          </h1>
+          <p style={heroSubStyle}>
+            Africa&apos;s adult content network — where verified South African creators publish
+            exclusive content and get paid directly by the fans who support them. Browse free
+            previews with no card required, or subscribe to unlock more.
+          </p>
+          <Countdown target={LAUNCH_DATE} label="Launching in" />
+        </div>
+      </section>
 
       <section style={foundingBannerSectionStyle}>
         <Link href="/founding-baddies" style={foundingBannerStyle} className="hover-lift">
@@ -162,9 +163,9 @@ const sectionStyle: React.CSSProperties = {
   margin: "0 auto 1.5rem",
 };
 
-// Pulled up over HeroBanner's fading bottom edge so the banner reads as
-// a divider between the hero and the rest of the page, not just another
-// stacked section. position+zIndex keeps it painting above the hero.
+// Pulled up over the hero's bottom edge so it reads as a divider
+// between the hero and the rest of the page, not just another stacked
+// section. position+zIndex keeps it painting above the hero.
 const foundingBannerSectionStyle: React.CSSProperties = {
   padding: "0 1.75rem",
   maxWidth: "1100px",
