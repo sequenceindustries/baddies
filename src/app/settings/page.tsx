@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession, displayHeadingStyle, cardStyle, Field, inputStyle, primaryButtonStyle, errorBannerStyle } from "@/components/ui";
 
@@ -31,15 +31,33 @@ export default function SettingsPage() {
           Edit profile →
         </Link>
       </div>
-      <AccountEmailPanel email={user.email} emailVerified={user.emailVerified} />
+      <AccountEmailPanel email={user.email} emailVerified={user.emailVerified} isCreator={Boolean(user.creatorProfile)} />
       <ChangePasswordPanel />
       <SessionsPanel />
     </main>
   );
 }
 
-function AccountEmailPanel({ email, emailVerified }: { email: string; emailVerified: boolean }) {
+function AccountEmailPanel({ email, emailVerified, isCreator }: { email: string; emailVerified: boolean; isCreator: boolean }) {
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  // Only fetched for creators — a plain fan's phone lives nowhere in
+  // this app (only Founding Baddies applicants ever supply one, on
+  // FoundingApplication), so this stays null and the row just doesn't
+  // render rather than showing "Not on file" to everyone.
+  const [phone, setPhone] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isCreator) return;
+    let cancelled = false;
+    fetch("/api/creator/verification/identity-details")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (!cancelled && body?.phone) setPhone(body.phone);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCreator]);
 
   async function resend() {
     setStatus("sending");
@@ -61,6 +79,13 @@ function AccountEmailPanel({ email, emailVerified }: { email: string; emailVerif
           </button>
           {status === "sent" && <span style={mutedSmallStyle}>Check your inbox.</span>}
         </div>
+      )}
+      {phone && (
+        <>
+          <h2 style={{ ...sectionHeadingStyle, marginTop: "1.25rem" }}>Phone</h2>
+          <p style={{ margin: 0, fontSize: "0.92rem" }}>{phone}</p>
+          <p style={{ ...mutedSmallStyle, marginTop: "0.4rem" }}>From your creator application. Can&apos;t be changed here.</p>
+        </>
       )}
     </div>
   );

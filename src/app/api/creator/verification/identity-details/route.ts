@@ -2,12 +2,51 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
-import { encryptField } from "@/lib/security/field-encryption";
+import { encryptField, decryptField } from "@/lib/security/field-encryption";
+import { maskAccountNumber } from "@/lib/security/mask";
 import { getMediaStorageProvider } from "@/lib/providers/storage";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
 export const dynamic = "force-dynamic";
+
+/**
+ * Read-only view of what this creator filled in when they applied —
+ * legal name, phone (Founding Baddies applicants only — the plain
+ * /apply path never collects one), date of birth, nationality, and a
+ * masked ID number, once step 1 above has been submitted. Surfaced on
+ * /profile per explicit product decision: some of what a creator
+ * "filled in" isn't editable here (legal name/DOB/nationality/ID number
+ * only ever change through a real re-verification, not a form field),
+ * so this is display-only — same masking convention used everywhere
+ * else an ID number is shown (see maskAccountNumber's own comment),
+ * applied here too even though it's the account holder's own data,
+ * rather than trafficking the full plaintext value over the wire at all.
+ */
+export async function GET() {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+  }
+
+  const creatorProfile = await db.creatorProfile.findUnique({ where: { userId: user.id } });
+  if (!creatorProfile) {
+    return NextResponse.json({ error: "No creator application found." }, { status: 404 });
+  }
+
+  const [identity, application] = await Promise.all([
+    db.creatorIdentity.findUnique({ where: { creatorProfileId: creatorProfile.id } }),
+    db.foundingApplication.findUnique({ where: { userId: user.id }, select: { phone: true } }),
+  ]);
+
+  return NextResponse.json({
+    legalName: creatorProfile.legalNameEncrypted ? decryptField(creatorProfile.legalNameEncrypted) : null,
+    phone: application?.phone ?? null,
+    dateOfBirth: identity?.dateOfBirth ?? null,
+    nationality: identity?.nationality ?? null,
+    idNumberMasked: identity ? maskAccountNumber(decryptField(identity.idNumberEncrypted)) : null,
+  });
+}
 
 const MAX_BYTES = 15 * 1024 * 1024; // 15MB — same ceiling as Founding's identity-document upload
 

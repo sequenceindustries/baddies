@@ -43,6 +43,7 @@ export default function ProfilePage() {
       </div>
       <AccountTypePanel role={user.role} creatorProfile={user.creatorProfile} foundingPartner={user.foundingPartner} />
       <ProfileSettings />
+      {user.creatorProfile && <ApplicationDetailsPanel />}
     </main>
   );
 }
@@ -206,6 +207,67 @@ function ProfileSettings() {
           {saving ? "Saving..." : saved ? "✓ Saved" : "Save profile"}
         </button>
       </form>
+    </div>
+  );
+}
+
+interface ApplicationDetails {
+  legalName: string | null;
+  phone: string | null;
+  dateOfBirth: string | null;
+  nationality: string | null;
+  idNumberMasked: string | null;
+}
+
+/**
+ * What this creator filled in when they applied — legal name and (for
+ * Founding Baddies applicants) phone, plus whatever real verification
+ * has been submitted (date of birth, nationality, ID number). All
+ * read-only: legal name/DOB/nationality/ID number only ever change
+ * through a real re-verification, never a form field here, per explicit
+ * product decision. Phone has no edit path either (nowhere else in this
+ * app collects/updates a phone number today) — shown for visibility,
+ * not because it's editable.
+ */
+function ApplicationDetailsPanel() {
+  const [data, setData] = useState<ApplicationDetails | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/creator/verification/identity-details")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (!cancelled && body) setData(body);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!data) return null;
+
+  const rows: { label: string; value: string }[] = [
+    { label: "Legal name", value: data.legalName ?? "Not on file" },
+    { label: "Phone", value: data.phone ?? "Not on file" },
+    { label: "Date of birth", value: data.dateOfBirth ? new Date(data.dateOfBirth).toLocaleDateString() : "Not submitted yet" },
+    { label: "Nationality", value: data.nationality ?? "Not submitted yet" },
+    { label: "ID number", value: data.idNumberMasked ?? "Not submitted yet" },
+  ];
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: "2rem" }}>
+      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Application details</h2>
+      <p style={{ color: "var(--text-muted)", fontSize: "0.82rem", margin: "0 0 1rem" }}>
+        From your creator application and identity verification. Can&apos;t be changed here.
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+        {rows.map((row) => (
+          <div key={row.label} style={{ display: "flex", justifyContent: "space-between", gap: "1rem", fontSize: "0.88rem" }}>
+            <span style={{ color: "var(--text-muted)" }}>{row.label}</span>
+            <span>{row.value}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

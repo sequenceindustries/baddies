@@ -80,7 +80,6 @@ export default function CreatorDashboardPage() {
   return (
     <main style={mainStyle}>
       <h1 style={displayHeadingStyle}>Creator Dashboard</h1>
-      {!user.emailVerified && <EmailVerificationBanner />}
       <StatusPanel status={status} />
 
       {active && (
@@ -107,36 +106,10 @@ export default function CreatorDashboardPage() {
   );
 }
 
-/**
- * Surfaces User.emailVerified — real for the first time on this
- * dashboard (see POST /api/founding/apply and /register, the two
- * account-creation routes that send this email); previously nothing on
- * /creator-dashboard showed this at all, so a Founding Baddie's real
- * account could sit unverified forever with no visible next step.
- */
-function EmailVerificationBanner() {
-  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
-
-  async function resend() {
-    setStatus("sending");
-    const res = await fetch("/api/auth/verify-email/resend", { method: "POST" });
-    setStatus(res.ok ? "sent" : "error");
-  }
-
-  return (
-    <div style={{ ...cardStyle, marginBottom: "1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
-      <div>
-        <p style={{ margin: 0, fontWeight: 600 }}>Verify your email</p>
-        <p style={{ ...mutedSmallStyle, marginTop: "0.2rem" }}>
-          {status === "sent" ? "Sent — check your inbox." : "We emailed you a verification link when you applied."}
-        </p>
-      </div>
-      <button onClick={resend} disabled={status === "sending" || status === "sent"} style={fileUploadButtonStyle}>
-        {status === "sending" ? "Sending…" : status === "sent" ? "Sent" : status === "error" ? "Try again" : "Resend email"}
-      </button>
-    </div>
-  );
-}
+// Email verification now lives only on /settings (Email section, with
+// its own Resend action) — removed from here to avoid showing the same
+// thing in two places once Settings became the real, canonical account
+// page for it.
 
 const tabBarStyle: React.CSSProperties = {
   display: "flex",
