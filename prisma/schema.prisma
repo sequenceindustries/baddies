@@ -213,6 +213,11 @@ enum LedgerEventType {
   PAYOUT
   PAYOUT_REVERSAL
   ADJUSTMENT
+  // Founding Partner commission entries — posted against the partner's
+  // own wallet, never the referred creator's. See PartnerCommission's
+  // own comment for the full model this pairs with.
+  PARTNER_COMMISSION
+  PARTNER_COMMISSION_REVERSAL
 }
 
 enum PayoutStatus {
@@ -876,6 +881,14 @@ model LedgerEntry {
 
   createdAt DateTime @default(now())
 
+  // Back-relation only (no column here) — set when this entry is the
+  // originating SUBSCRIPTION event a PartnerCommission was computed
+  // from (PartnerCommission.sourceLedgerEntryId), or the PARTNER_COMMISSION
+  // entry that actually credited the partner's wallet
+  // (PartnerCommission.payoutLedgerEntryId).
+  partnerCommissionSource PartnerCommission? @relation("PartnerCommissionSource")
+  partnerCommissionPayout PartnerCommission? @relation("PartnerCommissionPayout")
+
   @@index([walletId])
   @@index([creatorProfileId])
   @@index([type])
@@ -1034,6 +1047,7 @@ model FoundingApplication {
   banking              Banking?
   documents            IdentityDocument[]
   referralAttribution  ReferralAttribution?
+  abuseFlags           AbuseFlag[]
 
   @@index([status])
   @@index([email])
@@ -1323,9 +1337,9 @@ enum PartnerInvitationStatus {
 // purely as this invitation's own audit trail of who accepted with what
 // address.
 model PartnerInvitation {
-  id    String  @id @default(cuid())
-  name  String
-  email String?
+  id     String                  @id @default(cuid())
+  name   String
+  email  String?
   // Short, generated, human-shareable reference ("Invite #482917") so
   // an admin can refer to/track an invitation by something other than
   // an email address they may not have. Not itself a secret — the real
@@ -1343,6 +1357,15 @@ model PartnerInvitation {
   revokedBy   String? // admin User.id
   resentAt    DateTime?
   resendCount Int       @default(0)
+
+  // Admin-set explicit override of the 50-Founding-Partner cap (see
+  // FoundingPartner's own comment) — false for every ordinary invite;
+  // an admin flips this deliberately when they want this specific
+  // invitation to be acceptable even while the programme is at
+  // capacity. Checked at accept time, not at invite-creation time —
+  // creating an invite while at cap is always allowed (it's the
+  // waitlist), only accepting one is ever blocked.
+  capOverride Boolean @default(false)
 
   foundingPartner FoundingPartner?
 
@@ -1378,11 +1401,19 @@ model FoundingPartner {
   suspendedAt DateTime?
   suspendedBy String? // admin User.id
 
+  // Set once, at acceptance time, to this partner's rank among all
+  // acceptances so far ("Founding Partner #23 of 50") — never
+  // recomputed afterward, so it stays correct even if an earlier
+  // partner is later suspended.
+  joinedPositionNumber Int?
+
   referralAttributions ReferralAttribution[]
   ledgerEntries        LedgerEntry[]
+  abuseFlags           AbuseFlag[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  PartnerCommission PartnerCommission[]
 
   @@index([status])
   @@map("founding_partners")
@@ -1410,16 +1441,157 @@ model ReferralAttribution {
   correctedAt      DateTime?
   correctionReason String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // The referred creator's individual 12-month commission-earning
+  // window (Founding Partner Programme v2) — set lazily/idempotently
+  // the first time a real SUBSCRIPTION revenue event posts for this
+  // creator (see PartnerCommission's own comment for why "activation"
+  // is defined that way, not by an application/admin-status date).
+  // Both null until then; always set together.
+  earningPeriodStartAt DateTime?
+  earningPeriodEndAt   DateTime?
+
+  partnerCommissions PartnerCommission[]
+
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  AbuseFlag AbuseFlag[]
 
   @@index([foundingPartnerId])
   @@map("referral_attributions")
 }
 
+enum PartnerCommissionStatus {
+  PENDING
+  HELD
+  REVERSED
+}
+
+// One row per originating SUBSCRIPTION LedgerEntry (sourceLedgerEntryId
+// unique — never recomputed, only ever reversed via a new negative
+// entry). Deliberately has no PAYABLE/PAID status of its own: whether a
+// PENDING commission has cleared its hold window is answered by
+// recomputeWalletBalances's existing pending/available split on the
+// partner's own wallet (see payoutLedgerEntryId below), and whether it
+// has actually been paid out is answered by the existing Payout model —
+// storing either of those again here would be a second, driftable
+// source of truth for the same fact.
+model PartnerCommission {
+  id String @id @default(cuid())
+
+  foundingPartnerId String
+  foundingPartner   FoundingPartner @relation(fields: [foundingPartnerId], references: [id])
+
+  referralAttributionId String
+  referralAttribution   ReferralAttribution @relation(fields: [referralAttributionId], references: [id])
+
+  // The SUBSCRIPTION LedgerEntry this commission was computed from.
+  // Unique — a source entry produces at most one commission row, ever.
+  sourceLedgerEntryId String      @unique
+  sourceLedgerEntry   LedgerEntry @relation("PartnerCommissionSource", fields: [sourceLedgerEntryId], references: [id])
+
+  // The RevenueShareRule (type PARTNER_COMMISSION_RATE) row whose
+  // percentage was actually used, frozen at write time — same
+  // "resolved rule referenced by id, never just a bare number" pattern
+  // LedgerEntry itself already uses.
+  revenueShareRuleId String
+  revenueShareRule   RevenueShareRule @relation(fields: [revenueShareRuleId], references: [id])
+
+  netEligibleAmountUsd Decimal @db.Decimal(12, 2)
+  commissionAmountUsd  Decimal @db.Decimal(12, 2)
+  reversedAmountUsd    Decimal @default(0) @db.Decimal(12, 2)
+
+  status PartnerCommissionStatus @default(PENDING)
+
+  // The PARTNER_COMMISSION LedgerEntry that actually credited the
+  // partner's wallet for this commission. Unique — set once, never
+  // repointed.
+  payoutLedgerEntryId String?      @unique
+  payoutLedgerEntry   LedgerEntry? @relation("PartnerCommissionPayout", fields: [payoutLedgerEntryId], references: [id])
+
+  heldBy     String? // admin User.id
+  heldReason String?
+  heldAt     DateTime?
+
+  reversedAt     DateTime?
+  reversalReason String?
+
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  AbuseFlag AbuseFlag[]
+
+  @@index([foundingPartnerId])
+  @@index([status])
+  @@index([referralAttributionId])
+  @@map("partner_commissions")
+}
+
+enum AbuseFlagType {
+  SELF_REFERRAL_ATTEMPT
+  DUPLICATE_APPLICATION_ATTEMPT
+  MULTIPLE_ACCOUNTS_SAME_REFERRAL
+  SUSPICIOUS_REFUND_PATTERN
+  SUSPICIOUS_CHARGEBACK_PATTERN
+  MANUAL_REVIEW
+}
+
+enum AbuseFlagStatus {
+  OPEN
+  REVIEWING
+  DISMISSED
+  CONFIRMED
+}
+
+// Narrow, rule-based auto-flagging only (no ML/scoring) for
+// Founding-Partner-Programme-specific abuse patterns — general fake
+// accounts or general fraudulent payments stay the platform's existing
+// Report/moderation system's job, not duplicated here. Never
+// auto-confiscates anything on its own; a flag only ever prompts a
+// human review (see status).
+model AbuseFlag {
+  id     String          @id @default(cuid())
+  type   AbuseFlagType
+  status AbuseFlagStatus @default(OPEN)
+
+  foundingPartnerId String?
+  foundingPartner   FoundingPartner? @relation(fields: [foundingPartnerId], references: [id])
+
+  foundingApplicationId String?
+  foundingApplication   FoundingApplication? @relation(fields: [foundingApplicationId], references: [id])
+
+  referralAttributionId String?
+  referralAttribution   ReferralAttribution? @relation(fields: [referralAttributionId], references: [id])
+
+  partnerCommissionId String?
+  partnerCommission   PartnerCommission? @relation(fields: [partnerCommissionId], references: [id])
+
+  reason       String
+  autoDetected Boolean @default(false)
+
+  reviewedBy      String? // admin User.id
+  reviewedAt      DateTime?
+  resolutionNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([foundingPartnerId])
+  @@map("abuse_flags")
+}
+
 enum RevenueShareRuleType {
   STANDARD_CREATOR_SHARE
+  // No longer read by any live code path (see PartnerCommission's own
+  // comment on why: the Founding Partner Programme v2 model pays the
+  // *partner* a commission instead of boosting the creator's own
+  // share) — kept in the schema/enum forever since historical
+  // LedgerEntry.revenueShareRuleId rows already point at seeded rows
+  // of this type and must never dangle or be reinterpreted.
   PARTNER_REFERRED_CREATOR_SHARE
+  // The Founding Partner's own commission rate (10% of a referred
+  // creator's net eligible subscription revenue, for 12 months per
+  // referral) — see PartnerCommission.
+  PARTNER_COMMISSION_RATE
 }
 
 // Versioned commercial rules — deliberately NOT another PlatformSetting
@@ -1439,10 +1611,10 @@ model RevenueShareRule {
 
   createdAt DateTime @default(now())
 
-  ledgerEntries LedgerEntry[]
+  ledgerEntries      LedgerEntry[]
+  partnerCommissions PartnerCommission[]
 
   @@unique([type, version])
   @@index([type])
   @@map("revenue_share_rules")
 }
-

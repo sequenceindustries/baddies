@@ -126,4 +126,30 @@ export const AGREEMENTS: AgreementSeed[] = [
       "8. Changes. Baddies may update this agreement; continuing to participate in the programme after a new version takes effect means you accept it.",
     ].join("\n"),
   },
+  {
+    // v3 — not an edit of v2's bodyText, per this model's own versioning
+    // rule. Replaces the annual profit-pool mechanism (removed from the
+    // platform outright) with the real Founding Partner Programme v2
+    // model: a direct 10% commission on each personally-referred
+    // creator's own net eligible subscription revenue, for 12 months per
+    // referral. This is a genuine compensation-model change, not a
+    // wording fix, so every prior acceptance still correctly refers to
+    // the profit-pool terms a partner actually agreed to at the time.
+    type: "PARTNER_AGREEMENT",
+    version: "v3",
+    title: "Founding Partner Agreement",
+    bodyText: [
+      DRAFT_NOTICE,
+      "",
+      "1. The programme. Baddies is inviting up to 50 Founding Partners to help bring the first 300 Founding Baddies onto the platform.",
+      "2. Referral relationship. Each Founding Partner receives a unique referral link and code. A creator who applies through that link is attributed to that Partner for as long as the attribution stands; Baddies may correct an attribution, always with a recorded reason. This is a direct referral relationship only — you are compensated solely for creators you personally bring to Baddies, never for creators referred by anyone else.",
+      "3. Commission. For each creator attributed to you, you earn 10% of that creator's own net eligible subscription revenue (after refunds, chargebacks, and other adjustments), for the 12 months starting when that creator's first subscription payment is recorded. Each referral has its own separate 12-month period. The creator's own share of their revenue is unaffected by your commission and is never reduced because of the referral.",
+      "4. Payment. Commission is not paid immediately on each transaction. It is recorded to your account, held for a short review period to account for refunds and chargebacks, and becomes available for payout once that period passes. You can request payout of any available balance from your Founding Partner dashboard.",
+      "5. No guarantee. Nothing in this agreement guarantees any referral, any creator's success, or any minimum amount of commission.",
+      "6. Fair use. Baddies may review, hold, or reverse a commission it reasonably believes resulted from a self-referral, a duplicate or fraudulent account, or other misuse of the referral system, and will tell you why. Baddies will not take back a commission it has already determined to be legitimate.",
+      "7. Confidentiality. Referral data, other Partners' information, and any commercial terms shared with you as a Partner are confidential and must not be shared outside the programme.",
+      "8. Standing. Baddies may suspend a Founding Partner's status for a violation of this agreement or of the Content Policy; suspension ends future referral attribution but does not undo commission already earned and recorded before the suspension.",
+      "9. Changes. Baddies may update this agreement; continuing to participate in the programme after a new version takes effect means you accept it.",
+    ].join("\n"),
+  },
 ];

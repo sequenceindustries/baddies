@@ -28,6 +28,17 @@ export const BUSINESS_CONFIG_KEYS = {
   // goal, not a pricing/revenue rule, but the same "don't hard-code
   // business numbers in dashboard code" reasoning applies.
   FOUNDING_BADDIES_TARGET: "founding_baddies.target",
+  // Founding Partner Programme v2 — the hard cap on ACTIVE FoundingPartner
+  // rows, enforced at invite-acceptance time (see
+  // POST /api/partner-invite/accept). Creating an invitation is never
+  // blocked by this — a PENDING invite while at cap is the waitlist.
+  FOUNDING_PARTNERS_LIMIT: "founding_partners.limit",
+  // How many days a posted PARTNER_COMMISSION ledger entry sits in
+  // recomputeWalletBalances's "pending" bucket before it becomes
+  // available for payout — longer than creators' own 3-day default
+  // since a partner's commission additionally depends on the
+  // underlying creator payment itself clearing refund/chargeback risk.
+  PARTNER_COMMISSION_HOLD_DAYS: "partner_commission.hold_days",
   // MASTER REQUIREMENTS §11 — "Build the data model so trial rules can
   // be changed later... Do not hardcode the trial logic." TRIAL_ENABLED
   // is a simple kill switch; TRIAL_DURATION_HOURS controls how long a
@@ -51,7 +62,12 @@ export const DEFAULT_BUSINESS_CONFIG: Record<BusinessConfigKey, string> = {
   // See src/lib/entitlements/unlimited.ts — "consumption" is the initial
   // allocation model per build brief §2, but the engine is pluggable.
   [BUSINESS_CONFIG_KEYS.UNLIMITED_ALLOCATION_MODEL]: "consumption",
-  [BUSINESS_CONFIG_KEYS.FOUNDING_BADDIES_TARGET]: "50",
+  // Bumped 50 -> 300 for the Founding Partner Programme v2 relaunch
+  // (see prisma/migrations/*_founding_partner_commissions_phase1 for the
+  // guarded one-time backfill of any already-seeded platform_settings row).
+  [BUSINESS_CONFIG_KEYS.FOUNDING_BADDIES_TARGET]: "300",
+  [BUSINESS_CONFIG_KEYS.FOUNDING_PARTNERS_LIMIT]: "50",
+  [BUSINESS_CONFIG_KEYS.PARTNER_COMMISSION_HOLD_DAYS]: "30",
   [BUSINESS_CONFIG_KEYS.TRIAL_ENABLED]: "true",
   [BUSINESS_CONFIG_KEYS.TRIAL_DURATION_HOURS]: "24",
 };
