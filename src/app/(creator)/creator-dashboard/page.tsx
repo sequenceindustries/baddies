@@ -285,6 +285,7 @@ interface CreatorStats {
   publishedCount: number;
   totalCount: number;
   totalLikes: number;
+  referredByPartner: boolean;
 }
 
 /** Overview's at-a-glance numbers — see GET /api/creator/stats for what each figure means and why it's computed separately from the public creator-profile endpoint. */
@@ -311,6 +312,14 @@ function StatsPanel() {
         <WalletStat label="Total uploads" value={stats.totalCount} format="int" />
         <WalletStat label="Total likes" value={stats.totalLikes} format="int" />
       </div>
+      {/* Founding Partner Programme v2, spec §11 — quiet and private
+          only: no partner identity, no incentive language, no public
+          badge. Baddies stays a creator subscription platform first. */}
+      {stats.referredByPartner && (
+        <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", margin: "0.85rem 0 0" }}>
+          You joined Baddies through a Founding Partner referral.
+        </p>
+      )}
     </div>
   );
 }

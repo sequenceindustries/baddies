@@ -27,15 +27,25 @@ export async function GET() {
     return NextResponse.json({ error: "No creator profile found." }, { status: 404 });
   }
 
-  const [followerCount, subscriberCount, publishedCount, totalCount, totalLikes] = await Promise.all([
-    db.follow.count({ where: { creatorProfileId: creatorProfile.id } }),
-    db.subscription.count({ where: { creatorProfileId: creatorProfile.id, status: "ACTIVE" } }),
-    db.content.count({
-      where: { creatorProfileId: creatorProfile.id, status: "APPROVED", publishedAt: { not: null } },
-    }),
-    db.content.count({ where: { creatorProfileId: creatorProfile.id, status: { not: "REMOVED" } } }),
-    db.contentLike.count({ where: { content: { creatorProfileId: creatorProfile.id } } }),
-  ]);
+  const [followerCount, subscriberCount, publishedCount, totalCount, totalLikes, foundingApplication] =
+    await Promise.all([
+      db.follow.count({ where: { creatorProfileId: creatorProfile.id } }),
+      db.subscription.count({ where: { creatorProfileId: creatorProfile.id, status: "ACTIVE" } }),
+      db.content.count({
+        where: { creatorProfileId: creatorProfile.id, status: "APPROVED", publishedAt: { not: null } },
+      }),
+      db.content.count({ where: { creatorProfileId: creatorProfile.id, status: { not: "REMOVED" } } }),
+      db.contentLike.count({ where: { content: { creatorProfileId: creatorProfile.id } } }),
+      // Founding Partner Programme v2, spec §11 — a quiet, private signal
+      // only (no partner identity, no incentive language, no public
+      // badge): bridged by email, same pattern resolveCreatorRevenueShare
+      // itself uses, since a Founding Baddie's application predates their
+      // real account and has no direct FK to it.
+      db.foundingApplication.findFirst({
+        where: { email: user.email },
+        select: { referralAttribution: { select: { id: true } } },
+      }),
+    ]);
 
   return NextResponse.json({
     followerCount,
@@ -43,5 +53,6 @@ export async function GET() {
     publishedCount,
     totalCount,
     totalLikes,
+    referredByPartner: !!foundingApplication?.referralAttribution,
   });
 }
