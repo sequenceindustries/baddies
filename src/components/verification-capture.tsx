@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cardStyle, Field, inputStyle, primaryButtonStyle, errorBannerStyle, ImageUploadField } from "@/components/ui";
+import { parseSaIdDateOfBirth } from "@/lib/identity/sa-id";
 
 type CheckState = "NOT_STARTED" | "PENDING" | "IN_PROGRESS" | "PASSED" | "FAILED" | "EXPIRED" | "MANUAL_REVIEW";
 type StepStatus = "locked" | "todo" | "submitted" | "passed" | "failed";
@@ -96,11 +97,27 @@ function summaryLineStyle(): React.CSSProperties {
 
 function StepDetails({ status, onSubmitted }: { status: StepStatus; onSubmitted: () => void }) {
   const [dateOfBirth, setDateOfBirth] = useState("");
-  const [nationality, setNationality] = useState("");
+  // Defaults to South Africa — every creator on this platform is South
+  // African (see /founding-baddies' own "no exceptions" copy), so this
+  // is the overwhelmingly common case; still a plain editable field for
+  // the rare exception.
+  const [nationality, setNationality] = useState("South Africa");
   const [idNumber, setIdNumber] = useState("");
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // A South African ID number's first 6 digits already encode date of
+  // birth (YYMMDD) — reading it back the moment a valid one is typed
+  // means most creators never have to touch the date field at all.
+  // Still just an assist: the field stays editable so someone can
+  // correct it (a passport number parses to null and leaves whatever's
+  // already there untouched).
+  function handleIdNumberChange(value: string) {
+    setIdNumber(value);
+    const parsedDob = parseSaIdDateOfBirth(value);
+    if (parsedDob) setDateOfBirth(parsedDob);
+  }
 
   if (status === "submitted" || status === "passed") {
     return (
@@ -143,7 +160,17 @@ function StepDetails({ status, onSubmitted }: { status: StepStatus; onSubmitted:
       )}
       {error && <div style={errorBannerStyle}>{error}</div>}
       <form onSubmit={handleSubmit}>
-        <Field label="Date of birth">
+        <Field label="ID / passport number" hint="Encrypted at rest. Never shown publicly.">
+          <input
+            style={inputStyle}
+            value={idNumber}
+            onChange={(e) => handleIdNumberChange(e.target.value)}
+            minLength={3}
+            maxLength={50}
+            required
+          />
+        </Field>
+        <Field label="Date of birth" hint="Filled in automatically from a South African ID number.">
           <input
             type="date"
             style={inputStyle}
@@ -162,22 +189,13 @@ function StepDetails({ status, onSubmitted }: { status: StepStatus; onSubmitted:
             required
           />
         </Field>
-        <Field label="ID / passport number" hint="Encrypted at rest. Never shown publicly.">
-          <input
-            style={inputStyle}
-            value={idNumber}
-            onChange={(e) => setIdNumber(e.target.value)}
-            minLength={3}
-            maxLength={50}
-            required
-          />
-        </Field>
         <ImageUploadField
           label="ID document"
           hint="A clear photo of your government ID or passport."
           value={documentUrl}
           onChange={setDocumentUrl}
           shape="rect"
+          centered
         />
         <button type="submit" style={primaryButtonStyle} disabled={submitting}>
           {submitting ? "Submitting..." : "Continue"}
@@ -304,15 +322,17 @@ function StepIdentityAge({ status, onSubmitted }: { status: StepStatus; onSubmit
       {error && <div style={errorBannerStyle}>{error}</div>}
 
       {!active && !captured && (
-        <button type="button" onClick={() => setActive(true)} style={{ ...primaryButtonStyle, width: "auto" }}>
-          Start
-        </button>
+        <div style={centeredButtonWrapStyle}>
+          <button type="button" onClick={() => setActive(true)} style={{ ...primaryButtonStyle, width: "auto" }}>
+            Start
+          </button>
+        </div>
       )}
 
       {active && !captured && !error && (
         <>
           <video ref={videoRef} autoPlay playsInline muted style={captureMediaStyle} />
-          <div style={{ marginTop: "0.8rem" }}>
+          <div style={centeredButtonWrapStyle}>
             <button type="button" onClick={handleCapture} style={{ ...primaryButtonStyle, width: "auto" }}>
               Capture
             </button>
@@ -324,7 +344,7 @@ function StepIdentityAge({ status, onSubmitted }: { status: StepStatus; onSubmit
         <>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={captured} alt="Captured selfie holding ID" style={captureMediaStyle} />
-          <div style={{ marginTop: "0.8rem", display: "flex", gap: "0.5rem" }}>
+          <div style={captureActionRowStyle}>
             <button
               type="button"
               onClick={handleSubmit}
@@ -474,15 +494,17 @@ function StepLiveness({ status, onSubmitted }: { status: StepStatus; onSubmitted
       {error && <div style={errorBannerStyle}>{error}</div>}
 
       {!active && !recordedUrl && (
-        <button type="button" onClick={() => setActive(true)} style={{ ...primaryButtonStyle, width: "auto" }}>
-          Start
-        </button>
+        <div style={centeredButtonWrapStyle}>
+          <button type="button" onClick={() => setActive(true)} style={{ ...primaryButtonStyle, width: "auto" }}>
+            Start
+          </button>
+        </div>
       )}
 
       {active && !recordedUrl && (
         <>
           <video ref={videoRef} autoPlay playsInline muted style={captureMediaStyle} />
-          <div style={{ marginTop: "0.8rem" }}>
+          <div style={centeredButtonWrapStyle}>
             <button
               type="button"
               onClick={startRecording}
@@ -498,7 +520,7 @@ function StepLiveness({ status, onSubmitted }: { status: StepStatus; onSubmitted
       {recordedUrl && (
         <>
           <video src={recordedUrl} controls style={captureMediaStyle} />
-          <div style={{ marginTop: "0.8rem", display: "flex", gap: "0.5rem" }}>
+          <div style={captureActionRowStyle}>
             <button
               type="button"
               onClick={handleSubmit}
@@ -523,6 +545,25 @@ const captureMediaStyle: React.CSSProperties = {
   borderRadius: "var(--radius)",
   background: "#000",
   display: "block",
+  margin: "0 auto",
+};
+
+// For a single centered action button (Start/Capture/Record 6s video)
+// sitting below the (also centered) camera preview.
+const centeredButtonWrapStyle: React.CSSProperties = {
+  marginTop: "0.8rem",
+  textAlign: "center",
+};
+
+// For the Submit/Retake pair once something's been captured — same
+// 420px width as the media above so the row lines up under it instead
+// of stretching across the whole card.
+const captureActionRowStyle: React.CSSProperties = {
+  marginTop: "0.8rem",
+  display: "flex",
+  gap: "0.5rem",
+  maxWidth: "420px",
+  margin: "0.8rem auto 0",
 };
 
 const secondaryButtonStyle: React.CSSProperties = {

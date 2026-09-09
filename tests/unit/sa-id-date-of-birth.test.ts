@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseSaIdDateOfBirth } from "@/app/founding-baddies/ApplicationNextSteps";
+import { parseSaIdDateOfBirth } from "@/lib/identity/sa-id";
 
 describe("parseSaIdDateOfBirth", () => {
   it("reads a 1900s birthdate from the first 6 digits", () => {

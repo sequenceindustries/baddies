@@ -12,7 +12,7 @@ import { useSession, displayHeadingStyle, cardStyle, Field, inputStyle, primaryB
  * its own real functions, not just a renamed heading.
  */
 export default function SettingsPage() {
-  const { user, loading } = useSession();
+  const { user, loading, refresh } = useSession();
 
   if (loading) return <main style={mainStyle} />;
   if (!user) {
@@ -31,10 +31,61 @@ export default function SettingsPage() {
           Edit profile →
         </Link>
       </div>
+      <AccountOverviewPanel role={user.role} createdAt={user.createdAt} onSignOut={refresh} />
       <AccountEmailPanel email={user.email} emailVerified={user.emailVerified} isCreator={Boolean(user.creatorProfile)} />
       <ChangePasswordPanel />
       <SessionsPanel />
     </main>
+  );
+}
+
+const ROLE_LABEL: Record<"FAN" | "CREATOR" | "ADMIN" | "PARTNER", string> = {
+  FAN: "Fan",
+  CREATOR: "Creator",
+  ADMIN: "Admin",
+  PARTNER: "Founding Partner",
+};
+
+/**
+ * A quick account summary + sign-out, right at the top — this page used
+ * to jump straight into Email with nothing establishing "this is your
+ * account" first, and Sign out otherwise only ever lived in the nav's
+ * account menu, easy to miss on a page whose whole job is account
+ * management.
+ */
+function AccountOverviewPanel({
+  role,
+  createdAt,
+  onSignOut,
+}: {
+  role: "FAN" | "CREATOR" | "ADMIN" | "PARTNER";
+  createdAt: string;
+  onSignOut: () => void;
+}) {
+  const [signingOut, setSigningOut] = useState(false);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    await fetch("/api/auth/logout", { method: "POST" });
+    onSignOut();
+    window.location.href = "/";
+  }
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: "1.5rem" }}>
+      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Account</h2>
+      <p style={{ margin: 0, fontSize: "0.92rem" }}>{ROLE_LABEL[role]} account</p>
+      <p style={{ ...mutedSmallStyle, marginTop: "0.4rem" }}>
+        Member since {new Date(createdAt).toLocaleDateString(undefined, { year: "numeric", month: "long" })}
+      </p>
+      <button
+        onClick={handleSignOut}
+        disabled={signingOut}
+        style={{ ...secondaryButtonStyle, marginTop: "1rem" }}
+      >
+        {signingOut ? "Signing out…" : "Sign out"}
+      </button>
+    </div>
   );
 }
 

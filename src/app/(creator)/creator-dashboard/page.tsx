@@ -93,11 +93,21 @@ export default function CreatorDashboardPage() {
             ))}
           </div>
 
+          {/* Repeats regardless of which tab is open — StatusPanel's own
+              message is easy to lose sight of once you've scrolled down
+              into Content or Overview, and Content in particular still
+              shows the full upload form to a not-yet-verified creator
+              (the real gate is server-side, on submit) with nothing
+              nearby saying they can't actually publish yet. */}
+          {(status === "PENDING" || status === "VERIFICATION_REQUIRED" || status === "UNDER_REVIEW") && (
+            <PendingVerificationNotice status={status} />
+          )}
+
           {tab === "overview" && (
-            <>
+            <div style={overviewGridStyle}>
               <OnboardingChecklist />
               <StatsPanel />
-            </>
+            </div>
           )}
           {tab === "content" && <ContentPanel />}
           {tab === "settings" && <CreatorSettingsPanel />}
@@ -114,9 +124,60 @@ export default function CreatorDashboardPage() {
 
 const tabBarStyle: React.CSSProperties = {
   display: "flex",
+  justifyContent: "center",
   gap: "0.5rem",
   marginBottom: "1.75rem",
   flexWrap: "wrap",
+};
+
+/**
+ * A short, persistent reminder that stays visible under the tab bar no
+ * matter which tab is open — StatusPanel's own message up top is easy
+ * to lose sight of once you've scrolled into Content or Overview, and
+ * Content in particular still shows the full upload form to a
+ * not-yet-verified creator (the real gate is server-side, on submit).
+ */
+function PendingVerificationNotice({
+  status,
+}: {
+  status: "PENDING" | "VERIFICATION_REQUIRED" | "UNDER_REVIEW";
+}) {
+  const copy: Record<typeof status, string> = {
+    PENDING: "Application pending — content and stats unlock once you're verified.",
+    VERIFICATION_REQUIRED: "Verification pending — finish the steps above before you can publish.",
+    UNDER_REVIEW: "Verification submitted — awaiting admin review before you can publish.",
+  };
+  return (
+    <div style={pendingNoticeStyle}>
+      <span aria-hidden="true">⏳</span> {copy[status]}
+    </div>
+  );
+}
+
+const pendingNoticeStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "0.5rem",
+  textAlign: "center",
+  background: "var(--surface)",
+  color: "var(--accent)",
+  borderRadius: "999px",
+  padding: "0.6rem 1.2rem",
+  fontSize: "0.85rem",
+  fontWeight: 600,
+  marginBottom: "1.75rem",
+  boxShadow: "var(--glow)",
+};
+
+// Side by side on wide screens (Get discovered left, Stats right),
+// stacking to one column on narrow ones — same two-column pattern as
+// the landing page's "how it works" sections.
+const overviewGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+  gap: "1.5rem",
+  alignItems: "start",
 };
 
 function tabButtonStyle(active: boolean): React.CSSProperties {
@@ -166,7 +227,7 @@ function OnboardingChecklist() {
   if (doneCount === items.length) return null; // fully set up — no need to keep nudging
 
   return (
-    <div style={{ ...cardStyle, marginBottom: "2rem" }}>
+    <div style={cardStyle}>
       <h2 style={{ ...sectionHeadingStyle, marginTop: 0, marginBottom: "0.3rem" }}>Get discovered</h2>
       <p style={{ ...mutedSmallStyle, marginTop: 0, marginBottom: "1rem" }}>
         {doneCount} of {items.length} set up — finish these to look your best to fans and other Founding baddies.
@@ -219,7 +280,7 @@ function StatsPanel() {
   if (!stats) return null;
 
   return (
-    <div style={{ ...cardStyle, marginBottom: "2rem" }}>
+    <div style={cardStyle}>
       <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Stats</h2>
       <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
         <WalletStat label="Followers" value={stats.followerCount} format="int" />

@@ -41,7 +41,12 @@ export default function ProfilePage() {
           Account settings →
         </Link>
       </div>
-      <AccountTypePanel role={user.role} creatorProfile={user.creatorProfile} foundingPartner={user.foundingPartner} />
+      <AccountTypePanel
+        role={user.role}
+        creatorProfile={user.creatorProfile}
+        foundingPartner={user.foundingPartner}
+        createdAt={user.createdAt}
+      />
       <ProfileSettings />
       {user.creatorProfile && <ApplicationDetailsPanel />}
     </main>
@@ -57,10 +62,12 @@ function AccountTypePanel({
   role,
   creatorProfile,
   foundingPartner,
+  createdAt,
 }: {
   role: "FAN" | "CREATOR" | "ADMIN" | "PARTNER";
   creatorProfile: { id: string; status: string } | null;
   foundingPartner: { id: string; status: string } | null;
+  createdAt: string;
 }) {
   // foundingPartner and creatorProfile are independent — an account can
   // hold both (a Founding Partner who's also applied as a creator; see
@@ -101,6 +108,10 @@ function AccountTypePanel({
     <div style={{ ...cardStyle, marginBottom: "2rem" }}>
       <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>{heading}</h2>
       <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", margin: 0 }}>{body}</p>
+      <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", margin: "0.5rem 0 0" }}>
+        Member since{" "}
+        {new Date(createdAt).toLocaleDateString(undefined, { year: "numeric", month: "long" })}
+      </p>
       {!creatorProfile && role !== "ADMIN" && (
         <Link href="/apply" style={linkStyle}>
           Become a creator →

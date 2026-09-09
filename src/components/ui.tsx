@@ -10,6 +10,7 @@ export interface SessionUser {
   role: "FAN" | "CREATOR" | "ADMIN" | "PARTNER";
   displayName: string | null;
   emailVerified: boolean;
+  createdAt: string;
   creatorProfile: { id: string; status: string; isFoundingBaddie: boolean } | null;
   // Independent of role, same reason creatorProfile is: an account can
   // hold both a FoundingPartner row and (once applied) a CreatorProfile
@@ -758,12 +759,18 @@ export function ImageUploadField({
   value,
   onChange,
   shape = "circle",
+  centered = false,
 }: {
   label: string;
   hint?: string;
   value: string | null;
   onChange: (dataUrl: string | null) => void;
   shape?: "circle" | "rect";
+  // Centers the preview + upload button row instead of the default
+  // left alignment — opt-in so avatar/featured-image pickers elsewhere
+  // keep their existing layout; only the verification flow's ID-document
+  // upload asks for this today.
+  centered?: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
 
@@ -787,7 +794,7 @@ export function ImageUploadField({
 
   return (
     <Field label={label} hint={hint ?? "JPG, PNG, or WebP, up to 2MB."} error={error ?? undefined}>
-      <div style={imageUploadRowStyle}>
+      <div style={centered ? { ...imageUploadRowStyle, justifyContent: "center" } : imageUploadRowStyle}>
         <div style={shape === "circle" ? imageUploadPreviewCircleStyle : imageUploadPreviewRectStyle}>
           {value ? (
             // eslint-disable-next-line @next/next/no-img-element

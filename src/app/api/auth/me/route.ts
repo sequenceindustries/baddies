@@ -36,6 +36,7 @@ export async function GET() {
                 role: user.role,
                 displayName: profile?.displayName ?? null,
                 emailVerified: user.emailVerified !== null,
+                createdAt: user.createdAt.toISOString(),
                 creatorProfile: creatorProfile ?? null,
                 foundingPartner: foundingPartner ?? null,
         },

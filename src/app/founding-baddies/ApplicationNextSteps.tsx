@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { parseSaIdDateOfBirth } from "@/lib/identity/sa-id";
 
 /**
  * The "verify & upload" step shown right after a successful application
@@ -83,43 +84,15 @@ function StepStatus({ done, label }: { done: boolean; label: string }) {
   );
 }
 
-/**
- * Reads a South African 13-digit ID number's first 6 digits (YYMMDD) and
- * returns the birthdate as "YYYY-MM-DD" for the date input above, or
- * null if those digits don't form a real calendar date (a passport
- * number, a still-incomplete ID number mid-typing, etc.) — the century
- * itself isn't encoded in the number, so this uses the same two-digit-
- * year heuristic every SA ID parser does: a YY greater than the current
- * two-digit year is assumed to be 19XX, otherwise 20XX. It's an assist,
- * not a source of truth — the date field stays editable so an applicant
- * can correct it if the guess lands on the wrong century.
- */
-export function parseSaIdDateOfBirth(idNumber: string): string | null {
-  const digits = idNumber.replace(/\s/g, "");
-  if (!/^\d{13}$/.test(digits)) return null;
-
-  const yy = Number(digits.slice(0, 2));
-  const mm = Number(digits.slice(2, 4));
-  const dd = Number(digits.slice(4, 6));
-  if (mm < 1 || mm > 12) return null;
-
-  const currentYY = new Date().getFullYear() % 100;
-  const century = yy > currentYY ? 1900 : 2000;
-  const year = century + yy;
-
-  const parsed = new Date(Date.UTC(year, mm - 1, dd));
-  const isRealDate =
-    parsed.getUTCFullYear() === year && parsed.getUTCMonth() === mm - 1 && parsed.getUTCDate() === dd;
-  if (!isRealDate) return null;
-
-  return `${year}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
-}
-
 function IdentityForm({ applicationId, onSubmitted }: { applicationId: string; onSubmitted: () => void }) {
   const router = useRouter();
   const [legalName, setLegalName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
-  const [nationality, setNationality] = useState("");
+  // Defaults to South Africa — this whole campaign is South-African-
+  // creators-only (see the application form's own "no exceptions"
+  // copy), so it's the overwhelmingly common case; still a plain
+  // editable text field for the rare exception.
+  const [nationality, setNationality] = useState("South Africa");
   const [idNumber, setIdNumber] = useState("");
   const [idDocument, setIdDocument] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
