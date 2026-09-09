@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { NOT_SOUTH_AFRICA_MESSAGE } from "@/lib/security/geo";
 import { LocationField } from "@/components/ui";
-import ApplicationNextSteps from "./ApplicationNextSteps";
 
 /**
  * The Founding Baddies recruitment campaign — landing page + application
@@ -193,6 +192,7 @@ type PlatformState = Record<string, PlatformEntry>;
 const EMPTY_ENTRY: PlatformEntry = { handle: "", link: "", followers: "", customName: "" };
 
 function ApplicationForm() {
+  const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [stageName, setStageName] = useState("");
   const [email, setEmail] = useState("");
@@ -210,12 +210,11 @@ function ApplicationForm() {
   const [website, setWebsite] = useState(""); // honeypot — see hidden field below
 
   const [submitting, setSubmitting] = useState(false);
+  // Only ever drives the brief "Taking you to your dashboard…" message
+  // below, for the gap between a successful submit and router.push
+  // actually landing — see handleSubmit.
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Set on a successful submit — drives the step-2 "verify & upload"
-  // panel below (see ApplicationNextSteps). Not sensitive: it's an
-  // unguessable cuid.
-  const [applicationId, setApplicationId] = useState<string | null>(null);
 
   // Client-side heads-up only, not the enforcement — fails open (assumes
   // eligible) on a slow/failed check so a network hiccup never blocks a
@@ -296,21 +295,36 @@ function ApplicationForm() {
     }
 
     const body: { applicationId?: string } = await res.json().catch(() => ({}));
-    setApplicationId(body.applicationId ?? null);
+    if (!body.applicationId) {
+      setError("Something went wrong submitting your application. Please try again.");
+      return;
+    }
     setSubmitted(true);
+    // Straight to the applicant's own dashboard rather than an inline
+    // "next steps" panel on this same marketing/apply page — this used
+    // to render the identity-upload form right here, which meant a real
+    // dead end the moment email verification became a hard requirement
+    // for it (see ApplicationNextSteps' own comment): someone could fill
+    // out the whole identity form and only find out it's blocked after
+    // hitting Submit, stranded on the apply page with no obvious next
+    // step. The dashboard is the one canonical place this now happens,
+    // consistent with where the identity form's own submit already sends
+    // people (see IdentityForm in ApplicationNextSteps.tsx), and it's
+    // where the "verify your email first" lock message actually belongs.
+    router.push(`/founding-baddies/dashboard?id=${body.applicationId}`);
   }
 
+  // Covers the brief gap between a successful submit and router.push
+  // actually landing on the dashboard — without this, the form (still
+  // full of what they just typed) would flash back on screen for a
+  // moment instead of a clean handoff.
   if (submitted) {
     return (
       <section id="apply" style={{ ...sectionStyle, ...formSectionStyle }}>
         <div style={successCardStyle}>
           <h2 style={sectionHeadingStyle}>Application received</h2>
-          <p style={tierDescStyle}>
-            Thank you for applying to become a Founding baddie. Our team reviews every application
-            personally — we&apos;ll reach out by email or WhatsApp once yours has been reviewed.
-          </p>
+          <p style={tierDescStyle}>Taking you to your dashboard…</p>
         </div>
-        {applicationId && <ApplicationNextSteps applicationId={applicationId} />}
       </section>
     );
   }
