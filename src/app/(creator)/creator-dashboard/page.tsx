@@ -80,6 +80,7 @@ export default function CreatorDashboardPage() {
   return (
     <main style={mainStyle}>
       <h1 style={displayHeadingStyle}>Creator Dashboard</h1>
+      {!user.emailVerified && <EmailVerificationBanner />}
       <StatusPanel status={status} />
 
       {active && (
@@ -96,7 +97,6 @@ export default function CreatorDashboardPage() {
             <>
               <OnboardingChecklist />
               <StatsPanel />
-              <WalletPanel />
             </>
           )}
           {tab === "content" && <ContentPanel />}
@@ -104,6 +104,37 @@ export default function CreatorDashboardPage() {
         </>
       )}
     </main>
+  );
+}
+
+/**
+ * Surfaces User.emailVerified — real for the first time on this
+ * dashboard (see POST /api/founding/apply and /register, the two
+ * account-creation routes that send this email); previously nothing on
+ * /creator-dashboard showed this at all, so a Founding Baddie's real
+ * account could sit unverified forever with no visible next step.
+ */
+function EmailVerificationBanner() {
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+
+  async function resend() {
+    setStatus("sending");
+    const res = await fetch("/api/auth/verify-email/resend", { method: "POST" });
+    setStatus(res.ok ? "sent" : "error");
+  }
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: "1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+      <div>
+        <p style={{ margin: 0, fontWeight: 600 }}>Verify your email</p>
+        <p style={{ ...mutedSmallStyle, marginTop: "0.2rem" }}>
+          {status === "sent" ? "Sent — check your inbox." : "We emailed you a verification link when you applied."}
+        </p>
+      </div>
+      <button onClick={resend} disabled={status === "sending" || status === "sent"} style={fileUploadButtonStyle}>
+        {status === "sending" ? "Sending…" : status === "sent" ? "Sent" : status === "error" ? "Try again" : "Resend email"}
+      </button>
+    </div>
   );
 }
 
@@ -127,17 +158,6 @@ function tabButtonStyle(active: boolean): React.CSSProperties {
   };
 }
 
-interface WalletBalances {
-  pendingBalanceUsd: number;
-  availableBalanceUsd: number;
-  paidBalanceUsd: number;
-}
-
-/**
- * Read-model display — balances are derived from LedgerEntry history by
- * src/lib/ledger/service.ts#recomputeWalletBalances, recomputed on every
- * dummy checkout (see src/app/api/checkout/*) and every payout approval.
- */
 /**
  * Phase 4's onboarding checklist — reuses three endpoints the rest of
  * the dashboard already calls (no new backend needed): /api/profile for
@@ -238,58 +258,9 @@ function StatsPanel() {
   );
 }
 
-function WalletPanel() {
-  const [wallet, setWallet] = useState<WalletBalances | null>(null);
-  const [requesting, setRequesting] = useState(false);
-  const [payoutMessage, setPayoutMessage] = useState<string | null>(null);
-
-  function reload() {
-    fetch("/api/creator/wallet")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((body) => {
-        if (body) setWallet(body);
-      });
-  }
-
-  useEffect(reload, []);
-
-  async function requestPayout() {
-    setRequesting(true);
-    setPayoutMessage(null);
-    const res = await fetch("/api/creator/payout", { method: "POST" });
-    setRequesting(false);
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      setPayoutMessage(body?.error ?? "Payout request failed.");
-      return;
-    }
-    const body = await res.json();
-    setPayoutMessage(`✓ Requested $${body.amountUsd.toFixed(2)} — awaiting admin approval.`);
-    reload();
-  }
-
-  if (!wallet) return null;
-
-  return (
-    <div style={{ ...cardStyle, marginBottom: "2rem" }}>
-      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Wallet</h2>
-      <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap", alignItems: "flex-end" }}>
-        <WalletStat label="Available" value={wallet.availableBalanceUsd} />
-        <WalletStat label="Pending" value={wallet.pendingBalanceUsd} />
-        <WalletStat label="Paid out" value={wallet.paidBalanceUsd} />
-        {wallet.availableBalanceUsd > 0 && (
-          <button onClick={requestPayout} disabled={requesting} style={publishButtonStyle}>
-            {requesting ? "..." : "Request payout"}
-          </button>
-        )}
-      </div>
-      {payoutMessage && <p style={{ ...mutedSmallStyle, marginTop: "0.75rem", marginBottom: 0 }}>{payoutMessage}</p>}
-      <p style={{ ...mutedSmallStyle, marginTop: "0.85rem", marginBottom: 0 }}>
-        Derived from ledger events (Exclusive subscriptions, tips, payouts).
-      </p>
-    </div>
-  );
-}
+// Wallet moved to its own page (src/app/wallet/page.tsx), reached from
+// the nav's account menu ("Wallet ($balance)") — no longer a card on
+// this dashboard's Overview tab.
 
 function WalletStat({
   label,

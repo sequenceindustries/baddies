@@ -35,6 +35,7 @@ export async function GET() {
                 email: user.email,
                 role: user.role,
                 displayName: profile?.displayName ?? null,
+                emailVerified: user.emailVerified !== null,
                 creatorProfile: creatorProfile ?? null,
                 foundingPartner: foundingPartner ?? null,
         },

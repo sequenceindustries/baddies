@@ -9,7 +9,7 @@ import {
   NOT_SOUTH_AFRICA_MESSAGE,
 } from "@/lib/security/geo";
 import { notifyFoundingApplicationReceived } from "@/lib/notifications/founding-application";
-import { sendFoundingEmailVerification } from "@/lib/notifications/email-verification";
+import { sendUserEmailVerification } from "@/lib/notifications/user-email-verification";
 import { getWhatsappProvider } from "@/lib/providers/whatsapp";
 import { resolveReferralAttribution } from "@/lib/founding/referral-attribution";
 import { checkRateLimitByIp, rateLimitResponse } from "@/lib/security/rate-limit";
@@ -241,7 +241,12 @@ export async function POST(req: NextRequest) {
     console.error("[founding-apply] admin notification failed", err);
   }
   try {
-    await sendFoundingEmailVerification(application.id, application.email, application.stageName);
+    // The real account's own verification email (same one
+    // POST /api/auth/register sends), not the older Founding-specific
+    // one — this route now creates a real User/CreatorProfile, and
+    // that's the account whose emailVerified column actually matters
+    // (surfaced on /creator-dashboard, not a Founding-only status page).
+    await sendUserEmailVerification(userId, application.email, application.stageName);
   } catch (err) {
     console.error("[founding-apply] email verification send failed", err);
   }

@@ -9,6 +9,7 @@ export interface SessionUser {
   email: string;
   role: "FAN" | "CREATOR" | "ADMIN" | "PARTNER";
   displayName: string | null;
+  emailVerified: boolean;
   creatorProfile: { id: string; status: string; isFoundingBaddie: boolean } | null;
   // Independent of role, same reason creatorProfile is: an account can
   // hold both a FoundingPartner row and (once applied) a CreatorProfile
@@ -350,10 +351,41 @@ function MobileAccountBlock({ user, onLogout }: { user: SessionUser; onLogout: (
       <Link href="/settings" style={accountMenuLinkStyle}>
         Settings
       </Link>
+      {user.creatorProfile && <WalletMenuLink />}
       <button onClick={onLogout} style={accountMenuButtonStyle}>
         Sign out
       </button>
     </div>
+  );
+}
+
+/**
+ * "Wallet ($available)" — moved here from a card on the Creator
+ * Dashboard's Overview tab, per explicit product decision: it's an
+ * account-level thing (like Settings), not a dashboard widget, so it
+ * lives in the same menu Settings does and links to its own page
+ * (src/app/wallet/page.tsx). Only rendered for creators (see both call
+ * sites) — a plain fan's wallet is always $0, nothing to check.
+ */
+function WalletMenuLink({ onNavigate }: { onNavigate?: () => void }) {
+  const [availableUsd, setAvailableUsd] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/creator/wallet")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (!cancelled && body) setAvailableUsd(Number(body.availableBalanceUsd));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <Link href="/wallet" style={accountMenuLinkStyle} onClick={onNavigate}>
+      Wallet{availableUsd !== null ? ` ($${availableUsd.toFixed(2)})` : ""}
+    </Link>
   );
 }
 
@@ -403,6 +435,7 @@ function AccountMenu({ user, onLogout }: { user: SessionUser; onLogout: () => vo
           <Link href="/settings" style={accountMenuLinkStyle} onClick={() => setOpen(false)}>
             Settings
           </Link>
+          {user.creatorProfile && <WalletMenuLink onNavigate={() => setOpen(false)} />}
           <button onClick={onLogout} style={accountMenuButtonStyle}>
             Sign out
           </button>
