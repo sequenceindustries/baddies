@@ -21,12 +21,6 @@ interface RewardEntry {
   createdAt: string;
 }
 
-interface ProfitShare {
-  year: number;
-  amountUsd: string;
-  finalizedAt: string | null;
-}
-
 interface DashboardData {
   referralCode: string;
   referralLink: string;
@@ -36,7 +30,6 @@ interface DashboardData {
   rewardHistory: RewardEntry[];
   wallet: { pendingBalanceUsd: string; availableBalanceUsd: string; paidBalanceUsd: string } | null;
   agreement: { title: string; version: string; acceptedAt: string } | null;
-  profitShares: ProfitShare[];
 }
 
 /**
@@ -142,26 +135,6 @@ export default function PartnerDashboardPage() {
                   <div style={mutedSmallStyle}>{new Date(r.createdAt).toLocaleString()}</div>
                 </div>
                 <div style={{ fontSize: "0.88rem", textAlign: "right" }}>${r.grossAmount}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </SectionCard>
-
-      <SectionCard title="Annual profit-pool participation">
-        <p style={mutedSmallStyle}>
-          Founding Partners participate in a share of baddies&apos; annual distributable profit
-          pool, calculated once a year from real financial results — never estimated or paid in
-          advance.
-        </p>
-        {data.profitShares.length === 0 ? (
-          <p style={{ ...mutedSmallStyle, marginTop: "0.6rem" }}>Nothing has been calculated yet.</p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.6rem" }}>
-            {data.profitShares.map((s) => (
-              <div key={s.year} style={rowStyle}>
-                <div style={{ fontSize: "0.88rem" }}>{s.year}</div>
-                <div style={{ fontSize: "0.88rem" }}>${s.amountUsd}</div>
               </div>
             ))}
           </div>

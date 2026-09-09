@@ -51,20 +51,17 @@ const ResetSchema = z.object({ confirm: z.literal(CONFIRM_PHRASE) });
  *      can go. (There should be none for the dummy roster — its own
  *      wallets are just idle — but real partner/creator accounts may
  *      have genuine ledger history.)
- *   3. PartnerProfitShare rows for any partner in scope (the profit-pool
- *      feature is unused today, but a stray row would block deletion the
- *      same way).
- *   4. FoundingPartner rows in scope, explicitly (not left to User's own
+ *   3. FoundingPartner rows in scope, explicitly (not left to User's own
  *      cascade) — FoundingPartner.invitationId has no cascade, so a live
  *      FoundingPartner blocks deleting the PartnerInvitation it points at;
  *      this has to go first.
- *   5. PartnerInvitation rows (now unreferenced) — also has to go before
- *      step 6: PartnerInvitation.invitedBy has no cascade either, so a
+ *   4. PartnerInvitation rows (now unreferenced) — also has to go before
+ *      step 5: PartnerInvitation.invitedBy has no cascade either, so a
  *      User who ever sent an invitation can't be deleted while that
  *      invitation row still exists. Confirmed against a real local
  *      blocked-delete case during this route's own build — see the
  *      inline comment at this step for what that looked like.
- *   6. The User rows themselves — cascades Wallet, CreatorProfile (and
+ *   5. The User rows themselves — cascades Wallet, CreatorProfile (and
  *      everything that cascades from CreatorProfile: Content and every
  *      one of its own children, Follow, Subscription, etc.), Session,
  *      Profile, and User-linked AgreementAcceptance.
@@ -130,17 +127,14 @@ export async function POST(req: NextRequest) {
     });
     const payoutsRemoved = await tx.payout.deleteMany({ where: { walletId: { in: walletIds } } });
 
-    // Step 3
-    await tx.partnerProfitShare.deleteMany({ where: { foundingPartnerId: { in: partnerIds } } });
-
-    // Step 4 — FoundingPartner must go before PartnerInvitation, not the
+    // Step 3 — FoundingPartner must go before PartnerInvitation, not the
     // other way round: FoundingPartner.invitationId has no cascade, so a
     // live FoundingPartner row blocks deleting the PartnerInvitation it
     // points at. (Relying on User's own cascade to remove FoundingPartner
     // here isn't enough on its own — see step 5's comment.)
     await tx.foundingPartner.deleteMany({ where: { id: { in: partnerIds } } });
 
-    // Step 5 — must also go before deleting Users: PartnerInvitation.invitedBy
+    // Step 4 — must also go before deleting Users: PartnerInvitation.invitedBy
     // has no cascade either, so a User who ever sent an invitation (in
     // practice always an admin — but this makes no assumption about who)
     // can't be deleted while that invitation row still exists. Confirmed
@@ -151,7 +145,7 @@ export async function POST(req: NextRequest) {
     // partner_invitations_invitedBy_fkey.
     await tx.partnerInvitation.deleteMany({});
 
-    // Step 6
+    // Step 5
     const usersRemoved = await tx.user.deleteMany({ where: { id: { in: userIds } } });
 
     await tx.auditLog.create({

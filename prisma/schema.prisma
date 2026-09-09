@@ -1289,12 +1289,12 @@ model AuditLog {
 // only by accepting an admin-issued invitation. A partner has a unique
 // referral link (ReferralAttribution.foundingPartnerId is where that
 // shows up on a FoundingApplication); referred creators earn a higher
-// revenue share (RevenueShareRule.PARTNER_REFERRED_CREATOR_SHARE) and,
-// separately, partners themselves participate in an ANNUAL profit pool
-// (RevenueShareRule.PARTNER_PROFIT_POOL_SHARE) — never a per-transaction
-// commission. Nothing in this section computes a dollar figure
-// automatically: AnnualProfitDistribution/PartnerProfitShare only ever
-// hold what an admin enters from real numbers (see that model's comment).
+// revenue share (RevenueShareRule.PARTNER_REFERRED_CREATOR_SHARE).
+// There is no separate partner profit-sharing mechanism — per explicit
+// product decision, the earlier annual profit-pool distribution feature
+// (AnnualProfitDistribution/PartnerProfitShare/
+// RevenueShareRuleType.PARTNER_PROFIT_POOL_SHARE) was removed outright,
+// not just left unused.
 // =========================================================================
 
 enum PartnerInvitationStatus {
@@ -1380,7 +1380,6 @@ model FoundingPartner {
 
   referralAttributions ReferralAttribution[]
   ledgerEntries        LedgerEntry[]
-  profitShares         PartnerProfitShare[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1421,7 +1420,6 @@ model ReferralAttribution {
 enum RevenueShareRuleType {
   STANDARD_CREATOR_SHARE
   PARTNER_REFERRED_CREATOR_SHARE
-  PARTNER_PROFIT_POOL_SHARE
 }
 
 // Versioned commercial rules — deliberately NOT another PlatformSetting
@@ -1448,48 +1446,3 @@ model RevenueShareRule {
   @@map("revenue_share_rules")
 }
 
-enum ProfitDistributionStatus {
-  DRAFT
-  FINALIZED
-}
-
-// One row per calendar year. totalDistributableProfitUsd is an admin-
-// entered real figure — this project deliberately never computes it
-// automatically, since no live payment provider exists yet to derive
-// "distributable profit" from. Stays empty/absent until an admin
-// performs that real, manual calculation.
-model AnnualProfitDistribution {
-  id     String                   @id @default(cuid())
-  year   Int                      @unique
-  status ProfitDistributionStatus @default(DRAFT)
-
-  totalDistributableProfitUsd Decimal? @db.Decimal(12, 2)
-
-  computedBy  String? // admin User.id
-  computedAt  DateTime?
-  finalizedBy String? // admin User.id
-  finalizedAt DateTime?
-
-  partnerShares PartnerProfitShare[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("annual_profit_distributions")
-}
-
-model PartnerProfitShare {
-  id             String                   @id @default(cuid())
-  distributionId String
-  distribution   AnnualProfitDistribution @relation(fields: [distributionId], references: [id], onDelete: Cascade)
-
-  foundingPartnerId String
-  foundingPartner   FoundingPartner @relation(fields: [foundingPartnerId], references: [id])
-
-  amountUsd Decimal @db.Decimal(12, 2)
-
-  createdAt DateTime @default(now())
-
-  @@unique([distributionId, foundingPartnerId])
-  @@map("partner_profit_shares")
-}

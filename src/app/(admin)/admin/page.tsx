@@ -2903,16 +2903,6 @@ interface FoundingPartnerRow {
   agreement: { version: string; acceptedAt: string } | null;
 }
 
-interface ProfitDistributionRow {
-  id: string;
-  year: number;
-  status: string;
-  totalDistributableProfitUsd: string | null;
-  computedAt: string | null;
-  finalizedAt: string | null;
-  partnerShares: { foundingPartnerId: string; partnerEmail: string; amountUsd: string }[];
-}
-
 /**
  * The private Founding Partner programme: invitation CRUD (create/revoke/
  * resend), the partner roster with embedded referral + reward detail, and
@@ -2931,10 +2921,6 @@ function FoundingPartnersPanel() {
   const [email, setEmail] = useState("");
   const [expiresInDays, setExpiresInDays] = useState("14");
   const [inviting, setInviting] = useState(false);
-  const [distributions, setDistributions] = useState<ProfitDistributionRow[]>([]);
-  const [distYear, setDistYear] = useState(String(new Date().getFullYear()));
-  const [distTotal, setDistTotal] = useState("");
-  const [savingDist, setSavingDist] = useState(false);
   // Surfaces the real, working invite link after sending/resending —
   // never solely dependent on an invite email existing/landing (see the
   // invitations routes' own comment: no address at all, a sandboxed
@@ -2950,12 +2936,10 @@ function FoundingPartnersPanel() {
     Promise.all([
       fetch("/api/admin/partners/invitations").then((r) => (r.ok ? r.json() : { invitations: [] })),
       fetch("/api/admin/partners").then((r) => (r.ok ? r.json() : { partners: [] })),
-      fetch("/api/admin/profit-distributions").then((r) => (r.ok ? r.json() : { distributions: [] })),
     ])
-      .then(([invBody, partnerBody, distBody]) => {
+      .then(([invBody, partnerBody]) => {
         setInvitations(invBody.invitations ?? []);
         setPartners(partnerBody.partners ?? []);
-        setDistributions(distBody.distributions ?? []);
       })
       .finally(() => setLoading(false));
   }
@@ -3051,36 +3035,6 @@ function FoundingPartnersPanel() {
     else {
       const body = await res.json().catch(() => null);
       alert(body?.error ?? "Action failed.");
-    }
-  }
-
-  async function saveDistribution(e: React.FormEvent) {
-    e.preventDefault();
-    setSavingDist(true);
-    const res = await fetch("/api/admin/profit-distributions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ year: Number(distYear), totalDistributableProfitUsd: Number(distTotal) }),
-    });
-    setSavingDist(false);
-    if (res.ok) {
-      setDistTotal("");
-      reload();
-    } else {
-      const body = await res.json().catch(() => null);
-      alert(body?.error && typeof body.error === "string" ? body.error : "Couldn't save.");
-    }
-  }
-
-  async function finalizeDistribution(id: string) {
-    if (!window.confirm("Finalize this year's profit distribution? This calculates and locks in each active partner's share and can't be undone.")) return;
-    setBusyId(id);
-    const res = await fetch(`/api/admin/profit-distributions/${id}/finalize`, { method: "POST" });
-    setBusyId(null);
-    if (res.ok) reload();
-    else {
-      const body = await res.json().catch(() => null);
-      alert(body?.error ?? "Finalize failed.");
     }
   }
 
@@ -3237,69 +3191,6 @@ function FoundingPartnersPanel() {
                         <span key={c.foundingApplicationId} style={filterChipStyle}>
                           {c.stageName} · {humanizeKey(c.status)}
                           {c.correctedBy && " (corrected)"}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          <h3 style={{ ...statGroupHeadingStyle, marginTop: "2rem" }}>Annual profit-pool distribution</h3>
-          <p style={mutedSmallStyle}>
-            Real, admin-entered figures only — never estimated or computed automatically. Record the
-            year&apos;s total distributable profit, then finalize once to split the Founding Partner
-            pool evenly across that year&apos;s active partners; finalizing can&apos;t be undone.
-          </p>
-          <form onSubmit={saveDistribution} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", margin: "0.75rem 0 1.5rem" }}>
-            <input
-              type="number"
-              style={{ ...memberSearchInputStyle, flex: "0 1 120px" }}
-              placeholder="Year"
-              value={distYear}
-              onChange={(e) => setDistYear(e.target.value)}
-              required
-            />
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              style={memberSearchInputStyle}
-              placeholder="Total distributable profit (USD)"
-              value={distTotal}
-              onChange={(e) => setDistTotal(e.target.value)}
-              required
-            />
-            <button type="submit" style={approveButtonStyle} disabled={savingDist}>
-              {savingDist ? "Saving..." : "Save"}
-            </button>
-          </form>
-          {distributions.length === 0 ? (
-            <p style={{ color: "var(--text-muted)" }}>No distribution years recorded yet.</p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-              {distributions.map((d) => (
-                <div key={d.id} style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch", gap: "0.5rem" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
-                    <div>
-                      <div style={{ fontSize: "0.9rem" }}>{d.year}</div>
-                      <div style={mutedSmallStyle}>
-                        {d.status} · total ${d.totalDistributableProfitUsd ?? "—"}
-                        {d.finalizedAt && ` · finalized ${new Date(d.finalizedAt).toLocaleDateString()}`}
-                      </div>
-                    </div>
-                    {d.status === "DRAFT" && (
-                      <button onClick={() => finalizeDistribution(d.id)} disabled={busyId === d.id} style={approveButtonStyle}>
-                        Finalize
-                      </button>
-                    )}
-                  </div>
-                  {d.partnerShares.length > 0 && (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
-                      {d.partnerShares.map((s) => (
-                        <span key={s.foundingPartnerId} style={filterChipStyle}>
-                          {s.partnerEmail}: ${s.amountUsd}
                         </span>
                       ))}
                     </div>

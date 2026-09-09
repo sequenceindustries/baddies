@@ -60,7 +60,7 @@ describe.skipIf(!dbAvailable)("getCurrentRevenueShareRule (integration)", () => 
   it("ignores a not-yet-effective (future) row", async () => {
     const past = await db.revenueShareRule.create({
       data: {
-        type: "PARTNER_PROFIT_POOL_SHARE",
+        type: "STANDARD_CREATOR_SHARE",
         version: `test-past-${Date.now()}`,
         percentage: "0.1000",
         effectiveAt: new Date(Date.now() - 60_000),
@@ -70,7 +70,7 @@ describe.skipIf(!dbAvailable)("getCurrentRevenueShareRule (integration)", () => 
 
     const future = await db.revenueShareRule.create({
       data: {
-        type: "PARTNER_PROFIT_POOL_SHARE",
+        type: "STANDARD_CREATOR_SHARE",
         version: `test-future-${Date.now()}`,
         percentage: "0.5000",
         effectiveAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -78,7 +78,7 @@ describe.skipIf(!dbAvailable)("getCurrentRevenueShareRule (integration)", () => 
     });
     createdIds.push(future.id);
 
-    const current = await getCurrentRevenueShareRule("PARTNER_PROFIT_POOL_SHARE");
+    const current = await getCurrentRevenueShareRule("STANDARD_CREATOR_SHARE");
     expect(current.id).toBe(past.id);
   });
 
