@@ -175,11 +175,16 @@ interface PlatformEntry {
   handle: string;
   link: string;
   customName: string;
+  // Creator platforms only (see PlatformPicker's showFollowers) — free
+  // text like audienceSize, not a strict number, since "~2.3k" is a
+  // perfectly normal answer. Matches the admin Command Centre's own
+  // PlatformEntryView.followers field name.
+  followers: string;
 }
 
 type PlatformState = Record<string, PlatformEntry>;
 
-const EMPTY_ENTRY: PlatformEntry = { handle: "", link: "", customName: "" };
+const EMPTY_ENTRY: PlatformEntry = { handle: "", link: "", customName: "", followers: "" };
 
 function ApplicationForm() {
   const router = useRouter();
@@ -245,6 +250,7 @@ function ApplicationForm() {
         platform: option === "Other" ? entry.customName || "Other" : option,
         handle: entry.handle,
         link: entry.link,
+        followers: entry.followers,
       }));
     return [...fromRecord(social, "social"), ...fromRecord(creatorPlats, "creator")];
   }
@@ -405,6 +411,8 @@ function ApplicationForm() {
             options={CREATOR_PLATFORMS}
             state={creatorPlats}
             onChange={setCreatorPlats}
+            singleField
+            showFollowers
           />
         </FormFieldset>
 
@@ -472,16 +480,23 @@ function PlatformPicker({
   state,
   onChange,
   singleField = false,
+  showFollowers = false,
 }: {
   title: string;
   options: string[];
   state: PlatformState;
   onChange: (next: PlatformState) => void;
   // One merged "Handle or link" input instead of separate handle/link
-  // fields — used for Social, where either is equally useful and asking
-  // for both is just friction. The merged value is stored in `handle`
-  // (PlatformEntry.link stays "" and is simply never sent).
+  // fields — used for both Social and Creator platforms now, where
+  // either is equally useful and asking for both is just friction. The
+  // merged value is stored in `handle` (PlatformEntry.link stays "" and
+  // is simply never sent).
   singleField?: boolean;
+  // Creator platforms only — an extra "Number of subscribers" input
+  // per selected platform (stored as PlatformEntry.followers), since
+  // that's specific to a paid creator platform and doesn't apply to a
+  // plain social account.
+  showFollowers?: boolean;
 }) {
   function toggle(option: string) {
     const next = { ...state };
@@ -542,6 +557,14 @@ function PlatformPicker({
                         onChange={(e) => updateEntry(option, { link: e.target.value })}
                       />
                     </>
+                  )}
+                  {showFollowers && (
+                    <input
+                      style={inputStyle}
+                      placeholder="Number of subscribers"
+                      value={entry.followers}
+                      onChange={(e) => updateEntry(option, { followers: e.target.value })}
+                    />
                   )}
                 </div>
               )}
@@ -803,7 +826,12 @@ const fieldsetStyle: React.CSSProperties = {
   background: "var(--surface)",
   borderRadius: "14px",
   padding: "1.5rem",
-  margin: "0 0 1.5rem",
+  // Wide enough to clear --glow's own drop-shadow (12px offset + 40px
+  // blur) — at the old 1.5rem gap, one fieldset's shadow visibly bled
+  // onto the top of the next one since (unlike every other glow box on
+  // this page/the landing page) these stack directly on top of each
+  // other with nothing between them.
+  margin: "0 0 2.5rem",
   boxShadow: "var(--glow)",
 };
 

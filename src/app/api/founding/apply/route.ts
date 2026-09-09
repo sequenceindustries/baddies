@@ -27,6 +27,12 @@ const PlatformEntrySchema = z.object({
   platform: z.string().min(1).max(60),
   handle: z.string().max(100).optional().default(""),
   link: z.string().max(300).optional().default(""),
+  // Reintroduced — see the admin Command Centre's PlatformEntryView,
+  // which already had backward-compat support for this exact field on
+  // applications from before it was removed from the form. Creator
+  // platforms only (the form doesn't ask for it on social platforms);
+  // free text, like audienceSize, not a strict number.
+  followers: z.string().max(50).optional().default(""),
 });
 
 const ApplySchema = z.object({
