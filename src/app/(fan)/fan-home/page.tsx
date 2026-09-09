@@ -1,137 +1,102 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CreatorCardRow, ContentGrid, type CreatorCardData, type ContentCardData } from "@/components/cards";
-import { HowItWorks } from "@/components/how-it-works";
-import { displayHeadingStyle } from "@/components/ui";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { PostCard, type PostCardItem } from "@/components/post-card";
 
-interface RawContentItem {
-  id?: string;
-  contentId?: string;
-  accessLevel: ContentCardData["accessLevel"];
-  priceUsd?: number | string | null;
-  caption?: string | null;
-  publishedAt?: string | null;
-  mediaType?: ContentCardData["mediaType"];
-  creatorProfileId?: string | null;
-  creatorDisplayName?: string | null;
-  creatorAvatarUrl?: string | null;
-}
-
-interface HomeResponse {
-  following: RawContentItem[];
-  subscribed: RawContentItem[];
-  vipContent: RawContentItem[];
-  unlimited: CreatorCardData[];
-  nearby: CreatorCardData[];
-  trending: RawContentItem[];
-  newCreators: CreatorCardData[];
-}
-
-function normalize(items: RawContentItem[]): ContentCardData[] {
-  return items
-    .filter((i) => i.id ?? i.contentId)
-    .map((i) => ({
-      contentId: (i.id ?? i.contentId) as string,
-      accessLevel: i.accessLevel,
-      priceUsd: i.priceUsd,
-      caption: i.caption,
-      publishedAt: i.publishedAt,
-      mediaType: i.mediaType,
-      creatorProfileId: i.creatorProfileId,
-      creatorDisplayName: i.creatorDisplayName,
-      creatorAvatarUrl: i.creatorAvatarUrl,
-    }));
-}
-
+/**
+ * Home feed — Twitter/X-style single-column, infinite-scroll vertical
+ * stream (social-feed redesign). Fed by the revived GET /api/feed
+ * (cursor-paginated, blended Following/VIP/Trending/New into one
+ * reverse-chronological list — no section headers; see that route's
+ * own comment for why). Replaces the previous six flat, non-paginated
+ * sections entirely.
+ */
 export default function FanHomePage() {
-  const [data, setData] = useState<HomeResponse | null>(null);
+  const [items, setItems] = useState<PostCardItem[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [vipPassActive, setVipPassActive] = useState<boolean | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadingRef = useRef(false);
+
+  const loadPage = useCallback(async (afterCursor: string | null) => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    if (afterCursor) setLoadingMore(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/feed${afterCursor ? `?cursor=${encodeURIComponent(afterCursor)}` : ""}`);
+      if (!res.ok) throw new Error("Failed to load feed.");
+      const body = await res.json();
+      setItems((prev) => (afterCursor ? [...prev, ...body.items] : body.items));
+      setCursor(body.nextCursor ?? null);
+      setHasMore(Boolean(body.nextCursor));
+    } catch {
+      setError("Couldn't load your feed. Try refreshing.");
+    } finally {
+      loadingRef.current = false;
+      setInitialLoading(false);
+      setLoadingMore(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    fetch("/api/home")
-      .then((r) => {
-        if (!r.ok) throw new Error("Failed to load home feed.");
-        return r.json();
-      })
-      .then((body) => {
-        if (!cancelled) setData(body);
-      })
-      .catch(() => {
-        if (!cancelled) setError("Couldn't load your feed. Try refreshing.");
-      });
-
+    loadPage(null);
     fetch("/api/fan/subscriptions")
       .then((r) => (r.ok ? r.json() : null))
       .then((body) => {
-        if (!cancelled && body) setVipPassActive(body.vipPass?.status === "ACTIVE");
+        if (body) setVipPassActive(body.vipPass?.status === "ACTIVE");
       })
       .catch(() => {
         /* not signed in as a fan, or request failed — just hide the banner */
       });
-
-    return () => {
-      cancelled = true;
-    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Standard zero-dependency infinite-scroll pattern: an
+  // IntersectionObserver watching a sentinel at the bottom of the
+  // list, with a generous rootMargin so the next page starts loading
+  // before the viewer actually reaches the true bottom.
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasMore && !loadingRef.current) {
+          loadPage(cursor);
+        }
+      },
+      { rootMargin: "600px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [cursor, hasMore, loadPage]);
 
   return (
     <main style={mainStyle}>
-      <h1 style={displayHeadingStyle}>Fan Dashboard</h1>
       {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
-      {!data && !error && <p style={{ color: "var(--text-muted)" }}>Loading...</p>}
 
       {vipPassActive === false && <VipPassBanner />}
 
-      {data && (
-        <>
-          {normalize(data.following).length > 0 && (
-            <section style={sectionWrapStyle}>
-              <h2 style={sectionHeadingStyle}>Following</h2>
-              <ContentGrid items={normalize(data.following)} />
-            </section>
-          )}
-
-          {normalize(data.subscribed).length > 0 && (
-            <section style={sectionWrapStyle}>
-              <h2 style={sectionHeadingStyle}>Your Exclusives</h2>
-              <ContentGrid items={normalize(data.subscribed)} />
-            </section>
-          )}
-
-          {normalize(data.vipContent).length > 0 && (
-            <section style={sectionWrapStyle}>
-              <h2 style={sectionHeadingStyle}>VIP Content</h2>
-              <ContentGrid items={normalize(data.vipContent)} />
-            </section>
-          )}
-
-          <CreatorCardRow title="baddies near you" creators={data.nearby} />
-          <CreatorCardRow title="new baddies" creators={data.newCreators} />
-
-          {normalize(data.trending).length > 0 && (
-            <section style={sectionWrapStyle}>
-              <h2 style={sectionHeadingStyle}>Trending</h2>
-              <ContentGrid items={normalize(data.trending)} />
-            </section>
-          )}
-
-          {normalize(data.following).length === 0 &&
-            normalize(data.subscribed).length === 0 &&
-            normalize(data.vipContent).length === 0 &&
-            data.nearby.length === 0 &&
-            normalize(data.trending).length === 0 &&
-            data.newCreators.length === 0 && (
-              <p style={{ color: "var(--text-muted)" }}>
-                Nothing here yet — once creators publish content, it&apos;ll show up here.
-              </p>
-            )}
-        </>
+      {initialLoading ? (
+        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+      ) : items.length === 0 ? (
+        <p style={{ color: "var(--text-muted)" }}>
+          Nothing here yet — once creators publish content, it&apos;ll show up here.
+        </p>
+      ) : (
+        <div style={feedListStyle}>
+          {items.map((item) => (
+            <PostCard key={item.contentId} item={item} />
+          ))}
+        </div>
       )}
 
-      <HowItWorks />
+      <div ref={sentinelRef} style={{ height: "1px" }} aria-hidden="true" />
+      {loadingMore && <p style={{ color: "var(--text-muted)", textAlign: "center" }}>Loading more...</p>}
     </main>
   );
 }
@@ -188,7 +153,7 @@ const bannerStyle: React.CSSProperties = {
   border: "1px solid var(--accent)",
   borderRadius: "12px",
   padding: "1.1rem 1.4rem",
-  marginBottom: "2.25rem",
+  marginBottom: "1.5rem",
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
@@ -207,15 +172,10 @@ const bannerButtonStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
-const mainStyle: React.CSSProperties = { padding: "2.5rem 1.75rem", maxWidth: "1100px", margin: "0 auto" };
+// Matches the OnlyFans-style single-creator timeline's own maxWidth
+// (see cards.tsx's timelineWrapStyle) — a real Twitter-style feed reads
+// as one narrow centered column, not the previous multi-section page's
+// full 1100px width.
+const mainStyle: React.CSSProperties = { padding: "2rem 1.25rem 4rem", maxWidth: "620px", margin: "0 auto" };
 
-// Clearly-separated categories rather than sections running straight
-// into each other — this page stacks a lot of them.
-const sectionWrapStyle: React.CSSProperties = { marginBottom: "4rem" };
-
-const sectionHeadingStyle: React.CSSProperties = {
-  fontFamily: "var(--font-display)",
-  fontSize: "1.2rem",
-  fontWeight: 500,
-  margin: "0 0 0.85rem",
-};
+const feedListStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: "1rem" };

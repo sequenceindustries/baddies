@@ -576,6 +576,7 @@ model Content {
   moderationCases   ModerationCase[]
   consumptionEvents QualifiedConsumptionEvent[]
   likes             ContentLike[]
+  tips              Tip[]
 
   @@index([creatorProfileId, status])
   @@index([accessLevel])
@@ -753,6 +754,15 @@ model Tip {
   fan              User   @relation("TipSender", fields: [fanId], references: [id], onDelete: Cascade)
   creatorProfileId String
 
+  // Nullable — a tip can be a plain creator-level gift with no specific
+  // post attached (the only kind this model originally supported).
+  // Added for the social-feed redesign's per-post tip icon so a real
+  // post's tip count is a real count, not fabricated. SetNull rather
+  // than Cascade: removing the content a tip was attached to should
+  // never delete the financial record of the tip itself.
+  contentId String?
+  content   Content? @relation(fields: [contentId], references: [id], onDelete: SetNull)
+
   amountUsd Decimal @db.Decimal(10, 2)
   message   String?
 
@@ -762,6 +772,7 @@ model Tip {
 
   @@index([fanId])
   @@index([creatorProfileId])
+  @@index([contentId])
   @@map("tips")
 }
 

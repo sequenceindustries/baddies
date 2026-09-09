@@ -2,9 +2,10 @@ import { db } from "@/lib/db/client";
 import { toCreatorCard, CREATOR_CARD_SELECT } from "./creator-card";
 
 /**
- * Shared by /api/home and /api/discovery/nearby-creators — "Baddies Near
- * You" is the same query either place it appears, so it lives here once
- * instead of being copied.
+ * Backs /api/discovery/nearby-creators's "Baddies Near You" section.
+ * (Previously also shared by the now-removed /api/home — see
+ * GET /api/feed's own comment on why the fan-home feed was rewired to
+ * a single blended stream instead.)
  */
 export async function getFanCountry(fanId?: string): Promise<string | null> {
   if (!fanId) return null;

@@ -358,7 +358,7 @@ export function ContentCard({ item }: { item: ContentCardData }) {
  * without the portal the "full screen" overlay ends up boxed inside the
  * card instead of covering the screen.
  */
-function MediaLightbox({ mimeType, url, onClose }: { mimeType: string; url: string; onClose: () => void }) {
+export function MediaLightbox({ mimeType, url, onClose }: { mimeType: string; url: string; onClose: () => void }) {
   if (typeof document === "undefined") return null;
   // Every click handler here calls stopPropagation before onClose: this
   // is rendered via createPortal straight onto document.body, but React
@@ -395,7 +395,7 @@ function TierBadge({ accessLevel }: { accessLevel: ContentCardData["accessLevel"
   return <span style={tierBadgeStyle(accessLevel)}>{ACCESS_LABEL[accessLevel]}</span>;
 }
 
-function timeAgo(iso: string): string {
+export function timeAgo(iso: string): string {
   const diffSec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
   if (diffSec < 60) return "just now";
   const min = Math.floor(diffSec / 60);
@@ -626,7 +626,7 @@ const avatarImgStyle: React.CSSProperties = { width: "100%", height: "100%", obj
  * instead of leaving a blank circle — same "always show something real,
  * never an empty box" rule the full-bleed media itself follows.
  */
-function CardAvatar({ url, initial }: { url?: string | null; initial: string }) {
+export function CardAvatar({ url, initial }: { url?: string | null; initial: string }) {
   const [failed, setFailed] = useState(false);
   return (
     <span style={cardCreatorAvatarStyle}>
@@ -933,7 +933,7 @@ function likeButtonStyle(liked: boolean): React.CSSProperties {
 // the button's own currentColor. filled swaps a solid fill for an
 // outline stroke; both share one path so liking never shifts the glyph's
 // proportions, only how it's painted.
-function HeartIcon({ filled }: { filled: boolean }) {
+export function HeartIcon({ filled }: { filled: boolean }) {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
       <path

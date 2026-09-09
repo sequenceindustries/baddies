@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { buildViewerLockContext, computeLockState, type LockKind } from "@/lib/entitlements/list-lock";
+import { computeTrendingContent } from "@/lib/discovery/trending";
+import { resolveCreatorPricing } from "@/lib/creator/pricing";
+import { getBusinessConfig } from "@/lib/config/settings";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -8,25 +13,43 @@ export const dynamic = "force-dynamic";
 const PAGE_SIZE = 20;
 
 /**
- * Sprint 2 feed: a simple reverse-chronological stream of published,
- * approved FREE/VIP content (i.e. everything except creator-exclusive
- * VVIP content) from VERIFIED creators. This is intentionally basic —
- * per build brief §13 ("Avoid turning the MVP into an overly complicated
- * social network") and §35 ("Do not overbuild").
+ * The home feed's single source of data — the social-feed redesign's
+ * Twitter/X-style vertical scroll (fan-home), Instagram-style Discovery
+ * grid, and the "quick preview" a Stories tap opens all consume this
+ * one cursor-paginated, reverse-chronological stream. Previously an
+ * unused Sprint-2 stub restricted to FREE/VIP content from VERIFIED
+ * creators only; revived and extended:
  *
- * Personalized sections (Following, Recommended, Trending, category
- * filters — §11, §13) are Sprint 3 (Discovery) work and depend on models
- * this schema doesn't have yet (e.g. a Follow relation). This endpoint is
- * the foundation those will layer on top of, not a replacement for them.
+ *   - VVIP content is now included too, rendered LOCKED rather than
+ *     hidden — a deliberate widening of what's LISTED (see the
+ *     redesign plan's own callout: this never widens what's
+ *     UNLOCKABLE, only what appears, always still gated correctly).
+ *   - Every item now carries a `lock` object (see list-lock.ts — a
+ *     display-only mirror of canAccessContent, never authoritative)
+ *     and a `context` chip (why this is in the stream) so a locked
+ *     card can render a real "Subscribe to unlock" / "Get VIP Pass"
+ *     CTA instead of nothing.
+ *   - Real, per-post engagement counts (likes, tips) rather than
+ *     nothing — the actual unlock/like/tip actions still go through
+ *     their own existing/new dedicated routes; this route never
+ *     returns a signed media URL.
+ *
+ * The six flat, non-paginated sections GET /api/home used to compose
+ * (Following/Your Exclusive/VIP Content/Nearby/Trending/New) are fully
+ * superseded by this one blended, infinite-scrollable stream — no
+ * section headers, matching what "Twitter/X-style" actually means (X's
+ * own timeline has none). The small `context` chip preserves "why is
+ * this here" transparency without a multi-cursor-merge problem this
+ * codebase has never needed to solve.
  */
 export async function GET(req: NextRequest) {
   const cursor = req.nextUrl.searchParams.get("cursor") ?? undefined;
+  const user = await getCurrentUser();
 
   const items = await db.content.findMany({
     where: {
       status: "APPROVED",
       publishedAt: { not: null },
-      accessLevel: { in: ["FREE", "VIP"] },
       creatorProfile: { status: "VERIFIED" },
     },
     orderBy: { publishedAt: "desc" },
@@ -38,11 +61,23 @@ export async function GET(req: NextRequest) {
       accessLevel: true,
       caption: true,
       publishedAt: true,
+      status: true,
+      creatorProfileId: true,
+      _count: { select: { likes: true, tips: true } },
+      likes: user ? { where: { fanId: user.id }, select: { id: true } } : false,
       creatorProfile: {
         select: {
           id: true,
-          locationVisible: true,
-          user: { select: { profile: { select: { displayName: true, avatarUrl: true, country: true } } } },
+          unlimitedOptedIn: true,
+          vvipPriceOverride: true,
+          isFoundingBaddie: true,
+          coverImageUrl: true,
+          user: {
+            select: {
+              profile: { select: { displayName: true, avatarUrl: true } },
+              foundingPartner: { select: { id: true } },
+            },
+          },
         },
       },
     },
@@ -51,23 +86,93 @@ export async function GET(req: NextRequest) {
   const hasMore = items.length > PAGE_SIZE;
   const page = hasMore ? items.slice(0, PAGE_SIZE) : items;
 
+  const [viewerCtx, trending, businessConfig, follows] = await Promise.all([
+    buildViewerLockContext(user),
+    computeTrendingContent(),
+    getBusinessConfig(),
+    user ? db.follow.findMany({ where: { fanId: user.id }, select: { creatorProfileId: true } }) : Promise.resolve([]),
+  ]);
+
+  const trendingIds = new Set(trending.map((t) => t.contentId));
+  const followedCreatorIds = new Set(follows.map((f: (typeof follows)[number]) => f.creatorProfileId));
+
+  // resolveCreatorPricing is pure/no-DB (reads the field we already
+  // selected) — cached per creator on this page purely to avoid
+  // re-computing the same number for every one of a prolific creator's
+  // several posts on one page, not to avoid a query.
+  const vvipPriceByCreatorId = new Map<string, number>();
+  async function vvipPriceFor(creator: (typeof page)[number]["creatorProfile"]): Promise<number> {
+    const cached = vvipPriceByCreatorId.get(creator.id);
+    if (cached != null) return cached;
+    const { vvipPriceUsd } = await resolveCreatorPricing(creator);
+    vvipPriceByCreatorId.set(creator.id, vvipPriceUsd);
+    return vvipPriceUsd;
+  }
+
+  const shaped = await Promise.all(
+    page.map(async (item: (typeof page)[number]) => {
+      const lockState = computeLockState(
+        {
+          creatorProfileId: item.creatorProfileId,
+          accessLevel: item.accessLevel,
+          status: item.status,
+          publishedAt: item.publishedAt,
+          creatorUnlimitedOptedIn: item.creatorProfile.unlimitedOptedIn,
+        },
+        viewerCtx
+      );
+
+      const lock = lockState.locked
+        ? buildLockCta(
+            lockState.kind,
+            businessConfig.vipPassPriceUsd,
+            lockState.kind === "VVIP_SUBSCRIBE" ? await vvipPriceFor(item.creatorProfile) : 0
+          )
+        : { locked: false as const, kind: null, priceUsd: null, ctaLabel: null };
+
+      return {
+        contentId: item.id,
+        mediaType: item.mediaType,
+        accessLevel: item.accessLevel,
+        caption: item.caption,
+        publishedAt: item.publishedAt,
+        likeCount: item._count.likes,
+        tipCount: item._count.tips,
+        viewerHasLiked: user ? item.likes.length > 0 : false,
+        creator: {
+          creatorProfileId: item.creatorProfile.id,
+          displayName: item.creatorProfile.user.profile?.displayName ?? null,
+          avatarUrl: item.creatorProfile.user.profile?.avatarUrl ?? null,
+          coverImageUrl: item.creatorProfile.coverImageUrl,
+          isFoundingPartner: item.creatorProfile.user.foundingPartner !== null,
+          isFoundingBaddie: item.creatorProfile.isFoundingBaddie,
+        },
+        lock,
+        context: followedCreatorIds.has(item.creatorProfileId)
+          ? "following"
+          : trendingIds.has(item.id)
+            ? "trending"
+            : null,
+      };
+    })
+  );
+
   return NextResponse.json({
-    items: page.map((item: (typeof page)[number]) => ({
-      contentId: item.id,
-      mediaType: item.mediaType,
-      accessLevel: item.accessLevel,
-      caption: item.caption,
-      publishedAt: item.publishedAt,
-      creator: {
-        creatorProfileId: item.creatorProfile.id,
-        displayName: item.creatorProfile.user.profile?.displayName,
-        avatarUrl: item.creatorProfile.user.profile?.avatarUrl,
-        country: item.creatorProfile.locationVisible
-          ? item.creatorProfile.user.profile?.country
-          : undefined,
-        verifiedBadge: true,
-      },
-    })),
+    items: shaped,
     nextCursor: hasMore ? page[page.length - 1]?.id : null,
   });
+}
+
+function buildLockCta(
+  kind: LockKind,
+  vipPassPriceUsd: number,
+  vvipPriceUsd: number
+): { locked: true; kind: LockKind; priceUsd: number | null; ctaLabel: string } {
+  if (kind === "VVIP_SUBSCRIBE") {
+    return { locked: true, kind, priceUsd: vvipPriceUsd, ctaLabel: `Subscribe to unlock — $${vvipPriceUsd.toFixed(2)}/mo` };
+  }
+  if (kind === "VIP_PASS") {
+    return { locked: true, kind, priceUsd: vipPassPriceUsd, ctaLabel: `Get VIP Pass — $${vipPassPriceUsd.toFixed(2)}` };
+  }
+  return { locked: true, kind: null, priceUsd: null, ctaLabel: "Locked" };
 }

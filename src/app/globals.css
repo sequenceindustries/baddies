@@ -274,3 +274,34 @@ a[href]:hover {
         top: auto !important;
     }
 }
+
+/* Double-tap-to-like's heart pop (Instagram convention) — PostCard
+   mounts this with a fresh `key` on every trigger so React remounts a
+   new element each time (a re-triggered CSS animation on the same DOM
+   node doesn't restart otherwise), then removes it itself on
+   `onAnimationEnd`. Scales up past 100% before settling and fading, so
+   it reads as a deliberate "like" pop rather than a plain fade-in. The
+   global prefers-reduced-motion rule above already caps this to
+   near-zero duration for anyone who's asked for that. */
+@keyframes heart-pop {
+    0% {
+        transform: scale(0.6);
+        opacity: 0;
+    }
+    30% {
+        transform: scale(1.15);
+        opacity: 1;
+    }
+    55% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 0;
+    }
+}
+
+.heart-pop {
+    animation: heart-pop 0.8s ease-out forwards;
+}
