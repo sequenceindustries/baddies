@@ -14,6 +14,7 @@ import {
 } from "@/components/ui";
 import { VerificationFlow } from "@/components/verification-capture";
 import { ACCESS_LABEL } from "@/components/cards";
+import { EXCLUSIVE_MIN_PRICE_USD } from "@/lib/creator/pricing";
 
 type CreatorStatus =
   | "PENDING"
@@ -277,14 +278,23 @@ function StatusPanel({ status }: { status: CreatorStatus }) {
   );
 }
 
-const fixedPriceDisplayStyle: React.CSSProperties = {
-  padding: "0.7rem 0.8rem",
-  background: "var(--surface-raised)",
-  border: "1px solid var(--border)",
-  borderRadius: "var(--radius)",
-  color: "var(--text)",
+const priceInputRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.5rem",
+  marginTop: "0.4rem",
+};
+
+const priceAffixStyle: React.CSSProperties = {
+  color: "var(--text-muted)",
   fontSize: "0.95rem",
   fontWeight: 600,
+};
+
+const priceInputStyle: React.CSSProperties = {
+  ...inputStyle,
+  marginTop: 0,
+  width: "120px",
 };
 
 interface CreatorSettingsData {
@@ -301,12 +311,21 @@ function CreatorSettingsPanel() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Kept as a separate string field rather than folded into `data` (a
+  // number) — a number input's value has to be a freely-typeable string
+  // while editing (e.g. "5." mid-keystroke), and the effective price it
+  // starts from doesn't need to round-trip through more than one parse.
+  const [priceInput, setPriceInput] = useState("");
+
   useEffect(() => {
     let cancelled = false;
     fetch("/api/creator/settings")
       .then((r) => (r.ok ? r.json() : null))
       .then((body) => {
-        if (!cancelled && body) setData(body);
+        if (!cancelled && body) {
+          setData(body);
+          setPriceInput(body.effectiveVvipPriceUsd.toFixed(2));
+        }
       });
     return () => {
       cancelled = true;
@@ -316,6 +335,11 @@ function CreatorSettingsPanel() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!data) return;
+    const exclusivePriceUsd = Number(priceInput);
+    if (!Number.isFinite(exclusivePriceUsd) || exclusivePriceUsd < EXCLUSIVE_MIN_PRICE_USD) {
+      setError(`Exclusive price must be at least $${EXCLUSIVE_MIN_PRICE_USD.toFixed(2)}.`);
+      return;
+    }
     setSaving(true);
     setError(null);
     setSaved(false);
@@ -323,6 +347,7 @@ function CreatorSettingsPanel() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        exclusivePriceUsd,
         unlimitedOptedIn: data.unlimitedOptedIn,
         subscriberCountVisible: data.subscriberCountVisible,
         locationVisible: data.locationVisible,
@@ -334,6 +359,9 @@ function CreatorSettingsPanel() {
       setError(body?.error ?? "Save failed.");
       return;
     }
+    const body: CreatorSettingsData = await res.json();
+    setData(body);
+    setPriceInput(body.effectiveVvipPriceUsd.toFixed(2));
     setSaved(true);
   }
 
@@ -346,9 +374,21 @@ function CreatorSettingsPanel() {
         {error && <div style={errorBannerStyle}>{error}</div>}
         <Field
           label="Exclusive subscription price (USD)"
-          hint="Fixed platform-wide — every creator's Exclusive tier is the same price, not set per creator."
+          hint={`Set your own price for fans who subscribe directly to you — $${EXCLUSIVE_MIN_PRICE_USD.toFixed(2)}/mo minimum.`}
         >
-          <div style={fixedPriceDisplayStyle}>${data.effectiveVvipPriceUsd.toFixed(2)}/mo</div>
+          <div style={priceInputRowStyle}>
+            <span style={priceAffixStyle}>$</span>
+            <input
+              style={priceInputStyle}
+              type="number"
+              min={EXCLUSIVE_MIN_PRICE_USD}
+              step="0.01"
+              value={priceInput}
+              onChange={(e) => setPriceInput(e.target.value)}
+              required
+            />
+            <span style={priceAffixStyle}>/mo</span>
+          </div>
         </Field>
         <label style={checkboxRowStyle}>
           <input

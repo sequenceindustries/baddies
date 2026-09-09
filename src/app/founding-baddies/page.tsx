@@ -49,7 +49,7 @@ function Hero() {
       <p style={heroSubStyle}>
         Join the first generation of African creators building the future of the creator economy.
       </p>
-      <a href="#apply" style={heroCtaStyle}>
+      <a href="#apply" style={heroCtaStyle} className="hover-lift">
         Join Now
       </a>
     </section>
@@ -57,22 +57,13 @@ function Hero() {
 }
 
 function WhatIsBaddies() {
-  const points = [
-    "A premium platform built for female adult creators",
-    "Creators monetise their own content, on their own terms",
-    "Fans subscribe directly to the creators they support",
-    "Open exclusively to South African creators, no exceptions — built here first, for a global audience",
-  ];
   return (
     <Section title="What is baddies?">
-      <div className="grid-cols-2">
-        {points.map((p) => (
-          <div key={p} style={pointCardStyle}>
-            <span style={pointBulletStyle} aria-hidden="true" />
-            <span style={pointTextStyle}>{p}</span>
-          </div>
-        ))}
-      </div>
+      <p style={whatIsSentenceStyle}>
+        baddies is a premium platform built exclusively for South African female adult creators to
+        monetise their own content on their own terms, with fans subscribing directly to the
+        creators they support.
+      </p>
     </Section>
   );
 }
@@ -143,7 +134,7 @@ function TrustAndSafety() {
   ];
   return (
     <Section title="Trust & Safety">
-      <div className="grid-cols-3">
+      <div style={trustBoxStyle}>
         {points.map((p) => (
           <div key={p} style={pointCardStyle}>
             <span style={pointBulletStyle} aria-hidden="true" />
@@ -199,6 +190,11 @@ function ApplicationForm() {
   const [phone, setPhone] = useState("");
   const [country, setCountry] = useState("");
   const [city, setCity] = useState("");
+  // Already-supported on the backend (FoundingApplication.creatingSince)
+  // but not previously collected by this form — added here so the
+  // Email/Password/Phone row pairs up evenly instead of leaving Phone
+  // dangling alone on its own line at narrower widths.
+  const [creatingSince, setCreatingSince] = useState("");
 
   const [social, setSocial] = useState<PlatformState>({});
   const [creatorPlats, setCreatorPlats] = useState<PlatformState>({});
@@ -283,6 +279,7 @@ function ApplicationForm() {
         phone,
         country,
         city,
+        creatingSince: creatingSince || undefined,
         platforms,
         audienceSize: audienceSize || undefined,
         confirmsAdult,
@@ -383,13 +380,26 @@ function ApplicationForm() {
             <FormField label="Phone / WhatsApp">
               <input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value)} required />
             </FormField>
+            <FormField label="Creating content since" hint="e.g. 2021, or ~3 years">
+              <input
+                style={inputStyle}
+                value={creatingSince}
+                onChange={(e) => setCreatingSince(e.target.value)}
+              />
+            </FormField>
           </FormRow>
           <LocationField country={country} city={city} onChange={(v) => { setCountry(v.country); setCity(v.city); }} />
           <p style={fieldHintStyle}>South Africa only — this cohort has no exceptions.</p>
         </FormFieldset>
 
         <FormFieldset legend="Platforms" hint="Select every platform you currently use.">
-          <PlatformPicker title="Social" options={SOCIAL_PLATFORMS} state={social} onChange={setSocial} />
+          <PlatformPicker
+            title="Social"
+            options={SOCIAL_PLATFORMS}
+            state={social}
+            onChange={setSocial}
+            singleField
+          />
           <PlatformPicker
             title="Creator platforms"
             options={CREATOR_PLATFORMS}
@@ -461,11 +471,17 @@ function PlatformPicker({
   options,
   state,
   onChange,
+  singleField = false,
 }: {
   title: string;
   options: string[];
   state: PlatformState;
   onChange: (next: PlatformState) => void;
+  // One merged "Handle or link" input instead of separate handle/link
+  // fields — used for Social, where either is equally useful and asking
+  // for both is just friction. The merged value is stored in `handle`
+  // (PlatformEntry.link stays "" and is simply never sent).
+  singleField?: boolean;
 }) {
   function toggle(option: string) {
     const next = { ...state };
@@ -504,18 +520,29 @@ function PlatformPicker({
                       onChange={(e) => updateEntry(option, { customName: e.target.value })}
                     />
                   )}
-                  <input
-                    style={inputStyle}
-                    placeholder="Username / handle"
-                    value={entry.handle}
-                    onChange={(e) => updateEntry(option, { handle: e.target.value })}
-                  />
-                  <input
-                    style={inputStyle}
-                    placeholder="Profile link"
-                    value={entry.link}
-                    onChange={(e) => updateEntry(option, { link: e.target.value })}
-                  />
+                  {singleField ? (
+                    <input
+                      style={inputStyle}
+                      placeholder="Handle or link"
+                      value={entry.handle}
+                      onChange={(e) => updateEntry(option, { handle: e.target.value })}
+                    />
+                  ) : (
+                    <>
+                      <input
+                        style={inputStyle}
+                        placeholder="Username / handle"
+                        value={entry.handle}
+                        onChange={(e) => updateEntry(option, { handle: e.target.value })}
+                      />
+                      <input
+                        style={inputStyle}
+                        placeholder="Profile link"
+                        value={entry.link}
+                        onChange={(e) => updateEntry(option, { link: e.target.value })}
+                      />
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -591,6 +618,9 @@ const heroStyle: React.CSSProperties = {
   textAlign: "center",
 };
 
+// Border removed per product decision (copying the landing page's
+// borderless treatment) — background alone gives the pill enough
+// contrast against the hero.
 const kickerStyle: React.CSSProperties = {
   display: "inline-block",
   fontSize: "0.75rem",
@@ -598,18 +628,22 @@ const kickerStyle: React.CSSProperties = {
   letterSpacing: "0.08em",
   textTransform: "uppercase",
   color: "var(--accent)",
-  border: "1px solid var(--border)",
+  background: "var(--surface-raised)",
   borderRadius: "999px",
   padding: "0.4rem 1rem",
   marginBottom: "1.75rem",
 };
 
+// whiteSpace: nowrap + a vw-driven lower clamp bound (rather than a
+// fixed rem minimum) keeps "Become a Founding baddie" on one line down
+// to narrow phone widths instead of wrapping mid-heading.
 const heroTitleStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)",
-  fontSize: "clamp(2.4rem, 6vw, 3.8rem)",
+  fontSize: "clamp(1rem, 5.5vw, 2.9rem)",
   fontWeight: 600,
   margin: "0 0 1.1rem",
   lineHeight: 1.1,
+  whiteSpace: "nowrap",
 };
 
 const heroSubStyle: React.CSSProperties = {
@@ -620,24 +654,25 @@ const heroSubStyle: React.CSSProperties = {
   margin: "0 auto 2.25rem",
 };
 
+// Restyled to match the landing page's own boxes (countdown units,
+// how-it-works cards) — background + glow shadow, no border/gradient —
+// instead of the old solid gradient pill.
 const heroCtaStyle: React.CSSProperties = {
-  background: "linear-gradient(135deg, var(--accent) 0%, var(--accent-dim) 100%)",
-  color: "var(--bg)",
-  border: "none",
-  borderRadius: "999px",
+  background: "var(--surface)",
+  color: "var(--accent)",
+  borderRadius: "20px",
   padding: "1rem 2.5rem",
   fontWeight: 700,
   fontSize: "1rem",
   textDecoration: "none",
   display: "inline-block",
-  boxShadow: "0 8px 30px -8px rgba(59, 130, 246, 0.55)",
+  boxShadow: "var(--glow)",
 };
 
 const sectionStyle: React.CSSProperties = {
   padding: "3.5rem 1.75rem",
   maxWidth: "1000px",
   margin: "0 auto",
-  borderTop: "1px solid var(--border)",
 };
 
 const sectionHeadingStyle: React.CSSProperties = {
@@ -654,6 +689,30 @@ const sectionSubStyle: React.CSSProperties = {
   textAlign: "center",
   margin: "0 auto 2.5rem",
   maxWidth: "520px",
+};
+
+const whatIsSentenceStyle: React.CSSProperties = {
+  color: "var(--text)",
+  fontSize: "1.05rem",
+  lineHeight: 1.7,
+  textAlign: "center",
+  maxWidth: "640px",
+  margin: "0 auto",
+};
+
+// The single-column box Trust & Safety's points live in — background +
+// glow shadow, no border, same treatment as every other box on this
+// page and on the landing page.
+const trustBoxStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "1.1rem",
+  background: "var(--surface)",
+  borderRadius: "16px",
+  padding: "1.75rem 2rem",
+  boxShadow: "var(--glow)",
+  maxWidth: "640px",
+  margin: "0 auto",
 };
 
 const pointCardStyle: React.CSSProperties = {
@@ -689,7 +748,6 @@ const benefitCardStyle: React.CSSProperties = {
   alignItems: "flex-start",
   gap: "0.75rem",
   background: "var(--surface)",
-  border: "1px solid var(--border)",
   borderRadius: "14px",
   padding: "1.25rem 1.4rem",
   fontSize: "0.92rem",
@@ -711,7 +769,6 @@ const tierGridStyle: React.CSSProperties = {
 
 const tierCardStyle: React.CSSProperties = {
   background: "var(--surface)",
-  border: "1px solid var(--border)",
   borderRadius: "16px",
   padding: "1.75rem",
   boxShadow: "var(--glow)",
@@ -735,11 +792,19 @@ const formSectionStyle: React.CSSProperties = { maxWidth: "720px" };
 
 const formStyle: React.CSSProperties = { marginTop: "1rem" };
 
+// Border removed in favor of a background + glow shadow — same box
+// treatment used everywhere else on this page, applied to the form's
+// own section groupings too.
 const fieldsetStyle: React.CSSProperties = {
-  border: "1px solid var(--border)",
+  // Explicit "none" (not just omitted) — a bare <fieldset> has a UA
+  // stylesheet default border (2px groove) that only omitting the
+  // property doesn't clear.
+  border: "none",
+  background: "var(--surface)",
   borderRadius: "14px",
   padding: "1.5rem",
   margin: "0 0 1.5rem",
+  boxShadow: "var(--glow)",
 };
 
 const legendStyle: React.CSSProperties = {
@@ -804,7 +869,6 @@ const platformOptionsGridStyle: React.CSSProperties = {
 
 const platformOptionWrapStyle: React.CSSProperties = {
   background: "var(--surface-raised)",
-  border: "1px solid var(--border)",
   borderRadius: "10px",
   padding: "0.6rem 0.75rem",
 };
@@ -859,7 +923,6 @@ const submitButtonStyle: React.CSSProperties = {
 
 const errorBannerStyle: React.CSSProperties = {
   background: "rgba(217, 115, 106, 0.12)",
-  border: "1px solid rgba(217, 115, 106, 0.4)",
   color: "var(--danger)",
   borderRadius: "var(--radius)",
   padding: "0.7rem 0.9rem",
@@ -869,7 +932,6 @@ const errorBannerStyle: React.CSSProperties = {
 
 const successCardStyle: React.CSSProperties = {
   background: "var(--surface)",
-  border: "1px solid var(--border)",
   borderRadius: "16px",
   padding: "2.5rem",
   textAlign: "center",
