@@ -138,7 +138,7 @@ async function handleRefund(data: Record<string, unknown>) {
     referenceId,
   });
   await recomputeWalletBalances(walletId);
-  await reverseCommissionIfLinked(data, amountUsd, `Refund (${referenceId})`);
+  await reverseCommissionIfLinked(data, amountUsd, `Refund (${referenceId})`, "REFUND");
 }
 
 async function handleChargeback(data: Record<string, unknown>) {
@@ -155,7 +155,7 @@ async function handleChargeback(data: Record<string, unknown>) {
     referenceId,
   });
   await recomputeWalletBalances(walletId);
-  await reverseCommissionIfLinked(data, amountUsd, `Chargeback (${referenceId})`);
+  await reverseCommissionIfLinked(data, amountUsd, `Chargeback (${referenceId})`, "CHARGEBACK");
 }
 
 /**
@@ -176,7 +176,12 @@ async function handleChargeback(data: Record<string, unknown>) {
  * commission reversal — it writes a MANUAL_REVIEW AbuseFlag instead so
  * an admin can look at it directly.
  */
-async function reverseCommissionIfLinked(data: Record<string, unknown>, amountUsd: number, reason: string) {
+async function reverseCommissionIfLinked(
+  data: Record<string, unknown>,
+  amountUsd: number,
+  reason: string,
+  eventKind: "REFUND" | "CHARGEBACK"
+) {
   const originalReferenceType = data.originalReferenceType as string | undefined;
   const originalReferenceId = data.originalReferenceId as string | undefined;
   if (!originalReferenceType || !originalReferenceId) return;
@@ -201,11 +206,89 @@ async function reverseCommissionIfLinked(data: Record<string, unknown>, amountUs
     return;
   }
 
-  await postCommissionReversalEvent({
+  const reversal = await postCommissionReversalEvent({
     sourceLedgerEntryId: sourceEntry.id,
     amountUsd,
     reason,
   });
+  // null means this source entry never had a linked commission at all
+  // (an unreferred creator's ordinary refund) — nothing to flag.
+  if (!reversal) return;
+
+  await flagSuspiciousReversalPattern(sourceEntry.id, eventKind, reason);
+}
+
+/**
+ * Founding-Partner-Programme-specific fraud signal (spec §10) — narrow
+ * and rule-based, on purpose: general fraudulent payments elsewhere on
+ * the platform stay the existing Report/moderation system's job, not
+ * duplicated here (see AbuseFlag's own schema comment).
+ *
+ * A chargeback against a partner-attributed commission is flagged
+ * every time, no threshold — a chargeback is already an exceptional
+ * event (the cardholder's bank intervened), unlike an ordinary refund.
+ *
+ * A refund only gets flagged once it's part of a genuine pattern: the
+ * 3rd (or later) commission for this SAME referral that's seen any
+ * refund-driven reversal within a rolling 30-day window. Counts
+ * distinct PartnerCommission rows with a reversal, not raw refund
+ * events — a reasonable proxy given each row already corresponds to
+ * one SUBSCRIPTION billing cycle, and stated here plainly as an
+ * approximation rather than hidden as exact.
+ */
+async function flagSuspiciousReversalPattern(
+  sourceLedgerEntryId: string,
+  eventKind: "REFUND" | "CHARGEBACK",
+  reason: string
+) {
+  const commission = await db.partnerCommission.findUnique({
+    where: { sourceLedgerEntryId },
+    select: { id: true, foundingPartnerId: true, referralAttributionId: true },
+  });
+  if (!commission) return;
+
+  if (eventKind === "CHARGEBACK") {
+    try {
+      await db.abuseFlag.create({
+        data: {
+          type: "SUSPICIOUS_CHARGEBACK_PATTERN",
+          foundingPartnerId: commission.foundingPartnerId,
+          referralAttributionId: commission.referralAttributionId,
+          partnerCommissionId: commission.id,
+          reason: `A chargeback reversed a Founding Partner commission for this referral. ${reason}`,
+          autoDetected: true,
+        },
+      });
+    } catch (err) {
+      console.error("[webhook:payment] failed to write SUSPICIOUS_CHARGEBACK_PATTERN flag", err);
+    }
+    return;
+  }
+
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const recentReversedCommissionCount = await db.partnerCommission.count({
+    where: {
+      referralAttributionId: commission.referralAttributionId,
+      reversedAmountUsd: { gt: 0 },
+      updatedAt: { gte: thirtyDaysAgo },
+    },
+  });
+  if (recentReversedCommissionCount < 3) return;
+
+  try {
+    await db.abuseFlag.create({
+      data: {
+        type: "SUSPICIOUS_REFUND_PATTERN",
+        foundingPartnerId: commission.foundingPartnerId,
+        referralAttributionId: commission.referralAttributionId,
+        partnerCommissionId: commission.id,
+        reason: `${recentReversedCommissionCount} refunded commissions for this referral within the last 30 days. ${reason}`,
+        autoDetected: true,
+      },
+    });
+  } catch (err) {
+    console.error("[webhook:payment] failed to write SUSPICIOUS_REFUND_PATTERN flag", err);
+  }
 }
 
 async function handlePayoutStatus(

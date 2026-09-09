@@ -3234,6 +3234,7 @@ function FoundingPartnersPanel() {
       <PartnerReportingSection />
       <PartnerReferralsSection />
       <PartnerCommissionManagementSection />
+      <AbuseFlagsSection />
     </section>
   );
 }
@@ -3491,6 +3492,129 @@ function PartnerCommissionManagementSection() {
                   </button>
                 )}
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface AbuseFlagRow {
+  id: string;
+  type: string;
+  status: string;
+  reason: string;
+  autoDetected: boolean;
+  partnerEmail: string | null;
+  applicationStageName: string | null;
+  commissionAmountUsd: number | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  resolutionNotes: string | null;
+  createdAt: string;
+}
+
+/**
+ * Founding Partner fraud/abuse review (spec §10) — narrow, rule-based
+ * flags only, review/hold posture: this queue records a finding
+ * (DISMISSED/CONFIRMED) but never itself corrects an attribution or
+ * reverses a commission — see GET /api/admin/abuse-flags/[id]/resolve's
+ * own comment on why. A CONFIRMED flag is a signal for admin to
+ * separately use the existing attribution-correction flow (on the
+ * Applications tab) or the Commission Management "Reverse" action
+ * above, whichever fits the flag.
+ */
+function AbuseFlagsSection() {
+  const [flags, setFlags] = useState<AbuseFlagRow[]>([]);
+  const [statusFilter, setStatusFilter] = useState("OPEN");
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  function reload() {
+    setLoading(true);
+    const qs = statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : "?status=";
+    fetch(`/api/admin/abuse-flags${qs}`)
+      .then((r) => (r.ok ? r.json() : { flags: [] }))
+      .then((body) => setFlags(body.flags ?? []))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(reload, [statusFilter]);
+
+  async function resolve(id: string, status: "DISMISSED" | "CONFIRMED") {
+    const resolutionNotes = window.prompt(
+      status === "CONFIRMED"
+        ? "What did you confirm about this flag? (goes on the record)"
+        : "Why are you dismissing this flag?"
+    );
+    if (!resolutionNotes) return;
+    setBusyId(id);
+    const res = await fetch(`/api/admin/abuse-flags/${id}/resolve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, resolutionNotes }),
+    });
+    setBusyId(null);
+    if (res.ok) reload();
+    else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error && typeof body.error === "string" ? body.error : "Action failed.");
+    }
+  }
+
+  return (
+    <div style={{ marginTop: "2.5rem" }}>
+      <h3 style={statGroupHeadingStyle}>Fraud &amp; abuse review</h3>
+      <select
+        style={{ ...statusSelectStyle, marginBottom: "1rem" }}
+        value={statusFilter}
+        onChange={(e) => setStatusFilter(e.target.value)}
+      >
+        <option value="OPEN">Open</option>
+        <option value="REVIEWING">Reviewing</option>
+        <option value="DISMISSED">Dismissed</option>
+        <option value="CONFIRMED">Confirmed</option>
+        <option value="">All</option>
+      </select>
+      {loading ? (
+        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+      ) : flags.length === 0 ? (
+        <p style={{ color: "var(--success)", fontWeight: 600 }}>No flags match — you&apos;re all caught up.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          {flags.map((f) => (
+            <div key={f.id} style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch", gap: "0.5rem" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
+                <div>
+                  <div style={{ fontSize: "0.88rem" }}>{humanizeKey(f.type)}</div>
+                  <div style={mutedSmallStyle}>
+                    {f.reason}
+                    {f.partnerEmail && ` · partner: ${f.partnerEmail}`}
+                    {f.applicationStageName && ` · creator: ${f.applicationStageName}`}
+                    {f.commissionAmountUsd != null && ` · commission: $${f.commissionAmountUsd.toFixed(2)}`}
+                    {" · "}
+                    {new Date(f.createdAt).toLocaleString()}
+                  </div>
+                  {f.resolutionNotes && (
+                    <div style={mutedSmallStyle}>
+                      resolved: {f.resolutionNotes}
+                      {f.reviewedAt && ` (${new Date(f.reviewedAt).toLocaleDateString()})`}
+                    </div>
+                  )}
+                </div>
+                <span style={filterChipStyle}>{f.status}</span>
+              </div>
+              {(f.status === "OPEN" || f.status === "REVIEWING") && (
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <button onClick={() => resolve(f.id, "CONFIRMED")} disabled={busyId === f.id} style={rejectButtonStyle}>
+                    Confirm
+                  </button>
+                  <button onClick={() => resolve(f.id, "DISMISSED")} disabled={busyId === f.id} style={approveButtonStyle}>
+                    Dismiss
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

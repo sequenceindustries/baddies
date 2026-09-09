@@ -233,4 +233,82 @@ describe.skipIf(!dbAvailable)("payment webhook -> partner commission reversal (i
     const flagsAfter = await db.abuseFlag.count({ where: { type: "MANUAL_REVIEW" } });
     expect(flagsAfter).toBe(flagsBefore);
   });
+
+  it("a chargeback that reverses a partner-attributed commission writes exactly one SUSPICIOUS_CHARGEBACK_PATTERN flag", async () => {
+    const { partner, creatorProfile, creatorWallet } = await setUpReferredCreator(`${Date.now()}-d`);
+    const subscriptionId = `wh-sub-${Date.now()}-d`;
+
+    await postRevenueEvent({
+      walletId: creatorWallet.id,
+      creatorProfileId: creatorProfile.id,
+      type: "SUBSCRIPTION",
+      grossAmountUsd: 1000,
+      referenceType: "subscription",
+      referenceId: subscriptionId,
+    });
+
+    const res = await paymentWebhook(
+      webhookRequest({
+        type: "chargeback.opened",
+        data: {
+          walletId: creatorWallet.id,
+          amountUsd: 1000,
+          referenceId: `chargeback-${Date.now()}-d`,
+          originalReferenceType: "subscription",
+          originalReferenceId: subscriptionId,
+        },
+      })
+    );
+    expect(res.status).toBe(200);
+
+    const flags = await db.abuseFlag.findMany({
+      where: { type: "SUSPICIOUS_CHARGEBACK_PATTERN", foundingPartnerId: partner.id },
+    });
+    expect(flags.length).toBe(1);
+    expect(flags[0]!.autoDetected).toBe(true);
+    cleanupAbuseFlagIds.push(...flags.map((f) => f.id));
+  });
+
+  it("the 3rd refund-reversed commission for the same referral within 30 days writes a SUSPICIOUS_REFUND_PATTERN flag (the first two don't)", async () => {
+    const { partner, creatorProfile, creatorWallet } = await setUpReferredCreator(`${Date.now()}-e`);
+
+    async function refundOneSubscription(suffix: string) {
+      const subscriptionId = `wh-sub-${Date.now()}-e-${suffix}`;
+      await postRevenueEvent({
+        walletId: creatorWallet.id,
+        creatorProfileId: creatorProfile.id,
+        type: "SUBSCRIPTION",
+        grossAmountUsd: 1000,
+        referenceType: "subscription",
+        referenceId: subscriptionId,
+      });
+      const res = await paymentWebhook(
+        webhookRequest({
+          type: "refund.completed",
+          data: {
+            walletId: creatorWallet.id,
+            amountUsd: 1000,
+            referenceId: `refund-${Date.now()}-e-${suffix}`,
+            originalReferenceType: "subscription",
+            originalReferenceId: subscriptionId,
+          },
+        })
+      );
+      expect(res.status).toBe(200);
+    }
+
+    await refundOneSubscription("1");
+    let flags = await db.abuseFlag.findMany({ where: { type: "SUSPICIOUS_REFUND_PATTERN", foundingPartnerId: partner.id } });
+    expect(flags.length).toBe(0);
+
+    await refundOneSubscription("2");
+    flags = await db.abuseFlag.findMany({ where: { type: "SUSPICIOUS_REFUND_PATTERN", foundingPartnerId: partner.id } });
+    expect(flags.length).toBe(0);
+
+    await refundOneSubscription("3");
+    flags = await db.abuseFlag.findMany({ where: { type: "SUSPICIOUS_REFUND_PATTERN", foundingPartnerId: partner.id } });
+    expect(flags.length).toBe(1);
+    expect(flags[0]!.autoDetected).toBe(true);
+    cleanupAbuseFlagIds.push(...flags.map((f) => f.id));
+  });
 });
