@@ -16,6 +16,7 @@ import { checkRateLimitByIp, rateLimitResponse } from "@/lib/security/rate-limit
 import { hashPassword, createSession } from "@/lib/auth/session";
 import { getPlatformSetting } from "@/lib/config/settings";
 import { BUSINESS_CONFIG_KEYS } from "@/lib/config/business";
+import { encryptField } from "@/lib/security/field-encryption";
 
 // Always dynamic: this route writes live data and must never be
 // statically prerendered or cached at build time.
@@ -61,14 +62,24 @@ const ApplySchema = z.object({
  * Public, unauthenticated by design — this is the top-of-funnel Founding
  * Baddies recruitment form (see /founding-baddies), reachable before a
  * visitor has any session. It now creates one, though: the form
- * collects a password so this provisions a real FAN account (same
- * shape as POST /api/auth/register — passwordHash, ageVerified, Profile,
- * Wallet, a trial grant if enabled) and signs them in immediately, in
- * addition to writing the FoundingApplication row itself. See that
- * model's own schema comment for why. Never collects identity
- * documents here; that's the separate, later
- * /api/founding/apply/[id]/identity step, and isn't gated on anything
- * in this route.
+ * collects a password, and a Founding Baddie IS a creator applicant —
+ * not a fan who might become one later — so this provisions a real
+ * CREATOR account immediately, the same shape POST /api/creator/apply
+ * produces for the ordinary path (CreatorProfile at status
+ * VERIFICATION_REQUIRED, legalNameEncrypted, role: CREATOR) layered
+ * onto the same account-creation POST /api/auth/register uses
+ * (passwordHash, ageVerified, Profile, Wallet, a trial grant if
+ * enabled), and signs them in immediately. From here on their real
+ * identity/age/liveness verification happens through the ordinary
+ * creator flow (VerificationFlow on /creator-dashboard) — that's what
+ * "their dashboard should be that of creators" means in practice, not
+ * a separate Founding-specific status page. See FoundingApplication's
+ * own schema comment for why this route creates an account at all.
+ * Never collects identity documents itself; that's VerificationFlow's
+ * job now (the older /api/founding/apply/[id]/identity step still
+ * exists and still works, but only pre-existing applications that
+ * predate this change — with no linked User — would ever reach it via
+ * the legacy /founding-baddies/dashboard page).
  */
 export async function POST(req: NextRequest) {
   // 5 submissions per 15 minutes per IP — generous for a real applicant
@@ -162,15 +173,15 @@ export async function POST(req: NextRequest) {
   ]);
 
   const { application, userId } = await db.$transaction(async (tx) => {
-    // Same account shape POST /api/auth/register creates — this route
-    // is now a second real entry point into having a Baddies account,
-    // not just an application form. See FoundingApplication's own
-    // schema comment for why.
+    // Same account-creation shape POST /api/auth/register uses
+    // (passwordHash, ageVerified, Profile, Wallet), but role: CREATOR
+    // from the start — a Founding Baddie is a creator applicant, not a
+    // fan who might apply later (see this route's own doc comment).
     const user = await tx.user.create({
       data: {
         email: applicationData.email,
         passwordHash,
-        role: "FAN",
+        role: "CREATOR",
         ageVerified: true,
         ageVerifiedAt: new Date(),
         profile: { create: { displayName: applicationData.stageName, country: applicationData.country, city: applicationData.city } },
@@ -183,6 +194,19 @@ export async function POST(req: NextRequest) {
         data: { fanId: user.id, expiresAt: new Date(Date.now() + durationHours * 60 * 60 * 1000) },
       });
     }
+    // Same shape POST /api/creator/apply creates for the ordinary path —
+    // VERIFICATION_REQUIRED is what makes /creator-dashboard render the
+    // real VerificationFlow (identity+ID, live capture, liveness) for
+    // this account from the moment they sign in.
+    await tx.creatorProfile.create({
+      data: {
+        userId: user.id,
+        status: "VERIFICATION_REQUIRED",
+        legalNameEncrypted: encryptField(applicationData.fullName),
+        appliedAt: new Date(),
+        isFoundingBaddie: true,
+      },
+    });
 
     const created = await tx.foundingApplication.create({ data: { ...applicationData, userId: user.id } });
     await tx.location.create({
@@ -232,7 +256,7 @@ export async function POST(req: NextRequest) {
 
   // Signs them in immediately, same as a real /register — the password
   // they just set is real, not a form field that goes nowhere.
-  const { token, expiresAt } = await createSession(userId, "FAN", {
+  const { token, expiresAt } = await createSession(userId, "CREATOR", {
     userAgent: req.headers.get("user-agent") ?? undefined,
     ipAddress: req.headers.get("x-forwarded-for") ?? undefined,
   });

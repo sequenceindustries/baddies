@@ -304,18 +304,14 @@ function ApplicationForm() {
       return;
     }
     setSubmitted(true);
-    // Straight to the applicant's own dashboard rather than an inline
-    // "next steps" panel on this same marketing/apply page — this used
-    // to render the identity-upload form right here, which meant a real
-    // dead end the moment email verification became a hard requirement
-    // for it (see ApplicationNextSteps' own comment): someone could fill
-    // out the whole identity form and only find out it's blocked after
-    // hitting Submit, stranded on the apply page with no obvious next
-    // step. The dashboard is the one canonical place this now happens,
-    // consistent with where the identity form's own submit already sends
-    // people (see IdentityForm in ApplicationNextSteps.tsx), and it's
-    // where the "verify your email first" lock message actually belongs.
-    router.push(`/founding-baddies/dashboard?id=${body.applicationId}`);
+    // Straight to the real creator dashboard, not a Founding-specific
+    // status page — a Founding Baddie IS a creator applicant from the
+    // moment they submit (POST /api/founding/apply now creates a real
+    // CreatorProfile at VERIFICATION_REQUIRED alongside the account), so
+    // /creator-dashboard already renders the right thing for them: the
+    // real VerificationFlow (identity+ID, live capture, liveness), not a
+    // separate bespoke checklist. See that route's own doc comment.
+    router.push("/creator-dashboard");
   }
 
   // Covers the brief gap between a successful submit and router.push
