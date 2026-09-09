@@ -35,12 +35,7 @@ export default function ProfilePage() {
 
   return (
     <main style={mainStyle}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: "1rem", flexWrap: "wrap" }}>
-        <h1 style={displayHeadingStyle}>Profile</h1>
-        <Link href="/settings" style={{ fontSize: "0.85rem", color: "var(--accent)", fontWeight: 600 }}>
-          Account settings →
-        </Link>
-      </div>
+      <h1 style={{ ...displayHeadingStyle, textAlign: "center" }}>Profile</h1>
       <AccountTypePanel
         role={user.role}
         creatorProfile={user.creatorProfile}

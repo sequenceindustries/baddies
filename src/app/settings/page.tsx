@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useSession, displayHeadingStyle, cardStyle, Field, inputStyle, primaryButtonStyle, errorBannerStyle } from "@/components/ui";
 
 /**
@@ -25,12 +24,7 @@ export default function SettingsPage() {
 
   return (
     <main style={mainStyle}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: "1rem", flexWrap: "wrap" }}>
-        <h1 style={displayHeadingStyle}>Settings</h1>
-        <Link href="/profile" style={{ fontSize: "0.85rem", color: "var(--accent)", fontWeight: 600 }}>
-          Edit profile →
-        </Link>
-      </div>
+      <h1 style={{ ...displayHeadingStyle, textAlign: "center" }}>Settings</h1>
       <AccountOverviewPanel role={user.role} createdAt={user.createdAt} onSignOut={refresh} />
       <AccountEmailPanel email={user.email} emailVerified={user.emailVerified} isCreator={Boolean(user.creatorProfile)} />
       <ChangePasswordPanel />
@@ -124,7 +118,16 @@ function AccountEmailPanel({ email, emailVerified, isCreator }: { email: string;
         {emailVerified ? "✓ Verified" : "Not verified yet."}
       </p>
       {!emailVerified && (
-        <div style={{ marginTop: "0.6rem", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+        <div
+          style={{
+            marginTop: "0.6rem",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "0.75rem",
+            flexWrap: "wrap",
+          }}
+        >
           <button onClick={resend} disabled={status === "sending" || status === "sent"} style={secondaryButtonStyle}>
             {status === "sending" ? "Sending…" : status === "sent" ? "Sent" : status === "error" ? "Try again" : "Resend verification email"}
           </button>

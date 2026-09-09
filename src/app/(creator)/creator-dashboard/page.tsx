@@ -232,7 +232,7 @@ function OnboardingChecklist() {
       <p style={{ ...mutedSmallStyle, marginTop: 0, marginBottom: "1rem" }}>
         {doneCount} of {items.length} set up — finish these to look your best to fans and other Founding baddies.
       </p>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
+      <div style={checklistGridStyle}>
         {items.map((item) => (
           <span key={item.label} style={checklistPillStyle(item.done)}>
             {item.done ? "✓" : "○"} {item.label}
@@ -243,10 +243,22 @@ function OnboardingChecklist() {
   );
 }
 
+// A real 2-column grid instead of flex-wrap — flex-wrap packed items
+// left-to-right by whatever fit, so which item ended up "under" which
+// was just an accident of label length (e.g. Creator bio only ever
+// landed next to Featured image because both happened to be short).
+// A grid gives every item a real, consistent column.
+const checklistGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, 1fr)",
+  gap: "0.6rem",
+};
+
 function checklistPillStyle(done: boolean): React.CSSProperties {
   return {
-    display: "inline-flex",
+    display: "flex",
     alignItems: "center",
+    justifyContent: "center",
     gap: "0.35rem",
     fontSize: "0.8rem",
     fontWeight: 600,
@@ -256,6 +268,16 @@ function checklistPillStyle(done: boolean): React.CSSProperties {
     padding: "0.3rem 0.75rem",
   };
 }
+
+// A real 2-column grid instead of flex-wrap — flex-wrap sized each stat
+// to its own label width, so "Followers"/"Subscribers" didn't land in
+// the same columns as "Published posts"/"Total uploads" underneath
+// them. A grid keeps every row's columns aligned.
+const statsGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, 1fr)",
+  gap: "1.5rem 2rem",
+};
 
 interface CreatorStats {
   followerCount: number;
@@ -282,7 +304,7 @@ function StatsPanel() {
   return (
     <div style={cardStyle}>
       <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Stats</h2>
-      <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
+      <div style={statsGridStyle}>
         <WalletStat label="Followers" value={stats.followerCount} format="int" />
         <WalletStat label="Subscribers" value={stats.subscriberCount} format="int" />
         <WalletStat label="Published posts" value={stats.publishedCount} format="int" />
