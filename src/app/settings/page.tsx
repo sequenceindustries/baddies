@@ -1,18 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import {
-  useSession,
-  displayHeadingStyle,
-  cardStyle,
-  Field,
-  inputStyle,
-  primaryButtonStyle,
-  errorBannerStyle,
-  LocationField,
-} from "@/components/ui";
+import { useSession, displayHeadingStyle, cardStyle, Field, inputStyle, primaryButtonStyle, errorBannerStyle } from "@/components/ui";
 
+/**
+ * Real account-level settings — password, sessions, email verification.
+ * Split from /profile (display name/bio/avatar/location — what shows on
+ * your profile) per explicit product decision: this page used to be one
+ * thing called "Settings" holding both; now each has its own page and
+ * its own real functions, not just a renamed heading.
+ */
 export default function SettingsPage() {
   const { user, loading } = useSession();
 
@@ -27,279 +25,168 @@ export default function SettingsPage() {
 
   return (
     <main style={mainStyle}>
-      <h1 style={displayHeadingStyle}>Settings</h1>
-      <AccountTypePanel role={user.role} creatorProfile={user.creatorProfile} foundingPartner={user.foundingPartner} />
-      <ProfileSettings />
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: "1rem", flexWrap: "wrap" }}>
+        <h1 style={displayHeadingStyle}>Settings</h1>
+        <Link href="/profile" style={{ fontSize: "0.85rem", color: "var(--accent)", fontWeight: 600 }}>
+          Edit profile →
+        </Link>
+      </div>
+      <AccountEmailPanel email={user.email} emailVerified={user.emailVerified} />
+      <ChangePasswordPanel />
+      <SessionsPanel />
     </main>
   );
 }
 
-/**
- * Spells out, in plain words, exactly what kind of account this is —
- * the same distinction the nav badge makes at a glance, but with room
- * here to explain what it means and what to do about it.
- */
-function AccountTypePanel({
-  role,
-  creatorProfile,
-  foundingPartner,
-}: {
-  role: "FAN" | "CREATOR" | "ADMIN" | "PARTNER";
-  creatorProfile: { id: string; status: string } | null;
-  foundingPartner: { id: string; status: string } | null;
-}) {
-  // foundingPartner and creatorProfile are independent — an account can
-  // hold both (a Founding Partner who's also applied as a creator; see
-  // /api/partner/dashboard's comment on why role alone can't tell "is
-  // this a partner" once that happens), so this panel describes whatever
-  // combination is actually true rather than picking just one.
-  let heading = "Fan account";
-  let body = "You can browse, subscribe, and tip creators.";
-  if (role === "ADMIN") {
-    heading = "Admin account";
-    body = "You have platform administration access.";
-  } else if (foundingPartner && creatorProfile) {
-    heading = "Founding Partner + Creator account";
-    body =
-      creatorProfile.status === "VERIFIED"
-        ? "You have your private Founding Partner dashboard, and you're a verified creator — your uploads publish immediately."
-        : `You have your private Founding Partner dashboard. Your creator application is in progress (status: ${creatorProfile.status}).`;
-  } else if (foundingPartner) {
-    heading = "Founding Partner account";
-    body = "You have access to your private Founding Partner dashboard.";
-  } else if (creatorProfile) {
-    heading = "Creator account";
-    body =
-      creatorProfile.status === "VERIFIED"
-        ? "You're verified — your uploads publish immediately, no approval wait."
-        : `Application in progress (status: ${creatorProfile.status}).`;
+function AccountEmailPanel({ email, emailVerified }: { email: string; emailVerified: boolean }) {
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+
+  async function resend() {
+    setStatus("sending");
+    const res = await fetch("/api/auth/verify-email/resend", { method: "POST" });
+    setStatus(res.ok ? "sent" : "error");
   }
 
-  const linkStyle: React.CSSProperties = {
-    display: "inline-block",
-    marginTop: "0.6rem",
-    fontSize: "0.85rem",
-    color: "var(--accent)",
-    fontWeight: 600,
-  };
-
   return (
-    <div style={{ ...cardStyle, marginBottom: "2rem" }}>
-      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>{heading}</h2>
-      <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", margin: 0 }}>{body}</p>
-      {!creatorProfile && role !== "ADMIN" && (
-        <Link href="/apply" style={linkStyle}>
-          Become a creator →
-        </Link>
-      )}
-      {creatorProfile && (
-        <Link href="/creator-dashboard" style={{ ...linkStyle, display: "block" }}>
-          Manage pricing, privacy, and content from your Dashboard →
-        </Link>
-      )}
-      {foundingPartner && (
-        <Link href="/partner-dashboard" style={{ ...linkStyle, display: "block" }}>
-          Go to your Partner dashboard →
-        </Link>
+    <div style={{ ...cardStyle, marginBottom: "1.5rem" }}>
+      <h2 style={sectionHeadingStyle}>Email</h2>
+      <p style={{ margin: 0, fontSize: "0.92rem" }}>{email}</p>
+      <p style={{ ...mutedSmallStyle, marginTop: "0.4rem" }}>
+        {emailVerified ? "✓ Verified" : "Not verified yet."}
+      </p>
+      {!emailVerified && (
+        <div style={{ marginTop: "0.6rem", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+          <button onClick={resend} disabled={status === "sending" || status === "sent"} style={secondaryButtonStyle}>
+            {status === "sending" ? "Sending…" : status === "sent" ? "Sent" : status === "error" ? "Try again" : "Resend verification email"}
+          </button>
+          {status === "sent" && <span style={mutedSmallStyle}>Check your inbox.</span>}
+        </div>
       )}
     </div>
   );
 }
 
-interface ProfileData {
-  displayName: string | null;
-  bio: string | null;
-  avatarUrl: string | null;
-  country: string | null;
-  city: string | null;
-}
-
-function ProfileSettings() {
-  const [data, setData] = useState<ProfileData | null>(null);
+function ChangePasswordPanel() {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/profile")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((body) => {
-        if (!cancelled && body) setData(body);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const [result, setResult] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!data) return;
-    setSaving(true);
     setError(null);
-    setSaved(false);
-    const res = await fetch("/api/profile", {
+    setResult(null);
+    if (newPassword.length < 10) {
+      setError("New password must be at least 10 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("New password and confirmation don't match.");
+      return;
+    }
+    setSaving(true);
+    const res = await fetch("/api/auth/password", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        displayName: data.displayName,
-        bio: data.bio || null,
-        avatarUrl: data.avatarUrl || null,
-        country: data.country || undefined,
-        city: data.city || undefined,
-      }),
+      body: JSON.stringify({ currentPassword, newPassword }),
     });
     setSaving(false);
     if (!res.ok) {
       const body = await res.json().catch(() => null);
-      setError(body?.error ?? "Save failed.");
+      setError(typeof body?.error === "string" ? body.error : "Couldn't change your password.");
       return;
     }
-    setSaved(true);
+    const body = await res.json();
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setResult(
+      body.otherSessionsSignedOut > 0
+        ? `✓ Password changed — signed out ${body.otherSessionsSignedOut} other session(s) for security.`
+        : "✓ Password changed."
+    );
   }
 
-  if (!data) return null;
-
   return (
-    <div style={{ ...cardStyle, marginBottom: "2rem" }}>
-      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Profile</h2>
+    <div style={{ ...cardStyle, marginBottom: "1.5rem" }}>
+      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Change password</h2>
       <form onSubmit={handleSubmit}>
         {error && <div style={errorBannerStyle}>{error}</div>}
-        <Field label="Display name">
+        <Field label="Current password">
           <input
             style={inputStyle}
-            value={data.displayName ?? ""}
-            onChange={(e) => setData({ ...data, displayName: e.target.value })}
-            minLength={2}
-            maxLength={50}
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            required
           />
         </Field>
-        <Field label="Bio" hint="Optional.">
-          <textarea
-            style={{ ...inputStyle, minHeight: "80px", resize: "vertical" }}
-            value={data.bio ?? ""}
-            onChange={(e) => setData({ ...data, bio: e.target.value })}
-            maxLength={2000}
+        <Field label="New password" hint="At least 10 characters.">
+          <input
+            style={inputStyle}
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            minLength={10}
+            required
           />
         </Field>
-        <AvatarField avatarUrl={data.avatarUrl} onChange={(avatarUrl) => setData({ ...data, avatarUrl })} />
-        <LocationField
-          country={data.country ?? ""}
-          city={data.city ?? ""}
-          autoDetect={false}
-          onChange={(v) => setData({ ...data, country: v.country, city: v.city })}
-        />
+        <Field label="Confirm new password">
+          <input
+            style={inputStyle}
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            minLength={10}
+            required
+          />
+        </Field>
         <button type="submit" style={primaryButtonStyle} disabled={saving}>
-          {saving ? "Saving..." : saved ? "✓ Saved" : "Save profile"}
+          {saving ? "Saving..." : "Change password"}
         </button>
+        {result && <p style={{ ...mutedSmallStyle, marginTop: "0.75rem" }}>{result}</p>}
       </form>
     </div>
   );
 }
 
-const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2MB — avatarUrl is stored as a plain data: URI string on Profile, so this keeps the row reasonable
+function SessionsPanel() {
+  const [status, setStatus] = useState<"idle" | "working" | "done" | "error">("idle");
+  const [revokedCount, setRevokedCount] = useState<number | null>(null);
 
-/**
- * A real file picker instead of a raw "paste a URL" text box — nobody
- * has a hosted image URL sitting around. Reads the chosen file straight
- * to a data: URI client-side and hands that to the parent form; Profile.
- * avatarUrl is already just a plain string field (unlike Content, which
- * goes through the signed-URL storage provider), so no upload endpoint
- * is needed — it saves the same way pasting a URL always did.
- */
-function AvatarField({ avatarUrl, onChange }: { avatarUrl: string | null; onChange: (url: string | null) => void }) {
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-picking the same file later
-    if (!file) return;
-    setError(null);
-    if (file.size > MAX_AVATAR_BYTES) {
-      setError("Image is too large — please pick one under 2MB.");
+  async function revokeOthers() {
+    if (!window.confirm("Sign out of every other device/browser? This one stays signed in.")) return;
+    setStatus("working");
+    const res = await fetch("/api/auth/sessions/revoke-others", { method: "POST" });
+    if (!res.ok) {
+      setStatus("error");
       return;
     }
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-    onChange(dataUrl);
+    const body = await res.json();
+    setRevokedCount(body.revokedCount);
+    setStatus("done");
   }
 
   return (
-    <Field label="Profile picture" hint="JPG or PNG, up to 2MB." error={error ?? undefined}>
-      <div style={avatarFieldRowStyle}>
-        <div style={avatarPreviewStyle}>
-          {avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          ) : (
-            "?"
-          )}
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          <label style={uploadButtonStyle}>
-            Upload photo
-            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleFile} style={{ display: "none" }} />
-          </label>
-          {avatarUrl && (
-            <button type="button" onClick={() => onChange(null)} style={removeAvatarButtonStyle}>
-              Remove
-            </button>
-          )}
-        </div>
-      </div>
-    </Field>
+    <div style={cardStyle}>
+      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Sessions</h2>
+      <p style={{ ...mutedSmallStyle, marginTop: 0 }}>
+        Signed in on a shared or lost device? Sign out everywhere else — this browser stays signed in.
+      </p>
+      <button onClick={revokeOthers} disabled={status === "working"} style={secondaryButtonStyle}>
+        {status === "working" ? "Signing out…" : "Sign out of all other devices"}
+      </button>
+      {status === "done" && (
+        <p style={{ ...mutedSmallStyle, marginTop: "0.6rem" }}>
+          {revokedCount && revokedCount > 0 ? `✓ Signed out ${revokedCount} other session(s).` : "No other active sessions found."}
+        </p>
+      )}
+      {status === "error" && <p style={{ ...mutedSmallStyle, color: "var(--danger)", marginTop: "0.6rem" }}>Something went wrong. Try again.</p>}
+    </div>
   );
 }
-
-const avatarFieldRowStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "1rem",
-  marginTop: "0.4rem",
-};
-
-const avatarPreviewStyle: React.CSSProperties = {
-  width: "64px",
-  height: "64px",
-  borderRadius: "50%",
-  background: "var(--surface-raised)",
-  border: "2px solid var(--accent)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  color: "var(--accent)",
-  fontWeight: 700,
-  fontFamily: "var(--font-display)",
-  fontSize: "1.3rem",
-  overflow: "hidden",
-  flexShrink: 0,
-};
-
-const uploadButtonStyle: React.CSSProperties = {
-  display: "inline-block",
-  background: "var(--accent)",
-  color: "var(--bg)",
-  borderRadius: "var(--radius)",
-  padding: "0.55rem 1rem",
-  fontWeight: 600,
-  fontSize: "0.85rem",
-  cursor: "pointer",
-  textAlign: "center",
-};
-
-const removeAvatarButtonStyle: React.CSSProperties = {
-  background: "transparent",
-  border: "1px solid var(--border)",
-  color: "var(--text-muted)",
-  borderRadius: "var(--radius)",
-  padding: "0.45rem 1rem",
-  fontSize: "0.82rem",
-  cursor: "pointer",
-};
 
 const mainStyle: React.CSSProperties = { padding: "2.5rem 1.75rem", maxWidth: "620px", margin: "0 auto" };
 
@@ -308,4 +195,17 @@ const sectionHeadingStyle: React.CSSProperties = {
   fontSize: "1.2rem",
   fontWeight: 500,
   margin: "0 0 1.1rem",
+};
+
+const mutedSmallStyle: React.CSSProperties = { fontSize: "0.82rem", color: "var(--text-muted)" };
+
+const secondaryButtonStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "1px solid var(--accent)",
+  color: "var(--accent)",
+  borderRadius: "var(--radius)",
+  padding: "0.5rem 1rem",
+  fontWeight: 600,
+  fontSize: "0.85rem",
+  cursor: "pointer",
 };

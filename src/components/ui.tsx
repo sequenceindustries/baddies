@@ -348,6 +348,9 @@ function MobileAccountBlock({ user, onLogout }: { user: SessionUser; onLogout: (
       <div style={{ marginTop: "0.5rem" }}>
         <AccountTypeBadge role={user.role} creatorProfile={user.creatorProfile} foundingPartner={user.foundingPartner} />
       </div>
+      <Link href="/profile" style={accountMenuLinkStyle}>
+        Profile
+      </Link>
       <Link href="/settings" style={accountMenuLinkStyle}>
         Settings
       </Link>
@@ -432,6 +435,9 @@ function AccountMenu({ user, onLogout }: { user: SessionUser; onLogout: () => vo
               <AccountTypeBadge role={user.role} creatorProfile={user.creatorProfile} foundingPartner={user.foundingPartner} />
             </div>
           </div>
+          <Link href="/profile" style={accountMenuLinkStyle} onClick={() => setOpen(false)}>
+            Profile
+          </Link>
           <Link href="/settings" style={accountMenuLinkStyle} onClick={() => setOpen(false)}>
             Settings
           </Link>

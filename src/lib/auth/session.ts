@@ -86,6 +86,20 @@ export async function revokeSession(sessionId: string): Promise<void> {
   });
 }
 
+/**
+ * "Sign out everywhere else" (Settings) and the security step after a
+ * password change both need this: every other active session for this
+ * account revoked, the one making the request left alone so it doesn't
+ * lock itself out mid-request. Returns how many were actually revoked.
+ */
+export async function revokeOtherSessions(userId: string, keepSessionId: string): Promise<number> {
+  const result = await db.session.updateMany({
+    where: { userId, id: { not: keepSessionId }, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+  return result.count;
+}
+
 /** Server-side check that a session is still valid (not revoked, not expired). */
 export async function isSessionActive(sessionId: string): Promise<boolean> {
   const session = await db.session.findUnique({ where: { id: sessionId } });
