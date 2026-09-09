@@ -57,15 +57,15 @@ export default function ApplicationNextSteps({ applicationId }: { applicationId:
 
       <div style={stepCardStyle}>
         <StepStatus done={identitySubmitted} label="Identity & ID document" />
+        {/* Not gated on emailVerified — per explicit product decision,
+            email verification is informational/parallel, never a block
+            on continuing. An applicant can submit identity before
+            verifying email and come back to verify anytime from this
+            same dashboard; POST /api/founding/apply/[id]/identity
+            doesn't check email-verified status either (see that
+            route's own comment). */}
         {identitySubmitted ? (
           <p style={stepHintStyle}>Submitted — our team will review it as part of your application.</p>
-        ) : !loading && !emailVerified ? (
-          // Locked, not just listed second — per explicit product
-          // decision, an applicant can't get ahead of the pipeline by
-          // skipping straight to identity before confirming their
-          // email. POST /api/founding/apply/[id]/identity enforces the
-          // same rule server-side, so this isn't just a UI suggestion.
-          <p style={stepHintStyle}>Verify your email above first, then you can submit your ID.</p>
         ) : (
           !loading && <IdentityForm applicationId={applicationId} onSubmitted={reloadStatus} />
         )}

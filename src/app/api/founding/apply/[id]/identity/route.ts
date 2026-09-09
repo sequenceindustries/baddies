@@ -43,28 +43,18 @@ function isAtLeast18(dateOfBirth: Date): boolean {
  * email/response themselves).
  */
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const application = await db.foundingApplication.findUnique({
-    where: { id: params.id },
-    include: { contact: { select: { emailVerifiedAt: true } } },
-  });
+  const application = await db.foundingApplication.findUnique({ where: { id: params.id } });
   if (!application) {
     return NextResponse.json({ error: "Application not found." }, { status: 404 });
   }
   if (application.status === "REJECTED") {
     return NextResponse.json({ error: "This application was not accepted and can't be updated." }, { status: 403 });
   }
-  // Gates ID/identity submission behind email verification — per
-  // explicit product decision, the dashboard's own "verify your email"
-  // step must actually limit what an applicant can do next, not just
-  // suggest it. Defense in depth: ApplicationNextSteps.tsx already hides
-  // this form client-side until emailVerified, this is the same rule
-  // enforced server-side against a direct API call.
-  if (!application.contact?.emailVerifiedAt) {
-    return NextResponse.json(
-      { error: "Verify your email before submitting your identity documents." },
-      { status: 403 }
-    );
-  }
+  // Deliberately NOT gated on email verification — per explicit product
+  // decision, verifying email is informational and can happen anytime
+  // from the dashboard; it never blocks continuing with the
+  // application. (A brief earlier version of this route did gate on it;
+  // reverted — see this conversation's own history for why.)
 
   const json = await req.json().catch(() => null);
   const parsed = IdentitySchema.safeParse(json);
