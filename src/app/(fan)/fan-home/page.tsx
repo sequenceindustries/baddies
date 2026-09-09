@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PostCard, type PostCardItem } from "@/components/post-card";
+import { StoryAvatarRow } from "@/components/story-avatar-row";
 
 /**
  * Home feed — Twitter/X-style single-column, infinite-scroll vertical
@@ -80,6 +81,8 @@ export default function FanHomePage() {
       {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
 
       {vipPassActive === false && <VipPassBanner />}
+
+      <StoryAvatarRow />
 
       {initialLoading ? (
         <p style={{ color: "var(--text-muted)" }}>Loading...</p>
