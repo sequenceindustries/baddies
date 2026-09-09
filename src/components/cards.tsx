@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { VerifiedBadge } from "./ui";
 
@@ -21,6 +21,21 @@ export interface CreatorCardData {
   thumbnailUrl?: string | null;
   thumbnailMimeType?: string | null;
 }
+
+// FREE/VIP/VVIP — see prisma/schema.prisma's ContentAccessLevel comment.
+// PPV kept only for any stray legacy row; nothing can create it anymore
+// and the UI never offers it. Still used by the creator-dashboard's own
+// content list (creator-facing, not part of the fan-facing social-feed
+// redesign) after ContentCard/ContentCardData themselves were retired
+// as dead code once the redesign replaced every fan-facing consumer.
+export type ContentAccessLevel = "FREE" | "VIP" | "VVIP" | "PPV";
+
+export const ACCESS_LABEL: Record<ContentAccessLevel, string> = {
+  FREE: "Teasers",
+  VIP: "VIP",
+  VVIP: "Exclusive",
+  PPV: "Pay per view",
+};
 
 /**
  * Same full-bleed treatment as ContentCard (contentCardStyle/
@@ -159,196 +174,6 @@ export function CreatorCardRow({
   );
 }
 
-export interface ContentCardData {
-  contentId: string;
-  // FREE/VIP/VVIP — see prisma/schema.prisma's ContentAccessLevel comment.
-  // PPV kept in the type only for any stray legacy row; nothing can
-  // create it anymore and the UI never offers it.
-  accessLevel: "FREE" | "VIP" | "VVIP" | "PPV";
-  priceUsd?: number | string | null;
-  caption?: string | null;
-  publishedAt?: string | null;
-  mediaType?: "IMAGE" | "VIDEO" | "AUDIO" | null;
-  likeCount?: number;
-  viewerHasLiked?: boolean;
-  // Present when a card can come from more than one creator in the same
-  // feed (Home's Following/VIP Content/Trending) — absent on
-  // ContentTimeline, a single creator's own profile, where repeating
-  // their name on every post would be redundant with the page header.
-  creatorProfileId?: string | null;
-  creatorDisplayName?: string | null;
-  creatorAvatarUrl?: string | null;
-}
-
-export const ACCESS_LABEL: Record<ContentCardData["accessLevel"], string> = {
-  FREE: "Teasers",
-  VIP: "VIP",
-  VVIP: "Exclusive",
-  PPV: "Pay per view",
-};
-
-/**
- * Renders a content item. Always tries the real thing first, on mount —
- * no click required to reveal a thumbnail. /api/content/:id/media and
- * the server's entitlement check (src/lib/entitlements/content.ts)
- * decide, rather than the client guessing from local state whether this
- * viewer is unlocked. That guess used to be wrong for anyone reloading
- * the page: a real VVIP subscriber had no way to open VVIP content at
- * all outside the same session they'd just subscribed in, and every
- * thumbnail sat behind an extra click even when the viewer already had
- * access. Only once the server actually says no do we show a
- * tier-specific upsell (Get VIP Pass, or "subscribe on this creator's
- * profile" for VVIP, which needs that specific creator's price and so
- * isn't duplicated here) — a locked thumbnail is the exception now, not
- * the default.
- */
-export function ContentCard({ item }: { item: ContentCardData }) {
-  const [media, setMedia] = useState<{ mimeType: string; signedUrl: string } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [denied, setDenied] = useState(false);
-  const [liked, setLiked] = useState(item.viewerHasLiked ?? false);
-  const [likeCount, setLikeCount] = useState(item.likeCount ?? 0);
-  const [likeBusy, setLikeBusy] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-
-  async function handleView() {
-    setLoading(true);
-    setError(null);
-    const res = await fetch(`/api/content/${item.contentId}/media`);
-    setLoading(false);
-    if (!res.ok) {
-      setDenied(true);
-      if (res.status !== 401 && res.status !== 403) {
-        setError("Couldn't load this content. Try again.");
-      }
-      return;
-    }
-    const body = await res.json();
-    if (body.media?.[0]) {
-      setMedia(body.media[0]);
-      setDenied(false);
-    }
-  }
-
-  useEffect(() => {
-    handleView();
-    // Only ever auto-fires once per mounted card.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function handleGetVipPass() {
-    setLoading(true);
-    setError(null);
-    const res = await fetch("/api/checkout/vip-pass", { method: "POST" });
-    if (!res.ok) {
-      setLoading(false);
-      const body = await res.json().catch(() => null);
-      setError(body?.error ?? "Couldn't get VIP pass.");
-      return;
-    }
-    await handleView();
-  }
-
-  async function toggleLike() {
-    setLikeBusy(true);
-    const res = await fetch(`/api/content/${item.contentId}/like`, { method: liked ? "DELETE" : "POST" });
-    setLikeBusy(false);
-    if (res.ok) {
-      const body = await res.json();
-      setLiked(body.liked);
-      setLikeCount(body.likeCount);
-    }
-  }
-
-  return (
-    <div
-      className="hover-lift"
-      style={{ ...contentCardStyle, cursor: media ? "zoom-in" : "default" }}
-      onClick={() => media && setExpanded(true)}
-      role={media ? "button" : undefined}
-      aria-label={media ? "Open full size" : undefined}
-    >
-      {/* Full-bleed photo as the card's own background layer — everything
-          else (byline, tier label, caption, actions) sits on top of it in
-          gradient-scrimmed overlays, rather than the media being one
-          element among several stacked in a padded card. */}
-      {media ? (
-        <MediaPreview
-          mimeType={media.mimeType}
-          url={media.signedUrl}
-          // A signed URL that 404s/403s once mounted (expired, or the
-          // underlying blob never actually existed) falls straight back
-          // to the same loading/denied UI below, Retry button included,
-          // instead of leaving a blank broken-image box on the card.
-          onError={() => {
-            setMedia(null);
-            setError("This media couldn't load.");
-          }}
-        />
-      ) : (
-        <div style={cardMediaFallbackStyle}>
-          {loading ? (
-            <span style={mutedSmallStyle}>Loading...</span>
-          ) : denied && item.accessLevel === "VIP" ? (
-            <button onClick={(e) => { e.stopPropagation(); handleGetVipPass(); }} style={ghostSmallButtonStyle}>
-              Get VIP Pass to unlock
-            </button>
-          ) : denied ? (
-            <span style={mutedSmallStyle}>Locked</span>
-          ) : (
-            <button onClick={(e) => { e.stopPropagation(); handleView(); }} style={ghostSmallButtonStyle}>
-              Retry
-            </button>
-          )}
-          {denied && item.accessLevel === "VVIP" && (
-            <div style={mutedSmallStyle}>Subscribe on this creator&apos;s profile to unlock.</div>
-          )}
-          {error && <div style={{ ...mutedSmallStyle, color: "var(--danger)" }}>{error}</div>}
-        </div>
-      )}
-
-      <div style={cardTopScrimStyle}>
-        {item.creatorDisplayName && item.creatorProfileId ? (
-          <Link
-            href={`/creators/${item.creatorProfileId}`}
-            style={cardCreatorLinkStyle}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <CardAvatar url={item.creatorAvatarUrl} initial={item.creatorDisplayName.charAt(0).toUpperCase()} />
-            <span style={cardCreatorNameStyle}>{item.creatorDisplayName}</span>
-          </Link>
-        ) : (
-          // Keeps the tier badge pushed to the right (its normal flex
-          // position) even with no byline to fill the flex: 1 space.
-          <span style={{ flex: "1 1 auto" }} />
-        )}
-        <div style={cardTopScrimBadgeStyle}>
-          <TierBadge accessLevel={item.accessLevel} />
-        </div>
-      </div>
-
-      <div style={cardBottomScrimStyle}>
-        {item.caption && <p style={captionStyle}>{item.caption}</p>}
-        <div style={cardFooterStyle}>
-          {item.publishedAt && <span style={cardTimeStyle}>{timeAgo(item.publishedAt)}</span>}
-          <div style={cardFooterActionsStyle} onClick={(e) => e.stopPropagation()}>
-            <button onClick={toggleLike} disabled={likeBusy} style={likeButtonStyle(liked)}>
-              <HeartIcon filled={liked} />
-              {likeCount}
-            </button>
-            <ReportButton contentId={item.contentId} />
-          </div>
-        </div>
-      </div>
-
-      {expanded && media && (
-        <MediaLightbox mimeType={media.mimeType} url={media.signedUrl} onClose={() => setExpanded(false)} />
-      )}
-    </div>
-  );
-}
-
 /** Full-size view — clicking a card's media opens this instead of only ever showing the cropped card-sized preview. */
 /**
  * Rendered via a portal straight onto document.body — not nested inside
@@ -391,10 +216,6 @@ export function MediaLightbox({ mimeType, url, onClose }: { mimeType: string; ur
   );
 }
 
-function TierBadge({ accessLevel }: { accessLevel: ContentCardData["accessLevel"] }) {
-  return <span style={tierBadgeStyle(accessLevel)}>{ACCESS_LABEL[accessLevel]}</span>;
-}
-
 export function timeAgo(iso: string): string {
   const diffSec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
   if (diffSec < 60) return "just now";
@@ -407,81 +228,6 @@ export function timeAgo(iso: string): string {
   const mo = Math.floor(day / 30);
   if (mo < 12) return `${mo}mo`;
   return `${Math.floor(mo / 12)}y`;
-}
-
-/**
- * OnlyFans-style creator-profile feed: a single reverse-chronological
- * timeline (items already arrive sorted newest-first from
- * /api/creators/:id/content) rather than three permanently-stacked
- * sections. Tier tabs only appear at all once this creator actually has
- * content in more than one tier — a creator who only ever posts Free
- * content shouldn't see empty "VIP"/"Exclusive" tabs cluttering their
- * page.
- */
-const TIER_ORDER = ["FREE", "VIP", "VVIP"] as const;
-
-export function ContentTimeline({ items, vvipPriceUsd }: { items: ContentCardData[]; vvipPriceUsd: number }) {
-  const present = new Set(items.map((i) => i.accessLevel));
-  const tiersPresent = TIER_ORDER.filter((t) => present.has(t));
-  // No explicit "All" tab — undefined means unfiltered. Clicking the
-  // already-active tier tab again clears it back to unfiltered, so
-  // there's still a way back without a dedicated button for it.
-  const [tab, setTab] = useState<"FREE" | "VIP" | "VVIP" | undefined>(undefined);
-  const showTabs = tiersPresent.length > 1;
-  const visible = !tab ? items : items.filter((i) => i.accessLevel === tab);
-
-  if (items.length === 0) {
-    return <p style={mutedSmallStyle}>No content yet.</p>;
-  }
-
-  const TAB_LABEL: Record<"FREE" | "VIP" | "VVIP", string> = {
-    FREE: "Teasers",
-    VIP: "VIP",
-    VVIP: vvipPriceUsd ? `Exclusive · $${vvipPriceUsd.toFixed(2)}/mo` : "Exclusive",
-  };
-
-  return (
-    <div style={timelineWrapStyle}>
-      {showTabs && (
-        <div style={tabBarStyle}>
-          {tiersPresent.map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab((current) => (current === t ? undefined : t))}
-              style={tabButtonStyle(tab === t)}
-            >
-              {TAB_LABEL[t]}
-            </button>
-          ))}
-        </div>
-      )}
-      <div style={timelineListStyle}>
-        {visible.map((item) => (
-          <ContentCard key={item.contentId} item={item} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Fills the card as its background layer (position: absolute, inset: 0 —
-// see cardMediaLayerStyle) so the photo/video reads as the whole card,
-// not one element stacked among several. Audio has no visual to bleed,
-// so it stays a normal in-flow control instead (and never actually
-// fails silently the way an <img>/<video> can, so no onError there).
-function MediaPreview({ mimeType, url, onError }: { mimeType: string; url: string; onError: () => void }) {
-  if (mimeType.startsWith("video/")) {
-    return <video src={url} controls style={cardMediaLayerStyle} onError={onError} />;
-  }
-  if (mimeType.startsWith("audio/")) {
-    return (
-      <div style={cardMediaFallbackStyle}>
-        <audio src={url} controls style={{ width: "90%" }} onClick={(e) => e.stopPropagation()} />
-      </div>
-    );
-  }
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} alt="" style={cardMediaLayerStyle} onError={onError} />;
 }
 
 const REPORT_REASONS = [
@@ -601,21 +347,6 @@ const reportSelectStyle: React.CSSProperties = {
   padding: "0.3rem 0.4rem",
 };
 
-export function ContentGrid({ items }: { items: ContentCardData[] }) {
-  if (items.length === 0) {
-    return <p style={mutedSmallStyle}>No content yet.</p>;
-  }
-  return (
-    <div style={gridStyle}>
-      {items.map((item) => (
-        <div key={item.contentId} style={gridItemStyle}>
-          <ContentCard item={item} />
-        </div>
-      ))}
-    </div>
-  );
-}
-
 const cardLinkStyle: React.CSSProperties = { textDecoration: "none", color: "inherit", display: "block" };
 
 const avatarImgStyle: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover" };
@@ -650,8 +381,6 @@ const priceRowStyle: React.CSSProperties = {
   fontWeight: 600,
   textShadow: "0 1px 4px rgba(0, 0, 0, 0.7)",
 };
-
-const mutedSmallStyle: React.CSSProperties = { fontSize: "0.78rem", color: "var(--text-muted)" };
 
 // Matches src/app/(fan)/fan-home/page.tsx's sectionWrapStyle — clearly-
 // separated categories rather than sections running into each other.
@@ -717,28 +446,6 @@ function sliderNavButtonStyle(side: "left" | "right"): React.CSSProperties {
     boxShadow: "var(--glow)",
   };
 }
-
-const gridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 420px))",
-  gap: "1.75rem",
-  justifyContent: "center",
-};
-
-const gridItemStyle: React.CSSProperties = { minWidth: 0 };
-
-// var(--text) is already near-white (this app is dark-themed throughout),
-// so the only thing overlaying it on a photo needs is a drop shadow for
-// legibility against busy image content, plus its own stacking context
-// above the media layer (z-index: 0) and its gradient scrim.
-const captionStyle: React.CSSProperties = {
-  position: "relative",
-  zIndex: 2,
-  fontSize: "0.85rem",
-  margin: 0,
-  color: "var(--text)",
-  textShadow: "0 1px 4px rgba(0, 0, 0, 0.7)",
-};
 
 // flex: 1 + minWidth: 0 (not the row's natural content width) is what
 // actually centers this safely: the badge sibling in cardTopScrimStyle
@@ -847,14 +554,6 @@ const cardTimeStyle: React.CSSProperties = {
   textShadow: "0 1px 4px rgba(0, 0, 0, 0.7)",
 };
 
-const cardFooterActionsStyle: React.CSSProperties = {
-  position: "relative",
-  zIndex: 2,
-  display: "flex",
-  alignItems: "center",
-  gap: "0.85rem",
-};
-
 const lightboxBackdropStyle: React.CSSProperties = {
   position: "fixed",
   inset: 0,
@@ -894,39 +593,6 @@ const lightboxCloseStyle: React.CSSProperties = {
   zIndex: 101,
 };
 
-const ghostSmallButtonStyle: React.CSSProperties = {
-  background: "transparent",
-  border: "1px solid var(--border)",
-  color: "var(--text)",
-  borderRadius: "var(--radius)",
-  padding: "0.4rem 0.7rem",
-  fontSize: "0.8rem",
-  cursor: "pointer",
-};
-
-const cardFooterStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: "0.5rem",
-};
-
-function likeButtonStyle(liked: boolean): React.CSSProperties {
-  return {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "0.3rem",
-    background: "none",
-    border: "none",
-    color: liked ? "var(--accent-wine)" : "var(--text-muted)",
-    fontSize: "0.8rem",
-    cursor: "pointer",
-    padding: 0,
-    fontWeight: liked ? 600 : 400,
-    textShadow: "0 1px 4px rgba(0, 0, 0, 0.7)",
-  };
-}
-
 // A real drawn heart (rounded twin-lobe top, pointed base) instead of the
 // Unicode ♥/♡ glyphs previously used here — those render inconsistently
 // across platforms (a flat, dated shape on most systems) and can't take
@@ -946,22 +612,6 @@ export function HeartIcon({ filled }: { filled: boolean }) {
     </svg>
   );
 }
-
-// --- Timeline (large, Twitter-style post) styles ---
-
-// Centers the whole timeline (tabs + posts) as one column instead of
-// pinning it to the left edge of a much wider page, which on a large
-// viewport left a huge dead gap down the right side.
-const timelineWrapStyle: React.CSSProperties = {
-  maxWidth: "620px",
-  margin: "0 auto",
-};
-
-const timelineListStyle: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "1.25rem",
-};
 
 // Full-bleed photo card — one style used everywhere content appears
 // (creator-profile timeline, Home's grids, everywhere). The photo is the
@@ -1004,39 +654,3 @@ const cardMediaFallbackStyle: React.CSSProperties = {
   padding: "1.5rem",
 };
 
-// Bold uppercase text over the photo, not a bordered chip — plain white
-// with a drop shadow for legibility on any photo, --accent-colored only
-// for the top Exclusive tier so the hierarchy between tiers still reads.
-function tierBadgeStyle(accessLevel: ContentCardData["accessLevel"]): React.CSSProperties {
-  return {
-    position: "relative",
-    zIndex: 2,
-    fontSize: "0.72rem",
-    fontWeight: 800,
-    letterSpacing: "0.06em",
-    textTransform: "uppercase",
-    color: accessLevel === "VVIP" ? "var(--accent)" : "#fff",
-    textShadow: "0 1px 4px rgba(0, 0, 0, 0.7)",
-    flexShrink: 0,
-  };
-}
-
-const tabBarStyle: React.CSSProperties = {
-  display: "flex",
-  gap: "0.5rem",
-  marginBottom: "1.25rem",
-  flexWrap: "wrap",
-};
-
-function tabButtonStyle(active: boolean): React.CSSProperties {
-  return {
-    padding: "0.4rem 0.9rem",
-    borderRadius: "999px",
-    fontSize: "0.82rem",
-    fontWeight: 600,
-    cursor: "pointer",
-    background: active ? "var(--accent)" : "transparent",
-    color: active ? "var(--bg)" : "var(--text-muted)",
-    border: active ? "none" : "1px solid var(--border)",
-  };
-}

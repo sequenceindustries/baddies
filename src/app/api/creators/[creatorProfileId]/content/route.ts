@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { buildViewerLockContext, computeLockState } from "@/lib/entitlements/list-lock";
+import { resolveCreatorPricing } from "@/lib/creator/pricing";
+import { getBusinessConfig } from "@/lib/config/settings";
+import { POST_ITEM_SELECT, buildLockCta, shapeContentItem } from "@/lib/feed/post-item";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -9,19 +13,27 @@ export const dynamic = "force-dynamic";
 const PAGE_SIZE = 20;
 
 /**
- * A creator's own feed. Returns classification metadata (§8) so the
- * client can render locked/unlocked states correctly, but never a media
- * URL — clients fetch that per-item from
- * /api/content/:id/media once the fan has confirmed intent to view,
- * which is where the real entitlement check happens. Also returns
- * likeCount and (if signed in) viewerHasLiked — social-proof only, see
- * src/app/api/content/[contentId]/like/route.ts.
+ * A creator's own feed — now returning the exact same post-item shape
+ * GET /api/feed and GET /api/content/:id already do (lock object,
+ * engagement counts, creator byline), so the profile page's Instagram-
+ * style grid (social-feed redesign, Phase 3) can feed GridThumbnail/
+ * PostDetailOverlay directly without a translation layer. This is a
+ * full reshape rather than an additive bolt-on: the previous ad-hoc
+ * {priceUsd, ...} shape had exactly one consumer (this creator's own
+ * profile page), which is being rewritten in the same change, so
+ * keeping two parallel shapes alive would only add duplication with no
+ * real compatibility to protect.
+ *
+ * Still never returns a media URL — that's exclusively
+ * /api/content/:id/media's job, gated by canAccessContent. `lock` here
+ * is the same display-only mirror (list-lock.ts) every other list
+ * route already uses; never authoritative.
  */
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { creatorProfileId: string } }
-) {
-  const creator = await db.creatorProfile.findUnique({ where: { id: params.creatorProfileId } });
+export async function GET(req: NextRequest, { params }: { params: { creatorProfileId: string } }) {
+  const creator = await db.creatorProfile.findUnique({
+    where: { id: params.creatorProfileId },
+    select: { status: true, ...POST_ITEM_SELECT.creatorProfile.select },
+  });
   if (!creator || creator.status !== "VERIFIED") {
     return NextResponse.json({ error: "Creator not found." }, { status: 404 });
   }
@@ -38,10 +50,11 @@ export async function GET(
       id: true,
       mediaType: true,
       accessLevel: true,
-      priceUsd: true,
       caption: true,
       publishedAt: true,
-      _count: { select: { likes: true } },
+      status: true,
+      creatorProfileId: true,
+      _count: { select: { likes: true, tips: true } },
       likes: viewer ? { where: { fanId: viewer.id }, select: { id: true } } : false,
     },
   });
@@ -49,17 +62,36 @@ export async function GET(
   const hasMore = items.length > PAGE_SIZE;
   const page = hasMore ? items.slice(0, PAGE_SIZE) : items;
 
+  const [viewerCtx, businessConfig, { vvipPriceUsd }] = await Promise.all([
+    buildViewerLockContext(viewer),
+    getBusinessConfig(),
+    resolveCreatorPricing(creator),
+  ]);
+
+  const shaped = page.map((item) => {
+    const lockState = computeLockState(
+      {
+        creatorProfileId: item.creatorProfileId,
+        accessLevel: item.accessLevel,
+        status: item.status,
+        publishedAt: item.publishedAt,
+        creatorUnlimitedOptedIn: creator.unlimitedOptedIn,
+      },
+      viewerCtx
+    );
+
+    const lock = lockState.locked
+      ? buildLockCta(lockState.kind, businessConfig.vipPassPriceUsd, vvipPriceUsd)
+      : { locked: false as const, kind: null, priceUsd: null, ctaLabel: null };
+
+    return shapeContentItem(
+      { ...item, creatorProfile: creator },
+      { lock, viewerHasLiked: viewer ? item.likes.length > 0 : false, context: null }
+    );
+  });
+
   return NextResponse.json({
-    items: page.map((item: (typeof page)[number]) => ({
-      contentId: item.id,
-      mediaType: item.mediaType,
-      accessLevel: item.accessLevel,
-      priceUsd: item.priceUsd,
-      caption: item.caption,
-      publishedAt: item.publishedAt,
-      likeCount: item._count.likes,
-      viewerHasLiked: viewer ? item.likes.length > 0 : false,
-    })),
+    items: shaped,
     nextCursor: hasMore ? page[page.length - 1]?.id : null,
   });
 }

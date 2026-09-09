@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { VerifiedBadge, CheckTick, displayHeadingStyle, useSession, SignInGate } from "@/components/ui";
-import { ContentTimeline, ReportButton, type ContentCardData } from "@/components/cards";
+import { ReportButton } from "@/components/cards";
+import { GridThumbnail, PostDetailOverlay } from "@/components/grid-thumbnail";
+import { ComposeMessageModal, type PostCardItem } from "@/components/post-card";
 
 interface CreatorProfileResponse {
   creatorProfileId: string;
@@ -23,27 +25,71 @@ interface CreatorProfileResponse {
   isFoundingBaddie: boolean;
 }
 
-interface RawContentItem {
-  contentId: string;
-  mediaType: ContentCardData["mediaType"];
-  accessLevel: ContentCardData["accessLevel"];
-  priceUsd: number | string | null;
-  caption: string | null;
-  publishedAt: string | null;
-  likeCount?: number;
-  viewerHasLiked?: boolean;
-}
+const TIER_ORDER = ["FREE", "VIP", "VVIP"] as const;
+type Tier = (typeof TIER_ORDER)[number];
 
+/**
+ * Creator profile — header stays exactly as it was (avatar, name,
+ * VerifiedBadge, bio, follower/subscriber counts, Subscribe button),
+ * per the social-feed redesign brief's own instruction. What changed:
+ * the content section below is now the Instagram-style grid
+ * (GridThumbnail/PostDetailOverlay, same components Discovery's Phase 2
+ * grid uses) instead of ContentTimeline's vertical list, fed by this
+ * creator's own now-cursor-paginated /content route with its own
+ * infinite-scroll sentinel. The tier tab bar is unchanged in spirit —
+ * still only shown once more than one tier is present — but now filters
+ * client-side over whatever's already loaded, rather than filtering a
+ * single flat array fetched all at once. A Message button sits next to
+ * Follow, opening the same ComposeMessageModal the feed's engagement
+ * row uses, pre-targeted at this creator.
+ */
 export default function CreatorProfilePage() {
   const params = useParams<{ creatorProfileId: string }>();
   const creatorProfileId = params.creatorProfileId;
   const { user, loading: sessionLoading } = useSession();
 
   const [creator, setCreator] = useState<CreatorProfileResponse | null>(null);
-  const [items, setItems] = useState<RawContentItem[]>([]);
   const [notFound, setNotFound] = useState(false);
   const [following, setFollowing] = useState(false);
   const [followBusy, setFollowBusy] = useState(false);
+  const [messageOpen, setMessageOpen] = useState(false);
+
+  const [items, setItems] = useState<PostCardItem[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [gridInitialLoading, setGridInitialLoading] = useState(true);
+  const [gridLoadingMore, setGridLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [gridError, setGridError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tier | undefined>(undefined);
+  const [openContentId, setOpenContentId] = useState<string | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadingRef = useRef(false);
+
+  const loadPage = useCallback(
+    async (afterCursor: string | null) => {
+      if (loadingRef.current) return;
+      loadingRef.current = true;
+      if (afterCursor) setGridLoadingMore(true);
+      setGridError(null);
+      try {
+        const res = await fetch(
+          `/api/creators/${creatorProfileId}/content${afterCursor ? `?cursor=${encodeURIComponent(afterCursor)}` : ""}`
+        );
+        if (!res.ok) throw new Error("Failed to load.");
+        const body = await res.json();
+        setItems((prev) => (afterCursor ? [...prev, ...body.items] : body.items));
+        setCursor(body.nextCursor ?? null);
+        setHasMore(Boolean(body.nextCursor));
+      } catch {
+        setGridError("Couldn't load this creator's posts. Try refreshing.");
+      } finally {
+        loadingRef.current = false;
+        setGridInitialLoading(false);
+        setGridLoadingMore(false);
+      }
+    },
+    [creatorProfileId]
+  );
 
   useEffect(() => {
     // Signed-out visitors are gated below (SignInGate) — don't even fetch
@@ -63,16 +109,28 @@ export default function CreatorProfilePage() {
         if (!cancelled && body) setCreator(body);
       });
 
-    fetch(`/api/creators/${creatorProfileId}/content`)
-      .then((r) => (r.ok ? r.json() : { items: [] }))
-      .then((body) => {
-        if (!cancelled) setItems(body.items ?? []);
-      });
+    loadPage(null);
 
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creatorProfileId, user]);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasMore && !loadingRef.current) {
+          loadPage(cursor);
+        }
+      },
+      { rootMargin: "600px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [cursor, hasMore, loadPage]);
 
   if (sessionLoading) return <main style={mainStyle} />;
   if (!user) {
@@ -110,6 +168,10 @@ export default function CreatorProfilePage() {
 
   const initial = (creator.displayName ?? "?").trim().charAt(0).toUpperCase() || "?";
   const isOwnProfile = user?.creatorProfile?.id === creatorProfileId;
+
+  const tiersPresent = TIER_ORDER.filter((t) => items.some((i) => i.accessLevel === t));
+  const showTabs = tiersPresent.length > 1;
+  const visibleItems = tab ? items.filter((i) => i.accessLevel === tab) : items;
 
   return (
     <main style={mainStyle}>
@@ -153,9 +215,14 @@ export default function CreatorProfilePage() {
         </div>
         {!isOwnProfile && user && (
           <div style={headerActionsStyle}>
-            <button onClick={toggleFollow} disabled={followBusy} style={followButtonStyle(following)}>
-              {following ? "Following" : "Follow"}
-            </button>
+            <div style={headerActionButtonsRowStyle}>
+              <button onClick={toggleFollow} disabled={followBusy} style={followButtonStyle(following)}>
+                {following ? "Following" : "Follow"}
+              </button>
+              <button onClick={() => setMessageOpen(true)} style={messageButtonStyle}>
+                Message
+              </button>
+            </div>
             <div style={{ marginTop: "auto" }}>
               <ReportButton reportedUserId={creator.userId} />
             </div>
@@ -164,7 +231,34 @@ export default function CreatorProfilePage() {
       </div>
 
       <h2 style={sectionHeadingStyle}>Content</h2>
-      <ContentTimeline items={items} vvipPriceUsd={creator.vvipPriceUsd} />
+
+      {showTabs && (
+        <div style={tabRowStyle}>
+          {tiersPresent.map((t) => (
+            <button key={t} onClick={() => setTab((cur) => (cur === t ? undefined : t))} style={tabButtonStyle(tab === t)}>
+              {t === "FREE" ? "Free" : t === "VIP" ? "VIP" : "Exclusive"}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {gridError && <p style={{ color: "var(--danger)" }}>{gridError}</p>}
+      {gridInitialLoading ? (
+        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+      ) : visibleItems.length === 0 ? (
+        <p style={{ color: "var(--text-muted)" }}>No content yet.</p>
+      ) : (
+        <div style={gridStyle}>
+          {visibleItems.map((item) => (
+            <GridThumbnail key={item.contentId} item={item} onOpen={() => setOpenContentId(item.contentId)} />
+          ))}
+        </div>
+      )}
+      <div ref={sentinelRef} style={{ height: "1px" }} aria-hidden="true" />
+      {gridLoadingMore && <p style={{ color: "var(--text-muted)", textAlign: "center" }}>Loading more...</p>}
+
+      {openContentId && <PostDetailOverlay contentId={openContentId} onClose={() => setOpenContentId(null)} />}
+      {messageOpen && <ComposeMessageModal creatorProfileId={creatorProfileId} onClose={() => setMessageOpen(false)} />}
     </main>
   );
 }
@@ -229,7 +323,7 @@ function checkoutButtonStyle(active: boolean): React.CSSProperties {
   };
 }
 
-const mainStyle: React.CSSProperties = { padding: "2.5rem 1.75rem", maxWidth: "1100px", margin: "0 auto" };
+const mainStyle: React.CSSProperties = { padding: "2.5rem 1.75rem 4rem", maxWidth: "1100px", margin: "0 auto" };
 
 const headerStyle: React.CSSProperties = {
   display: "flex",
@@ -264,10 +358,11 @@ const avatarStyle: React.CSSProperties = {
 // not centered page copy.
 const headerTextBlockStyle: React.CSSProperties = { flex: 1, textAlign: "left" };
 
-// Follow sits vertically centered in the header's height (justifyContent:
-// center); Report gets marginTop: auto so it's pinned to the bottom
-// regardless — a flex child's own margin: auto on the main axis wins
-// over the container's justify-content for that one item.
+// Follow+Message sit vertically centered in the header's height
+// (justifyContent: center); Report gets marginTop: auto so it's pinned
+// to the bottom regardless — a flex child's own margin: auto on the
+// main axis wins over the container's justify-content for that one
+// item.
 const headerActionsStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
@@ -275,6 +370,8 @@ const headerActionsStyle: React.CSSProperties = {
   justifyContent: "center",
   gap: "0.5rem",
 };
+
+const headerActionButtonsRowStyle: React.CSSProperties = { display: "flex", gap: "0.5rem" };
 
 const mutedStyle: React.CSSProperties = { color: "var(--text-muted)", fontSize: "0.9rem", margin: "0.2rem 0" };
 
@@ -321,3 +418,38 @@ function followButtonStyle(following: boolean): React.CSSProperties {
     border: following ? "1px solid var(--border)" : "none",
   };
 }
+
+const messageButtonStyle: React.CSSProperties = {
+  padding: "0.55rem 1.1rem",
+  borderRadius: "var(--radius)",
+  fontWeight: 600,
+  fontSize: "0.85rem",
+  cursor: "pointer",
+  flexShrink: 0,
+  background: "transparent",
+  color: "var(--text)",
+  border: "1px solid var(--border)",
+};
+
+const tabRowStyle: React.CSSProperties = { display: "flex", gap: "0.5rem", marginBottom: "1.25rem" };
+
+function tabButtonStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: "0.4rem 0.9rem",
+    borderRadius: "999px",
+    fontSize: "0.82rem",
+    fontWeight: 600,
+    cursor: "pointer",
+    background: active ? "var(--accent)" : "var(--surface-raised)",
+    color: active ? "var(--bg)" : "var(--text)",
+    border: active ? "none" : "1px solid var(--border)",
+  };
+}
+
+// Same Instagram Explore convention as Discovery's grid — see that
+// page's own comment on why auto-fill (not auto-fit).
+const gridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+  gap: "4px",
+};

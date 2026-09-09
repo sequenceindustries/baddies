@@ -319,7 +319,7 @@ function LockedMediaBlock({
   );
 }
 
-function ComposeMessageModal({ creatorProfileId, onClose }: { creatorProfileId: string; onClose: () => void }) {
+export function ComposeMessageModal({ creatorProfileId, onClose }: { creatorProfileId: string; onClose: () => void }) {
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
