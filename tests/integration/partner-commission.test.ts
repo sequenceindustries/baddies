@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { db } from "@/lib/db/client";
-import { postRevenueEvent, postCommissionReversalEvent } from "@/lib/ledger/service";
+import { postRevenueEvent, postCommissionReversalEvent, postManualCommissionReversal } from "@/lib/ledger/service";
 
 /**
  * Integration test (real Postgres) for the Founding Partner Programme
@@ -308,5 +308,105 @@ describe.skipIf(!dbAvailable)("Founding Partner commission (integration)", () =>
       reason: "test: no-op",
     });
     expect(reversal).toBeNull();
+  });
+
+  it("postManualCommissionReversal (admin action) reverses the full remaining balance by default and marks it REVERSED", async () => {
+    const { partnerWallet, creatorProfile, creatorWallet } = await setUpReferredCreator(`${Date.now()}-h`);
+
+    const entry = await postRevenueEvent({
+      walletId: creatorWallet.id,
+      creatorProfileId: creatorProfile.id,
+      type: "SUBSCRIPTION",
+      grossAmountUsd: 1000,
+      referenceType: "subscription",
+      referenceId: `sub-${Date.now()}-h`,
+    });
+    const commission = await db.partnerCommission.findUniqueOrThrow({ where: { sourceLedgerEntryId: entry.id } });
+
+    const reversal = await postManualCommissionReversal({
+      commissionId: commission.id,
+      reason: "test: manual admin reversal, no amount specified",
+    });
+
+    expect(reversal).not.toBeNull();
+    expect(Number(reversal!.grossAmount)).toBeCloseTo(-100, 2);
+
+    const updated = await db.partnerCommission.findUniqueOrThrow({ where: { id: commission.id } });
+    expect(updated.status).toBe("REVERSED");
+    expect(Number(updated.reversedAmountUsd)).toBeCloseTo(100, 2);
+
+    const updatedPartnerWallet = await db.wallet.findUniqueOrThrow({ where: { id: partnerWallet.id } });
+    const total =
+      Number(updatedPartnerWallet.cachedPendingBalanceUsd) + Number(updatedPartnerWallet.cachedAvailableBalanceUsd);
+    expect(total).toBeCloseTo(0, 2);
+  });
+
+  it("postManualCommissionReversal honors a specific partial amount and leaves the commission PENDING", async () => {
+    const { creatorProfile, creatorWallet } = await setUpReferredCreator(`${Date.now()}-i`);
+
+    const entry = await postRevenueEvent({
+      walletId: creatorWallet.id,
+      creatorProfileId: creatorProfile.id,
+      type: "SUBSCRIPTION",
+      grossAmountUsd: 1000,
+      referenceType: "subscription",
+      referenceId: `sub-${Date.now()}-i`,
+    });
+    const commission = await db.partnerCommission.findUniqueOrThrow({ where: { sourceLedgerEntryId: entry.id } });
+
+    const reversal = await postManualCommissionReversal({
+      commissionId: commission.id,
+      amountUsd: 40,
+      reason: "test: partial manual reversal",
+    });
+    expect(reversal).not.toBeNull();
+    expect(Number(reversal!.grossAmount)).toBeCloseTo(-40, 2);
+
+    const updated = await db.partnerCommission.findUniqueOrThrow({ where: { id: commission.id } });
+    expect(updated.status).toBe("PENDING");
+    expect(Number(updated.reversedAmountUsd)).toBeCloseTo(40, 2);
+  });
+
+  it("postManualCommissionReversal caps at the remaining balance even if a larger amount is requested", async () => {
+    const { creatorProfile, creatorWallet } = await setUpReferredCreator(`${Date.now()}-j`);
+
+    const entry = await postRevenueEvent({
+      walletId: creatorWallet.id,
+      creatorProfileId: creatorProfile.id,
+      type: "SUBSCRIPTION",
+      grossAmountUsd: 1000,
+      referenceType: "subscription",
+      referenceId: `sub-${Date.now()}-j`,
+    });
+    const commission = await db.partnerCommission.findUniqueOrThrow({ where: { sourceLedgerEntryId: entry.id } });
+
+    const reversal = await postManualCommissionReversal({
+      commissionId: commission.id,
+      amountUsd: 999999,
+      reason: "test: requested far more than remains",
+    });
+    expect(reversal).not.toBeNull();
+    expect(Number(reversal!.grossAmount)).toBeCloseTo(-100, 2); // capped at the $100 commission itself
+
+    const updated = await db.partnerCommission.findUniqueOrThrow({ where: { id: commission.id } });
+    expect(updated.status).toBe("REVERSED");
+  });
+
+  it("postManualCommissionReversal returns null once already fully reversed", async () => {
+    const { creatorProfile, creatorWallet } = await setUpReferredCreator(`${Date.now()}-k`);
+
+    const entry = await postRevenueEvent({
+      walletId: creatorWallet.id,
+      creatorProfileId: creatorProfile.id,
+      type: "SUBSCRIPTION",
+      grossAmountUsd: 1000,
+      referenceType: "subscription",
+      referenceId: `sub-${Date.now()}-k`,
+    });
+    const commission = await db.partnerCommission.findUniqueOrThrow({ where: { sourceLedgerEntryId: entry.id } });
+
+    await postManualCommissionReversal({ commissionId: commission.id, reason: "test: first reversal" });
+    const second = await postManualCommissionReversal({ commissionId: commission.id, reason: "test: second reversal" });
+    expect(second).toBeNull();
   });
 });

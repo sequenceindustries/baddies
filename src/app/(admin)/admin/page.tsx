@@ -2897,22 +2897,29 @@ interface FoundingPartnerRow {
   referralCode: string;
   status: string;
   activatedAt: string;
+  joinedPositionNumber: number | null;
   referredCreators: ReferredCreatorRow[];
   ledgerEntryCount: number;
   ledgerEntries: PartnerLedgerEntryRow[];
   agreement: { version: string; acceptedAt: string } | null;
+  commissionSummary: { lifetimeUsd: number; pendingUsd: number; payableUsd: number; paidUsd: number };
+  earningPeriods: { active: number; expired: number };
 }
 
 /**
  * The private Founding Partner programme: invitation CRUD (create/revoke/
  * resend), the partner roster with embedded referral + reward detail, and
  * suspend/reactivate. Not paginated anywhere — the whole programme is
- * capped at 10 partners, so both lists stay small by construction. Same
- * reload()/busyId queue pattern as every other admin panel in this file.
+ * capped at 50 partners (Founding Partner Programme v2), so both lists
+ * stay small by construction. Same reload()/busyId queue pattern as every
+ * other admin panel in this file. Also renders the v2 Referrals,
+ * Commission Management, and Reporting sub-sections below the roster.
  */
 function FoundingPartnersPanel() {
   const [invitations, setInvitations] = useState<PartnerInvitationRow[]>([]);
   const [partners, setPartners] = useState<FoundingPartnerRow[]>([]);
+  const [positionsFilled, setPositionsFilled] = useState(0);
+  const [positionsLimit, setPositionsLimit] = useState(50);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -2940,6 +2947,8 @@ function FoundingPartnersPanel() {
       .then(([invBody, partnerBody]) => {
         setInvitations(invBody.invitations ?? []);
         setPartners(partnerBody.partners ?? []);
+        setPositionsFilled(partnerBody.positionsFilled ?? 0);
+        setPositionsLimit(partnerBody.positionsLimit ?? 50);
       })
       .finally(() => setLoading(false));
   }
@@ -3040,6 +3049,7 @@ function FoundingPartnersPanel() {
 
   const activePartnerCount = partners.filter((p) => p.status === "ACTIVE").length;
   const pendingInviteCount = invitations.filter((i) => i.status === "PENDING").length;
+  const positionsPct = positionsLimit > 0 ? Math.min(100, (positionsFilled / positionsLimit) * 100) : 0;
 
   return (
     <section style={{ marginBottom: "3rem" }}>
@@ -3047,6 +3057,16 @@ function FoundingPartnersPanel() {
       <p style={mutedSmallStyle}>
         {activePartnerCount} active · {pendingInviteCount} pending invitation{pendingInviteCount === 1 ? "" : "s"}
       </p>
+
+      <div style={{ ...foundingProgressWrapStyle, marginTop: "1rem" }}>
+        <div style={foundingProgressBarOuterStyle}>
+          <div style={{ ...foundingProgressBarInnerStyle, width: `${positionsPct}%` }} />
+        </div>
+        <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>
+          {positionsFilled} / {positionsLimit}{" "}
+          <span style={{ ...mutedSmallStyle, display: "inline" }}> Founding Partner positions filled</span>
+        </div>
+      </div>
 
       <form onSubmit={sendInvite} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", margin: "1rem 0 2rem" }}>
         <input
@@ -3169,12 +3189,21 @@ function FoundingPartnersPanel() {
                 <div key={p.id} style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch", gap: "0.6rem" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
                     <div>
-                      <div style={{ fontSize: "0.9rem" }}>{p.email}</div>
+                      <div style={{ fontSize: "0.9rem" }}>
+                        {p.email}
+                        {p.joinedPositionNumber != null && ` · #${p.joinedPositionNumber}`}
+                      </div>
                       <div style={mutedSmallStyle}>
                         {p.status} · code <code>{p.referralCode}</code> · activated {new Date(p.activatedAt).toLocaleDateString()} ·{" "}
                         {p.referredCreators.length} referred creator{p.referredCreators.length === 1 ? "" : "s"} ·{" "}
                         {p.ledgerEntryCount} ledger event{p.ledgerEntryCount === 1 ? "" : "s"} · agreement{" "}
                         {p.agreement ? `${p.agreement.version} accepted ${new Date(p.agreement.acceptedAt).toLocaleDateString()}` : "not on file"}
+                      </div>
+                      <div style={mutedSmallStyle}>
+                        commission — lifetime ${p.commissionSummary.lifetimeUsd.toFixed(2)} · pending $
+                        {p.commissionSummary.pendingUsd.toFixed(2)} · payable ${p.commissionSummary.payableUsd.toFixed(2)}{" "}
+                        · paid ${p.commissionSummary.paidUsd.toFixed(2)} · earning periods {p.earningPeriods.active} active /{" "}
+                        {p.earningPeriods.expired} expired
                       </div>
                     </div>
                     <button
@@ -3201,7 +3230,272 @@ function FoundingPartnersPanel() {
           )}
         </>
       )}
+
+      <PartnerReportingSection />
+      <PartnerReferralsSection />
+      <PartnerCommissionManagementSection />
     </section>
+  );
+}
+
+interface PartnerReportRow {
+  totalFoundingBaddies: number;
+  target: number;
+  remainingToTarget: number;
+  totalReferredByPartners: number;
+  topPartners: { partnerId: string; partnerEmail: string; referralCode: string; creatorsReferred: number }[];
+}
+
+/** Founding Baddie / Founding Partner recruitment reporting (spec §7) — see GET /api/admin/partners/report for exactly what each figure means. */
+function PartnerReportingSection() {
+  const [report, setReport] = useState<PartnerReportRow | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/partners/report")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setReport);
+  }, []);
+
+  if (!report) return null;
+
+  return (
+    <div style={{ marginTop: "2.5rem" }}>
+      <StatGroup title="Reporting">
+        <Stat label="Total Founding Baddies" value={report.totalFoundingBaddies} />
+        <Stat label="Referred by a Partner" value={report.totalReferredByPartners} />
+        <Stat label="Remaining to target" value={report.remainingToTarget} />
+        <Stat label="Target" value={report.target} />
+      </StatGroup>
+      {report.topPartners.length > 0 && (
+        <div style={{ marginTop: "1rem" }}>
+          <div style={{ ...mutedSmallStyle, marginBottom: "0.5rem" }}>Top Partners by recruitment</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+            {report.topPartners.map((p) => (
+              <div key={p.partnerId} style={rowCardStyle}>
+                <span style={{ fontSize: "0.88rem" }}>{p.partnerEmail}</span>
+                <span style={filterChipStyle}>{p.creatorsReferred} referred</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface PartnerReferralRow {
+  referralAttributionId: string;
+  partnerEmail: string;
+  partnerReferralCode: string;
+  stageName: string;
+  creatorEmail: string;
+  creatorStatus: string;
+  referredAt: string;
+  attributedAt: string;
+  correctedBy: string | null;
+  correctionReason: string | null;
+  subscriptionRevenueGeneratedUsd: number;
+  commissionGeneratedUsd: number;
+  earningPeriodStartAt: string | null;
+  earningPeriodEndAt: string | null;
+  earningPeriodStatus: "NOT_STARTED" | "ACTIVE" | "EXPIRED";
+}
+
+/** Flat, filterable referral list (spec §8 "Referrals") — see GET /api/admin/partners/referrals. */
+function PartnerReferralsSection() {
+  const [referrals, setReferrals] = useState<PartnerReferralRow[]>([]);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    const qs = statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : "";
+    fetch(`/api/admin/partners/referrals${qs}`)
+      .then((r) => (r.ok ? r.json() : { referrals: [] }))
+      .then((body) => setReferrals(body.referrals ?? []))
+      .finally(() => setLoading(false));
+  }, [statusFilter]);
+
+  return (
+    <div style={{ marginTop: "2.5rem" }}>
+      <h3 style={statGroupHeadingStyle}>Referrals ({referrals.length})</h3>
+      <select
+        style={{ ...statusSelectStyle, marginBottom: "1rem" }}
+        value={statusFilter}
+        onChange={(e) => setStatusFilter(e.target.value)}
+      >
+        <option value="">All statuses</option>
+        <option value="LIVE">Live</option>
+        <option value="VERIFIED">Verified</option>
+        <option value="APPROVED">Approved</option>
+        <option value="ONBOARDING">Onboarding</option>
+        <option value="REJECTED">Rejected</option>
+      </select>
+      {loading ? (
+        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+      ) : referrals.length === 0 ? (
+        <p style={{ color: "var(--text-muted)" }}>No referrals match this filter.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          {referrals.map((r) => (
+            <div key={r.referralAttributionId} style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch", gap: "0.3rem" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
+                <span style={{ fontSize: "0.88rem" }}>
+                  {r.stageName} ← {r.partnerEmail}
+                </span>
+                <span style={filterChipStyle}>{humanizeKey(r.creatorStatus)}</span>
+              </div>
+              <div style={mutedSmallStyle}>
+                referred {new Date(r.referredAt).toLocaleDateString()} · attributed {new Date(r.attributedAt).toLocaleDateString()}
+                {r.correctedBy && " · attribution corrected"} · revenue ${r.subscriptionRevenueGeneratedUsd.toFixed(2)} · commission $
+                {r.commissionGeneratedUsd.toFixed(2)}
+                {r.earningPeriodStartAt && r.earningPeriodEndAt && (
+                  <>
+                    {" "}
+                    · earning period {new Date(r.earningPeriodStartAt).toLocaleDateString()} –{" "}
+                    {new Date(r.earningPeriodEndAt).toLocaleDateString()} ({r.earningPeriodStatus.toLowerCase()})
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface PartnerCommissionRow {
+  id: string;
+  partnerId: string;
+  partnerEmail: string;
+  creatorStageName: string;
+  creatorEmail: string;
+  netEligibleAmountUsd: number;
+  commissionAmountUsd: number;
+  reversedAmountUsd: number;
+  status: string;
+  heldBy: string | null;
+  heldReason: string | null;
+  heldAt: string | null;
+  reversedAt: string | null;
+  reversalReason: string | null;
+  createdAt: string;
+}
+
+/**
+ * Commission ledger review (spec §8/§9/§10): hold a PENDING commission
+ * for investigation, release a HELD one back to PENDING, or manually
+ * reverse one believed fraudulent — never an automatic confiscation.
+ * Every action prompts for a reason (window.prompt, same pattern as
+ * every other admin reject/reason flow in this file) and is logged
+ * server-side with actor/timestamp/reason/amount-before/amount-after.
+ */
+function PartnerCommissionManagementSection() {
+  const [commissions, setCommissions] = useState<PartnerCommissionRow[]>([]);
+  const [statusFilter, setStatusFilter] = useState("PENDING");
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  function reload() {
+    setLoading(true);
+    const qs = statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : "";
+    fetch(`/api/admin/partner-commissions${qs}`)
+      .then((r) => (r.ok ? r.json() : { commissions: [] }))
+      .then((body) => setCommissions(body.commissions ?? []))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(reload, [statusFilter]);
+
+  async function act(id: string, action: "hold" | "release" | "reverse") {
+    const reason = window.prompt(
+      action === "hold"
+        ? "Why are you holding this commission?"
+        : action === "release"
+          ? "Why are you releasing this commission?"
+          : "Why are you reversing this commission? This cannot be undone."
+    );
+    if (!reason) return;
+    setBusyId(id);
+    const res = await fetch(`/api/admin/partner-commissions/${id}/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    });
+    setBusyId(null);
+    if (res.ok) reload();
+    else {
+      const body = await res.json().catch(() => null);
+      alert(body?.error && typeof body.error === "string" ? body.error : "Action failed.");
+    }
+  }
+
+  return (
+    <div style={{ marginTop: "2.5rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.75rem" }}>
+        <h3 style={{ ...statGroupHeadingStyle, margin: 0 }}>Commission management</h3>
+        <a
+          href={`/api/admin/partner-commissions/export${statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : ""}`}
+          style={{ ...filterChipStyle, textDecoration: "none" }}
+        >
+          Export CSV ↓
+        </a>
+      </div>
+      <select
+        style={{ ...statusSelectStyle, margin: "1rem 0" }}
+        value={statusFilter}
+        onChange={(e) => setStatusFilter(e.target.value)}
+      >
+        <option value="PENDING">Pending</option>
+        <option value="HELD">Held</option>
+        <option value="REVERSED">Reversed</option>
+        <option value="">All</option>
+      </select>
+      {loading ? (
+        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+      ) : commissions.length === 0 ? (
+        <p style={{ color: "var(--text-muted)" }}>No commissions match this filter.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          {commissions.map((c) => (
+            <div key={c.id} style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch", gap: "0.5rem" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
+                <div>
+                  <div style={{ fontSize: "0.88rem" }}>
+                    {c.creatorStageName} ← {c.partnerEmail}
+                  </div>
+                  <div style={mutedSmallStyle}>
+                    net ${c.netEligibleAmountUsd.toFixed(2)} · commission ${c.commissionAmountUsd.toFixed(2)} · reversed $
+                    {c.reversedAmountUsd.toFixed(2)} · {new Date(c.createdAt).toLocaleDateString()}
+                    {c.heldReason && ` · held: ${c.heldReason}`}
+                    {c.reversalReason && ` · reversal: ${c.reversalReason}`}
+                  </div>
+                </div>
+                <span style={filterChipStyle}>{c.status}</span>
+              </div>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                {c.status === "PENDING" && (
+                  <button onClick={() => act(c.id, "hold")} disabled={busyId === c.id} style={rejectButtonStyle}>
+                    Hold
+                  </button>
+                )}
+                {c.status === "HELD" && (
+                  <button onClick={() => act(c.id, "release")} disabled={busyId === c.id} style={approveButtonStyle}>
+                    Release
+                  </button>
+                )}
+                {c.status !== "REVERSED" && (
+                  <button onClick={() => act(c.id, "reverse")} disabled={busyId === c.id} style={rejectButtonStyle}>
+                    Reverse
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

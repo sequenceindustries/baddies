@@ -300,6 +300,74 @@ export async function postCommissionReversalEvent(input: CommissionReversalInput
   return reversalEntry;
 }
 
+export interface ManualCommissionReversalInput {
+  commissionId: string;
+  // Defaults to the full remaining balance when omitted — this is the
+  // common case ("reverse this fraudulent commission"). A partial
+  // amount is still supported for a dispute that's only partly upheld.
+  amountUsd?: number;
+  reason: string;
+}
+
+/**
+ * A direct admin action ("reverse this commission by $X, this looks
+ * fraudulent") — not a refund/chargeback correlation (see
+ * postCommissionReversalEvent above for that path, which instead
+ * reverses PROPORTIONALLY to a real refund amount against the
+ * original gross). Capped at whatever remains outstanding either way —
+ * this can never reverse more than was actually credited, and can
+ * never turn a reversal into a payment the other direction.
+ */
+export async function postManualCommissionReversal(input: ManualCommissionReversalInput) {
+  const commission = await db.partnerCommission.findUnique({
+    where: { id: input.commissionId },
+    include: { foundingPartner: { select: { user: { select: { wallet: { select: { id: true } } } } } } },
+  });
+  if (!commission || commission.status === "REVERSED") return null;
+
+  const remainingCommissionUsd = roundCents(Number(commission.commissionAmountUsd) - Number(commission.reversedAmountUsd));
+  if (remainingCommissionUsd <= 0) return null;
+
+  const requestedUsd = input.amountUsd != null ? Math.abs(input.amountUsd) : remainingCommissionUsd;
+  const reversalAmountUsd = Math.min(remainingCommissionUsd, requestedUsd);
+  if (reversalAmountUsd <= 0) return null;
+
+  const partnerWalletId = commission.foundingPartner.user.wallet?.id;
+  if (!partnerWalletId) return null; // shouldn't happen — see maybePostPartnerCommission's own comment
+
+  const newReversedTotal = roundCents(Number(commission.reversedAmountUsd) + reversalAmountUsd);
+  const nowFullyReversed = newReversedTotal >= Number(commission.commissionAmountUsd) - 0.005;
+
+  const reversalEntry = await db.$transaction(async (tx) => {
+    const entry = await tx.ledgerEntry.create({
+      data: {
+        walletId: partnerWalletId,
+        type: "PARTNER_COMMISSION_REVERSAL",
+        grossAmount: new Prisma.Decimal(-Math.abs(reversalAmountUsd)),
+        currency: "USD",
+        foundingPartnerId: commission.foundingPartnerId,
+        referenceType: "partner_commission_reversal",
+        referenceId: commission.id,
+        description: input.reason,
+      },
+    });
+    await tx.partnerCommission.update({
+      where: { id: commission.id },
+      data: {
+        reversedAmountUsd: new Prisma.Decimal(newReversedTotal),
+        status: nowFullyReversed ? "REVERSED" : commission.status,
+        reversedAt: nowFullyReversed ? new Date() : commission.reversedAt,
+        reversalReason: input.reason,
+      },
+    });
+    return entry;
+  });
+
+  await recomputeWalletBalances(partnerWalletId, await getPartnerCommissionHoldDays());
+
+  return reversalEntry;
+}
+
 export interface UnlimitedAllocationEventInput {
   walletId: string;
   creatorProfileId: string;
