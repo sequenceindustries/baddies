@@ -105,7 +105,7 @@ function Benefits() {
 
 function Monetisation() {
   return (
-    <Section title="How You Earn" subtitle="Three tiers. You decide what goes where.">
+    <Section title="How it works" subtitle="Three tiers. You decide what goes where.">
       <div style={tierGridStyle}>
         <div className="hover-lift" style={tierCardStyle}>
           <div style={tierNameStyle}>Teasers</div>
@@ -183,19 +183,19 @@ const CREATOR_PLATFORMS = ["OnlyFans", "Fansly", "JustForFans"];
 interface PlatformEntry {
   handle: string;
   link: string;
-  followers: string;
   customName: string;
 }
 
 type PlatformState = Record<string, PlatformEntry>;
 
-const EMPTY_ENTRY: PlatformEntry = { handle: "", link: "", followers: "", customName: "" };
+const EMPTY_ENTRY: PlatformEntry = { handle: "", link: "", customName: "" };
 
 function ApplicationForm() {
   const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [stageName, setStageName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [country, setCountry] = useState("");
   const [city, setCity] = useState("");
@@ -249,7 +249,6 @@ function ApplicationForm() {
         platform: option === "Other" ? entry.customName || "Other" : option,
         handle: entry.handle,
         link: entry.link,
-        followers: entry.followers,
       }));
     return [...fromRecord(social, "social"), ...fromRecord(creatorPlats, "creator")];
   }
@@ -261,6 +260,10 @@ function ApplicationForm() {
     const platforms = buildPlatforms();
     if (platforms.length === 0) {
       setError("Select at least one platform you currently use.");
+      return;
+    }
+    if (password.length < 10) {
+      setError("Password must be at least 10 characters.");
       return;
     }
     if (!confirmsAdult || !agreesToVerification) {
@@ -276,6 +279,7 @@ function ApplicationForm() {
         fullName,
         stageName,
         email,
+        password,
         phone,
         country,
         city,
@@ -367,6 +371,16 @@ function ApplicationForm() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </FormField>
+            <FormField label="Password" hint="At least 10 characters — this creates your Baddies account.">
+              <input
+                style={inputStyle}
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                minLength={10}
                 required
               />
             </FormField>
@@ -505,12 +519,6 @@ function PlatformPicker({
                     placeholder="Profile link"
                     value={entry.link}
                     onChange={(e) => updateEntry(option, { link: e.target.value })}
-                  />
-                  <input
-                    style={inputStyle}
-                    placeholder="Followers / subscribers"
-                    value={entry.followers}
-                    onChange={(e) => updateEntry(option, { followers: e.target.value })}
                   />
                 </div>
               )}

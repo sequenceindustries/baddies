@@ -1206,7 +1206,10 @@ interface PlatformEntryView {
   platform: string;
   handle: string;
   link: string;
-  followers: string;
+  // Only ever set on applications submitted before this field was
+  // removed from the form (see /founding-baddies/page.tsx) — kept
+  // optional so those older rows still render correctly.
+  followers?: string;
 }
 
 interface FoundingApplicationRow {

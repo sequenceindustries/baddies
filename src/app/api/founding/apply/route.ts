@@ -13,6 +13,9 @@ import { sendFoundingEmailVerification } from "@/lib/notifications/email-verific
 import { getWhatsappProvider } from "@/lib/providers/whatsapp";
 import { resolveReferralAttribution } from "@/lib/founding/referral-attribution";
 import { checkRateLimitByIp, rateLimitResponse } from "@/lib/security/rate-limit";
+import { hashPassword, createSession } from "@/lib/auth/session";
+import { getPlatformSetting } from "@/lib/config/settings";
+import { BUSINESS_CONFIG_KEYS } from "@/lib/config/business";
 
 // Always dynamic: this route writes live data and must never be
 // statically prerendered or cached at build time.
@@ -23,13 +26,16 @@ const PlatformEntrySchema = z.object({
   platform: z.string().min(1).max(60),
   handle: z.string().max(100).optional().default(""),
   link: z.string().max(300).optional().default(""),
-  followers: z.string().max(50).optional().default(""),
 });
 
 const ApplySchema = z.object({
   fullName: z.string().min(2).max(150),
   stageName: z.string().min(2).max(50),
   email: z.string().email(),
+  // Creates the real User account this application is now tied to (see
+  // FoundingApplication's own schema comment) — same minimum as
+  // POST /api/auth/register's own password rule.
+  password: z.string().min(10, "Password must be at least 10 characters"),
   phone: z.string().min(5).max(30),
   country: z.string().min(1).max(100),
   city: z.string().min(1).max(100),
@@ -53,11 +59,16 @@ const ApplySchema = z.object({
 
 /**
  * Public, unauthenticated by design — this is the top-of-funnel Founding
- * Baddies recruitment form (see /founding-baddies): a prospective
- * creator has no Baddies account yet, that's the whole point of it.
- * Never collects identity documents; real verification only ever
- * happens later through VerificationSession once someone is an actual
- * registered creator (see FoundingApplication's own schema comment).
+ * Baddies recruitment form (see /founding-baddies), reachable before a
+ * visitor has any session. It now creates one, though: the form
+ * collects a password so this provisions a real FAN account (same
+ * shape as POST /api/auth/register — passwordHash, ageVerified, Profile,
+ * Wallet, a trial grant if enabled) and signs them in immediately, in
+ * addition to writing the FoundingApplication row itself. See that
+ * model's own schema comment for why. Never collects identity
+ * documents here; that's the separate, later
+ * /api/founding/apply/[id]/identity step, and isn't gated on anything
+ * in this route.
  */
 export async function POST(req: NextRequest) {
   // 5 submissions per 15 minutes per IP — generous for a real applicant
@@ -72,12 +83,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { website, platforms, ...data } = parsed.data;
+  const { website, platforms, password, ...data } = parsed.data;
   if (website) {
     // Honeypot tripped — respond as if it worked so a bot doesn't learn
     // to look elsewhere, but write nothing.
     return NextResponse.json({ applicationId: "ok" }, { status: 201 });
   }
+
+  // Same duplicate-email rule as POST /api/auth/register (and the same
+  // 409 wording) — this route now creates a real User row too, so the
+  // uniqueness constraint is real, not just a formality.
+  const existingUser = await db.user.findUnique({ where: { email: data.email } });
+  if (existingUser) {
+    return NextResponse.json({ error: "An account with this email already exists." }, { status: 409 });
+  }
+  const passwordHash = await hashPassword(password);
 
   // South African creators only, no exceptions — checked against the
   // request's actual network origin, not the free-text "Country" field
@@ -133,8 +153,38 @@ export async function POST(req: NextRequest) {
   // these should block the application itself.
   const referralPartnerId = await resolveReferralAttribution(req, applicationData.email);
 
-  const application = await db.$transaction(async (tx) => {
-    const created = await tx.foundingApplication.create({ data: applicationData });
+  // Read before the transaction — a config read, not part of the atomic
+  // account-creation write itself. Same pattern POST /api/auth/register
+  // already uses for this exact lookup.
+  const [trialEnabled, trialDurationHours] = await Promise.all([
+    getPlatformSetting(BUSINESS_CONFIG_KEYS.TRIAL_ENABLED),
+    getPlatformSetting(BUSINESS_CONFIG_KEYS.TRIAL_DURATION_HOURS),
+  ]);
+
+  const { application, userId } = await db.$transaction(async (tx) => {
+    // Same account shape POST /api/auth/register creates — this route
+    // is now a second real entry point into having a Baddies account,
+    // not just an application form. See FoundingApplication's own
+    // schema comment for why.
+    const user = await tx.user.create({
+      data: {
+        email: applicationData.email,
+        passwordHash,
+        role: "FAN",
+        ageVerified: true,
+        ageVerifiedAt: new Date(),
+        profile: { create: { displayName: applicationData.stageName, country: applicationData.country, city: applicationData.city } },
+        wallet: { create: {} },
+      },
+    });
+    if (trialEnabled === "true") {
+      const durationHours = Number(trialDurationHours) || 24;
+      await tx.fanTrial.create({
+        data: { fanId: user.id, expiresAt: new Date(Date.now() + durationHours * 60 * 60 * 1000) },
+      });
+    }
+
+    const created = await tx.foundingApplication.create({ data: { ...applicationData, userId: user.id } });
     await tx.location.create({
       data: {
         foundingApplicationId: created.id,
@@ -153,7 +203,7 @@ export async function POST(req: NextRequest) {
         data: { foundingApplicationId: created.id, foundingPartnerId: referralPartnerId },
       });
     }
-    return created;
+    return { application: created, userId: user.id };
   });
 
   // Never lets a notification failure fail or block the applicant's
@@ -180,7 +230,21 @@ export async function POST(req: NextRequest) {
     `Hi, I'm ${application.stageName} — I just applied to become a Founding Baddie (application ${application.id}).`
   );
 
-  return NextResponse.json({ applicationId: application.id, whatsappLink }, { status: 201 });
+  // Signs them in immediately, same as a real /register — the password
+  // they just set is real, not a form field that goes nowhere.
+  const { token, expiresAt } = await createSession(userId, "FAN", {
+    userAgent: req.headers.get("user-agent") ?? undefined,
+    ipAddress: req.headers.get("x-forwarded-for") ?? undefined,
+  });
+  const response = NextResponse.json({ applicationId: application.id, whatsappLink }, { status: 201 });
+  response.cookies.set(process.env.SESSION_COOKIE_NAME ?? "baddies_session", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    expires: expiresAt,
+    path: "/",
+  });
+  return response;
 }
 
 /**

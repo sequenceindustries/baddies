@@ -300,6 +300,7 @@ model User {
   fanTrial               FanTrial?
   foundingPartner        FoundingPartner?
   partnerInvitationsSent PartnerInvitation[]     @relation("PartnerInvitationsSent")
+  foundingApplication    FoundingApplication?
 
   @@index([role])
   @@map("users")
@@ -973,16 +974,23 @@ model Notification {
 // =========================================================================
 
 // A prospective creator's application to the Founding Baddies launch
-// campaign — deliberately NOT tied to a User row. The whole point of
-// this form (see /founding-baddies) is that someone can apply before
-// they have any Baddies account at all; once approved, they go through
-// the existing /register -> /apply flow normally, with the same email.
+// campaign. Now tied to a real User row from the moment they apply —
+// the form collects a password precisely so this creates one (see
+// POST /api/founding/apply): a real, immediately-usable FAN account,
+// not just an unguessable-link-only application. userId is nullable
+// only because applications that predate this change have none, and
+// onDelete: SetNull on that relation means removing an application
+// (e.g. the admin "reset founding roster" tool) never takes the actual
+// login-capable account down with it — that account is real and stays.
 // Kept flat and mostly free-text on purpose — this is a recruitment
-// form, not a KYC form (no identity documents collected here; that
-// still only ever happens through the real VerificationSession flow
-// once they're a real creator).
+// form, not a KYC form (no identity documents collected in this POST
+// itself; that's the separate, later /api/founding/apply/[id]/identity
+// step, and still isn't gated on anything here).
 model FoundingApplication {
   id String @id @default(cuid())
+
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   fullName  String
   stageName String
@@ -992,9 +1000,9 @@ model FoundingApplication {
   city      String
 
   // [{ category: "social"|"creator", platform: string, handle: string,
-  //    link: string, followers: string }, ...] — one entry per platform
-  // the applicant checked, "platform" holding their own label when they
-  // picked "Other". A JSON column instead of a child table because this
+  //    link: string }, ...] — one entry per platform the applicant
+  // checked, "platform" holding their own label when they picked
+  // "Other". A JSON column instead of a child table because this
   // is a write-once submission, never queried or edited field-by-field.
   platforms Json
 
