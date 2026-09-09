@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { buildViewerLockContext, computeLockState, type LockKind } from "@/lib/entitlements/list-lock";
+import { buildViewerLockContext, computeLockState } from "@/lib/entitlements/list-lock";
 import { computeTrendingContent } from "@/lib/discovery/trending";
 import { resolveCreatorPricing } from "@/lib/creator/pricing";
 import { getBusinessConfig } from "@/lib/config/settings";
+import { POST_ITEM_SELECT, buildLockCta, shapeContentItem, type PostItemRow } from "@/lib/feed/post-item";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -14,11 +15,13 @@ const PAGE_SIZE = 20;
 
 /**
  * The home feed's single source of data — the social-feed redesign's
- * Twitter/X-style vertical scroll (fan-home), Instagram-style Discovery
- * grid, and the "quick preview" a Stories tap opens all consume this
- * one cursor-paginated, reverse-chronological stream. Previously an
- * unused Sprint-2 stub restricted to FREE/VIP content from VERIFIED
- * creators only; revived and extended:
+ * Twitter/X-style vertical scroll (fan-home) and Instagram-style
+ * Discovery grid both consume this one cursor-paginated, reverse-
+ * chronological stream (Discovery adds nothing of its own beyond
+ * lazy-loading media per thumbnail — see GET /api/content/:id for the
+ * single-item shape a grid tap's detail overlay uses instead).
+ * Previously an unused Sprint-2 stub restricted to FREE/VIP content
+ * from VERIFIED creators only; revived and extended:
  *
  *   - VVIP content is now included too, rendered LOCKED rather than
  *     hidden — a deliberate widening of what's LISTED (see the
@@ -46,7 +49,7 @@ export async function GET(req: NextRequest) {
   const cursor = req.nextUrl.searchParams.get("cursor") ?? undefined;
   const user = await getCurrentUser();
 
-  const items = await db.content.findMany({
+  const items: (PostItemRow & { likes: { id: string }[] })[] = await db.content.findMany({
     where: {
       status: "APPROVED",
       publishedAt: { not: null },
@@ -56,30 +59,8 @@ export async function GET(req: NextRequest) {
     take: PAGE_SIZE + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     select: {
-      id: true,
-      mediaType: true,
-      accessLevel: true,
-      caption: true,
-      publishedAt: true,
-      status: true,
-      creatorProfileId: true,
-      _count: { select: { likes: true, tips: true } },
+      ...POST_ITEM_SELECT,
       likes: user ? { where: { fanId: user.id }, select: { id: true } } : false,
-      creatorProfile: {
-        select: {
-          id: true,
-          unlimitedOptedIn: true,
-          vvipPriceOverride: true,
-          isFoundingBaddie: true,
-          coverImageUrl: true,
-          user: {
-            select: {
-              profile: { select: { displayName: true, avatarUrl: true } },
-              foundingPartner: { select: { id: true } },
-            },
-          },
-        },
-      },
     },
   });
 
@@ -101,7 +82,7 @@ export async function GET(req: NextRequest) {
   // re-computing the same number for every one of a prolific creator's
   // several posts on one page, not to avoid a query.
   const vvipPriceByCreatorId = new Map<string, number>();
-  async function vvipPriceFor(creator: (typeof page)[number]["creatorProfile"]): Promise<number> {
+  async function vvipPriceFor(creator: PostItemRow["creatorProfile"]): Promise<number> {
     const cached = vvipPriceByCreatorId.get(creator.id);
     if (cached != null) return cached;
     const { vvipPriceUsd } = await resolveCreatorPricing(creator);
@@ -110,7 +91,7 @@ export async function GET(req: NextRequest) {
   }
 
   const shaped = await Promise.all(
-    page.map(async (item: (typeof page)[number]) => {
+    page.map(async (item) => {
       const lockState = computeLockState(
         {
           creatorProfileId: item.creatorProfileId,
@@ -130,30 +111,15 @@ export async function GET(req: NextRequest) {
           )
         : { locked: false as const, kind: null, priceUsd: null, ctaLabel: null };
 
-      return {
-        contentId: item.id,
-        mediaType: item.mediaType,
-        accessLevel: item.accessLevel,
-        caption: item.caption,
-        publishedAt: item.publishedAt,
-        likeCount: item._count.likes,
-        tipCount: item._count.tips,
-        viewerHasLiked: user ? item.likes.length > 0 : false,
-        creator: {
-          creatorProfileId: item.creatorProfile.id,
-          displayName: item.creatorProfile.user.profile?.displayName ?? null,
-          avatarUrl: item.creatorProfile.user.profile?.avatarUrl ?? null,
-          coverImageUrl: item.creatorProfile.coverImageUrl,
-          isFoundingPartner: item.creatorProfile.user.foundingPartner !== null,
-          isFoundingBaddie: item.creatorProfile.isFoundingBaddie,
-        },
+      return shapeContentItem(item, {
         lock,
+        viewerHasLiked: user ? item.likes.length > 0 : false,
         context: followedCreatorIds.has(item.creatorProfileId)
           ? "following"
           : trendingIds.has(item.id)
             ? "trending"
             : null,
-      };
+      });
     })
   );
 
@@ -161,18 +127,4 @@ export async function GET(req: NextRequest) {
     items: shaped,
     nextCursor: hasMore ? page[page.length - 1]?.id : null,
   });
-}
-
-function buildLockCta(
-  kind: LockKind,
-  vipPassPriceUsd: number,
-  vvipPriceUsd: number
-): { locked: true; kind: LockKind; priceUsd: number | null; ctaLabel: string } {
-  if (kind === "VVIP_SUBSCRIBE") {
-    return { locked: true, kind, priceUsd: vvipPriceUsd, ctaLabel: `Subscribe to unlock — $${vvipPriceUsd.toFixed(2)}/mo` };
-  }
-  if (kind === "VIP_PASS") {
-    return { locked: true, kind, priceUsd: vipPassPriceUsd, ctaLabel: `Get VIP Pass — $${vipPassPriceUsd.toFixed(2)}` };
-  }
-  return { locked: true, kind: null, priceUsd: null, ctaLabel: "Locked" };
 }

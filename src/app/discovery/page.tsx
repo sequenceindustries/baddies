@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CreatorCardRow, type CreatorCardData } from "@/components/cards";
+import { GridThumbnail, PostDetailOverlay } from "@/components/grid-thumbnail";
+import type { PostCardItem } from "@/components/post-card";
 import { displayHeadingStyle, inputStyle, useSession, SignInGate } from "@/components/ui";
 
 interface CreatorsResponse {
@@ -9,11 +11,15 @@ interface CreatorsResponse {
 }
 
 /**
- * Discover — merges what used to be two separate pages (Search and
- * Discover) into one: a name/bio search box plus the platform's own
- * highlight rows (Top Baddies, Baddies Near You — same sections/queries
- * the landing page and fan Home use). /search redirects here rather
- * than staying a second destination.
+ * Discover — search box (unchanged: creator name/bio search stays a
+ * plain result list, not a grid) plus, once no search is active, a
+ * dense Instagram-style grid of posts (social-feed redesign, Phase 2):
+ * replaces the old "Top Baddies"/"Baddies near you" creator-row browse
+ * default. Fed by the same GET /api/feed the fan-home Twitter/X-style
+ * feed uses — cursor-paginated infinite scroll, same sentinel pattern.
+ * Tapping a tile opens PostDetailOverlay (a modal, not a navigation),
+ * matching how Instagram's own grid tap behaves. CreatorCardRow/
+ * CreatorCard (search results) and /discovery/[slug] are untouched.
  *
  * Signed-out visitors never see this page's real content — per product
  * decision, the landing page's own Top Baddies row is the only thing an
@@ -22,31 +28,64 @@ interface CreatorsResponse {
  */
 export default function DiscoveryPage() {
   const { user, loading } = useSession();
-  const [topCreators, setTopCreators] = useState<CreatorCardData[]>([]);
-  const [nearbyCreators, setNearbyCreators] = useState<CreatorCardData[]>([]);
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CreatorCardData[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
+  const [items, setItems] = useState<PostCardItem[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [gridInitialLoading, setGridInitialLoading] = useState(true);
+  const [gridLoadingMore, setGridLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [gridError, setGridError] = useState<string | null>(null);
+  const [openContentId, setOpenContentId] = useState<string | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadingRef = useRef(false);
+
+  const loadPage = useCallback(async (afterCursor: string | null) => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    if (afterCursor) setGridLoadingMore(true);
+    setGridError(null);
+    try {
+      const res = await fetch(`/api/feed${afterCursor ? `?cursor=${encodeURIComponent(afterCursor)}` : ""}`);
+      if (!res.ok) throw new Error("Failed to load.");
+      const body = await res.json();
+      setItems((prev) => (afterCursor ? [...prev, ...body.items] : body.items));
+      setCursor(body.nextCursor ?? null);
+      setHasMore(Boolean(body.nextCursor));
+    } catch {
+      setGridError("Couldn't load the grid. Try refreshing.");
+    } finally {
+      loadingRef.current = false;
+      setGridInitialLoading(false);
+      setGridLoadingMore(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!user) return;
-    let cancelled = false;
-    fetch("/api/discovery/top-creators")
-      .then((r) => (r.ok ? r.json() : { creators: [] }))
-      .then((body: CreatorsResponse) => {
-        if (!cancelled) setTopCreators(body.creators ?? []);
-      });
-    fetch("/api/discovery/nearby-creators")
-      .then((r) => (r.ok ? r.json() : { creators: [] }))
-      .then((body: CreatorsResponse) => {
-        if (!cancelled) setNearbyCreators(body.creators ?? []);
-      });
-    return () => {
-      cancelled = true;
-    };
+    loadPage(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  useEffect(() => {
+    if (results !== null) return; // don't keep loading the grid while a search is showing
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasMore && !loadingRef.current) {
+          loadPage(cursor);
+        }
+      },
+      { rootMargin: "600px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [cursor, hasMore, loadPage, results]);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -86,6 +125,11 @@ export default function DiscoveryPage() {
         <button type="submit" disabled={searching} style={submitButtonStyle}>
           {searching ? "..." : "Search"}
         </button>
+        {results && (
+          <button type="button" onClick={() => setResults(null)} style={clearSearchButtonStyle}>
+            Clear
+          </button>
+        )}
       </form>
       {searchError && <p style={{ color: "var(--danger)" }}>{searchError}</p>}
 
@@ -96,20 +140,34 @@ export default function DiscoveryPage() {
         </>
       ) : (
         <>
-          <CreatorCardRow title="The Baddest" creators={topCreators} />
-          <CreatorCardRow title="baddies near you" creators={nearbyCreators} />
+          {gridError && <p style={{ color: "var(--danger)" }}>{gridError}</p>}
+          {gridInitialLoading ? (
+            <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+          ) : items.length === 0 ? (
+            <p style={{ color: "var(--text-muted)" }}>Nothing here yet — check back once creators publish content.</p>
+          ) : (
+            <div style={gridStyle}>
+              {items.map((item) => (
+                <GridThumbnail key={item.contentId} item={item} onOpen={() => setOpenContentId(item.contentId)} />
+              ))}
+            </div>
+          )}
+          <div ref={sentinelRef} style={{ height: "1px" }} aria-hidden="true" />
+          {gridLoadingMore && <p style={{ color: "var(--text-muted)", textAlign: "center" }}>Loading more...</p>}
         </>
       )}
+
+      {openContentId && <PostDetailOverlay contentId={openContentId} onClose={() => setOpenContentId(null)} />}
     </main>
   );
 }
 
-const mainStyle: React.CSSProperties = { padding: "2.5rem 1.75rem", maxWidth: "1100px", margin: "0 auto" };
+const mainStyle: React.CSSProperties = { padding: "2.5rem 1.75rem 4rem", maxWidth: "1100px", margin: "0 auto" };
 
 const searchRowStyle: React.CSSProperties = {
   display: "flex",
   gap: "0.6rem",
-  margin: "1.5rem 0 3rem",
+  margin: "1.5rem 0 2.5rem",
   maxWidth: "560px",
   marginLeft: "auto",
   marginRight: "auto",
@@ -125,4 +183,27 @@ const submitButtonStyle: React.CSSProperties = {
   color: "var(--bg)",
   border: "none",
   flexShrink: 0,
+};
+
+const clearSearchButtonStyle: React.CSSProperties = {
+  padding: "0.7rem 1.1rem",
+  borderRadius: "var(--radius)",
+  fontWeight: 600,
+  fontSize: "0.9rem",
+  cursor: "pointer",
+  background: "transparent",
+  color: "var(--text-muted)",
+  border: "1px solid var(--border)",
+  flexShrink: 0,
+};
+
+// Instagram Explore convention: a dense, near-gapless grid of square
+// tiles. auto-fill (not auto-fit) so a half-empty last row never
+// stretches its tiles wider than the rest — matches this file's own
+// existing preference (see globals.css's explicit-column-count comment
+// on the .grid-cols-* classes) for predictable, non-orphaned grids.
+const gridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+  gap: "4px",
 };
