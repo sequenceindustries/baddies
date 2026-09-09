@@ -64,12 +64,12 @@ const wrapStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
-  gap: "0.6rem",
+  gap: "0.9rem",
   marginTop: "1.75rem",
 };
 
 const labelStyle: React.CSSProperties = {
-  fontSize: "0.75rem",
+  fontSize: "1.05rem",
   fontWeight: 700,
   letterSpacing: "0.08em",
   textTransform: "uppercase",
@@ -78,30 +78,34 @@ const labelStyle: React.CSSProperties = {
 
 const unitRowStyle: React.CSSProperties = {
   display: "flex",
-  gap: "0.75rem",
+  gap: "1.1rem",
 };
 
+// Borders removed per product decision — the glow shadow plus the
+// surface color are enough to read as a block without a hard edge.
 const unitStyle: React.CSSProperties = {
   background: "var(--surface)",
-  border: "1px solid var(--border)",
-  borderRadius: "14px",
-  padding: "0.75rem 0.9rem",
-  minWidth: "64px",
+  borderRadius: "18px",
+  padding: "1.1rem 1.35rem",
+  minWidth: "96px",
   textAlign: "center",
   boxShadow: "var(--glow)",
 };
 
+// 50% bigger than the original 1.6rem, per product decision — this is
+// the landing page's launch countdown, meant to be the loudest number
+// on the hero.
 const unitValueStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)",
-  fontSize: "1.6rem",
+  fontSize: "2.4rem",
   fontWeight: 600,
   lineHeight: 1.1,
 };
 
 const unitNameStyle: React.CSSProperties = {
-  fontSize: "0.68rem",
+  fontSize: "0.85rem",
   color: "var(--text-muted)",
   textTransform: "uppercase",
   letterSpacing: "0.05em",
-  marginTop: "0.2rem",
+  marginTop: "0.3rem",
 };

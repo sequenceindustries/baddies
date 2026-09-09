@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession, roleHomePath } from "@/components/ui";
 import { CreatorCardRow, type CreatorCardData } from "@/components/cards";
-import { HowItWorks, HowItWorksForCreators } from "@/components/how-it-works";
+import { HowItWorks } from "@/components/how-it-works";
 import { Countdown } from "@/components/countdown";
 
 interface DiscoveryResponse {
@@ -74,18 +74,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section style={foundingBannerSectionStyle}>
-        <Link href="/founding-baddies" style={foundingBannerStyle} className="hover-lift">
-          <span style={foundingBannerKickerStyle}>First generation</span>
-          <span style={foundingBannerTitleStyle}>Become a Founding baddie</span>
-          <p style={foundingBannerBodyStyle}>
-            Be part of baddies from the beginning. Join the first generation of creators helping
-            shape Africa&apos;s new adult content network.
-          </p>
-          <span style={foundingBannerArrowStyle}>Join baddies →</span>
-        </Link>
-      </section>
-
       {/* Larger cards, one sliding row (CreatorCardRow's size="lg"
           scroll) rather than several stacked rows — this is the one
           creator row a signed-out visitor sees before joining, so it
@@ -97,9 +85,24 @@ export default function LandingPage() {
         </section>
       )}
 
-      <HowItWorksForCreators />
-
       <HowItWorks />
+
+      {/* Moved to the bottom of the page per product decision — this
+          used to sit right under the hero (pulled up over its bottom
+          edge); now it's the last thing before the footer, after the
+          visitor has already seen the creator row and both "how it
+          works" explainers. */}
+      <section style={foundingBannerSectionStyle}>
+        <Link href="/founding-baddies" style={foundingBannerStyle} className="hover-lift">
+          <span style={foundingBannerKickerStyle}>First generation</span>
+          <span style={foundingBannerTitleStyle}>Become a Founding baddie</span>
+          <p style={foundingBannerBodyStyle}>
+            Be part of baddies from the beginning. Join the first generation of creators helping
+            shape Africa&apos;s new adult content network.
+          </p>
+          <span style={foundingBannerArrowStyle}>Join baddies →</span>
+        </Link>
+      </section>
 
       <footer style={footerStyle}>
         <p style={footerTaglineStyle}>South Africa to the World!</p>
@@ -163,17 +166,18 @@ const sectionStyle: React.CSSProperties = {
   margin: "0 auto 1.5rem",
 };
 
-// Pulled up over the hero's bottom edge so it reads as a divider
-// between the hero and the rest of the page, not just another stacked
-// section. position+zIndex keeps it painting above the hero.
+// Now the last section before the footer (moved down from just under
+// the hero) — a plain stacked section like the others, so the old
+// negative-margin/position/zIndex "pulled up over the hero" treatment
+// no longer applies.
 const foundingBannerSectionStyle: React.CSSProperties = {
   padding: "0 1.75rem",
   maxWidth: "1100px",
-  margin: "-5rem auto 2rem",
-  position: "relative",
-  zIndex: 2,
+  margin: "0 auto 2rem",
 };
 
+// Border removed per product decision — background + boxShadow glow
+// still read as a distinct block without a hard edge.
 const foundingBannerStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
@@ -183,7 +187,6 @@ const foundingBannerStyle: React.CSSProperties = {
   textDecoration: "none",
   color: "var(--text)",
   background: "var(--surface)",
-  border: "1px solid var(--accent)",
   borderRadius: "20px",
   padding: "3rem 2rem",
   boxShadow: "var(--glow)",
@@ -196,7 +199,7 @@ const foundingBannerKickerStyle: React.CSSProperties = {
   letterSpacing: "0.06em",
   textTransform: "uppercase",
   color: "var(--accent)",
-  border: "1px solid var(--border)",
+  background: "var(--surface-raised)",
   borderRadius: "999px",
   padding: "0.25rem 0.75rem",
 };
