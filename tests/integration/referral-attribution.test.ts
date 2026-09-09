@@ -100,13 +100,22 @@ describe.skipIf(!dbAvailable)("resolveReferralAttribution (integration)", () => 
     expect(await resolveReferralAttribution(req, "applicant@example.test")).toBeNull();
   });
 
-  it("returns null for a self-referral (applicant email matches the partner's own account email)", async () => {
+  it("returns null for a self-referral (applicant email matches the partner's own account email) and flags it for review", async () => {
     const email = `self-referral-${Date.now()}@example.test`;
     const partner = await createTestPartner(email);
     const token = await createReferralAttributionToken(partner.id);
     const req = requestWithReferralCookie(token);
     // Case-insensitive match, same as the resolver itself
     expect(await resolveReferralAttribution(req, email.toUpperCase())).toBeNull();
+
+    const flag = await db.abuseFlag.findFirst({
+      where: { type: "SELF_REFERRAL_ATTEMPT", foundingPartnerId: partner.id },
+    });
+    expect(flag).not.toBeNull();
+    expect(flag!.autoDetected).toBe(true);
+    expect(flag!.status).toBe("OPEN");
+
+    await db.abuseFlag.deleteMany({ where: { foundingPartnerId: partner.id } });
   });
 
   it("returns null when the referenced partner id doesn't exist (e.g. deleted)", async () => {

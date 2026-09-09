@@ -109,9 +109,24 @@ export async function POST(req: NextRequest) {
 
   // Same duplicate-email rule as POST /api/auth/register (and the same
   // 409 wording) — this route now creates a real User row too, so the
-  // uniqueness constraint is real, not just a formality.
+  // uniqueness constraint is real, not just a formality. Still flagged
+  // for admin visibility (repeated attempts against the same email are
+  // a real abuse signal even though they're already fully blocked here,
+  // not just an application allowed through with a note) — see
+  // AbuseFlag's own comment on why this stays narrow and review-only.
   const existingUser = await db.user.findUnique({ where: { email: data.email } });
   if (existingUser) {
+    try {
+      await db.abuseFlag.create({
+        data: {
+          type: "DUPLICATE_APPLICATION_ATTEMPT",
+          reason: `A Founding Baddie application was submitted for an email address (${data.email}) that already has an account.`,
+          autoDetected: true,
+        },
+      });
+    } catch (err) {
+      console.error("[founding-apply] failed to write DUPLICATE_APPLICATION_ATTEMPT flag", err);
+    }
     return NextResponse.json({ error: "An account with this email already exists." }, { status: 409 });
   }
   const passwordHash = await hashPassword(password);

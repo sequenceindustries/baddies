@@ -123,25 +123,34 @@ describe.skipIf(!dbAvailable)("resolveCreatorRevenueShare + postRevenueEvent (in
     expect(foundingPartnerId).toBeNull();
   });
 
-  it("resolves PARTNER_REFERRED_CREATOR_SHARE and the correct partner id when the Founding application IS attributed", async () => {
+  it("still resolves STANDARD_CREATOR_SHARE (flat 80%, v2) but returns the partner + attribution ids when the Founding application IS attributed", async () => {
     const email = `referred-${Date.now()}@example.test`;
     const partner = await createTestPartner(`partner-rev-${Date.now()}@example.test`);
     const app = await createBareFoundingApplication(email);
-    await db.referralAttribution.create({ data: { foundingApplicationId: app.id, foundingPartnerId: partner.id } });
+    const attribution = await db.referralAttribution.create({
+      data: { foundingApplicationId: app.id, foundingPartnerId: partner.id },
+    });
     const { creatorProfile } = await createRealCreator(email);
 
-    const { rule, foundingPartnerId } = await resolveCreatorRevenueShare(creatorProfile.id);
-    expect(rule.type).toBe("PARTNER_REFERRED_CREATOR_SHARE");
+    const { rule, foundingPartnerId, referralAttributionId } = await resolveCreatorRevenueShare(creatorProfile.id);
+    // v2: every creator gets the flat standard share — the old higher
+    // partner-referred personal cut is retired (see this module's own
+    // comment on why).
+    expect(rule.type).toBe("STANDARD_CREATOR_SHARE");
     expect(foundingPartnerId).toBe(partner.id);
+    expect(referralAttributionId).toBe(attribution.id);
   });
 
-  it("postRevenueEvent stamps the resolved rule + partner onto the LedgerEntry and applies the higher split", async () => {
+  it("postRevenueEvent stamps the resolved rule + partner onto the LedgerEntry but still applies the flat 80% split (v2)", async () => {
     const email = `ledger-referred-${Date.now()}@example.test`;
     const partner = await createTestPartner(`partner-ledger-${Date.now()}@example.test`);
     const app = await createBareFoundingApplication(email);
     await db.referralAttribution.create({ data: { foundingApplicationId: app.id, foundingPartnerId: partner.id } });
     const { creatorProfile, wallet } = await createRealCreator(email);
 
+    // TIP, not SUBSCRIPTION — attribution/reporting is stamped on every
+    // event type, but commission is only ever computed for SUBSCRIPTION
+    // (see tests/integration/partner-commission.test.ts for that path).
     const entry = await postRevenueEvent({
       walletId: wallet.id,
       creatorProfileId: creatorProfile.id,
@@ -153,8 +162,8 @@ describe.skipIf(!dbAvailable)("resolveCreatorRevenueShare + postRevenueEvent (in
 
     expect(entry.foundingPartnerId).toBe(partner.id);
     expect(entry.revenueShareRuleId).not.toBeNull();
-    expect(Number(entry.creatorShareAmount)).toBeCloseTo(85, 2); // 85% partner-referred rate
-    expect(Number(entry.platformShareAmount)).toBeCloseTo(15, 2);
+    expect(Number(entry.creatorShareAmount)).toBeCloseTo(80, 2); // flat standard rate, v2
+    expect(Number(entry.platformShareAmount)).toBeCloseTo(20, 2);
   });
 
   it("postRevenueEvent applies the standard 80% split and leaves foundingPartnerId null for a non-referred creator", async () => {

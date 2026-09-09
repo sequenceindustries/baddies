@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPaymentProvider } from "@/lib/providers/payment";
 import { db } from "@/lib/db/client";
-import { postRevenueEvent, postReversalEvent, recomputeWalletBalances } from "@/lib/ledger/service";
+import {
+  postRevenueEvent,
+  postReversalEvent,
+  postCommissionReversalEvent,
+  recomputeWalletBalances,
+} from "@/lib/ledger/service";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -133,6 +138,7 @@ async function handleRefund(data: Record<string, unknown>) {
     referenceId,
   });
   await recomputeWalletBalances(walletId);
+  await reverseCommissionIfLinked(data, amountUsd, `Refund (${referenceId})`);
 }
 
 async function handleChargeback(data: Record<string, unknown>) {
@@ -149,6 +155,57 @@ async function handleChargeback(data: Record<string, unknown>) {
     referenceId,
   });
   await recomputeWalletBalances(walletId);
+  await reverseCommissionIfLinked(data, amountUsd, `Chargeback (${referenceId})`);
+}
+
+/**
+ * A refund/chargeback payload carries originalReferenceType/
+ * originalReferenceId — the same (referenceType, referenceId) pair the
+ * ORIGINAL SUBSCRIPTION LedgerEntry was posted with (e.g.
+ * originalReferenceType: "subscription", originalReferenceId:
+ * <subscription.id> — see POST /api/checkout/subscribe). This is what
+ * correlates a refund/chargeback back to the specific revenue event a
+ * Founding Partner commission may have been computed from — a real gap
+ * this route had no way to close before (postReversalEvent had no link
+ * back to the original entry at all).
+ *
+ * Never blocks or fails the creator-side reversal above, which has
+ * already happened by the time this runs. If the source entry can't be
+ * found (a missing/garbled payload, or a processor that doesn't send
+ * these fields yet), this never silently drops a possible partner
+ * commission reversal — it writes a MANUAL_REVIEW AbuseFlag instead so
+ * an admin can look at it directly.
+ */
+async function reverseCommissionIfLinked(data: Record<string, unknown>, amountUsd: number, reason: string) {
+  const originalReferenceType = data.originalReferenceType as string | undefined;
+  const originalReferenceId = data.originalReferenceId as string | undefined;
+  if (!originalReferenceType || !originalReferenceId) return;
+
+  const sourceEntry = await db.ledgerEntry.findFirst({
+    where: { type: "SUBSCRIPTION", referenceType: originalReferenceType, referenceId: originalReferenceId },
+    select: { id: true },
+  });
+
+  if (!sourceEntry) {
+    try {
+      await db.abuseFlag.create({
+        data: {
+          type: "MANUAL_REVIEW",
+          reason: `Could not correlate a refund/chargeback back to its source SUBSCRIPTION entry (originalReferenceType=${originalReferenceType}, originalReferenceId=${originalReferenceId}) — a Founding Partner commission may need manual reversal. ${reason}`,
+          autoDetected: true,
+        },
+      });
+    } catch (err) {
+      console.error("[webhook:payment] failed to write MANUAL_REVIEW flag for an unresolved reversal", err);
+    }
+    return;
+  }
+
+  await postCommissionReversalEvent({
+    sourceLedgerEntryId: sourceEntry.id,
+    amountUsd,
+    reason,
+  });
 }
 
 async function handlePayoutStatus(

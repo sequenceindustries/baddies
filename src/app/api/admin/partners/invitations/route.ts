@@ -18,6 +18,12 @@ const CreateInvitationSchema = z.object({
   // own schema comment on why email can't be the primary identifier here.
   email: z.string().email().optional(),
   expiresInDays: z.number().int().positive().max(90).optional(),
+  // Explicit admin override of the 50-Founding-Partner cap, checked at
+  // ACCEPT time (see POST /api/partner-invite/accept) — false by
+  // default. Creating an invitation itself is never blocked by the cap
+  // regardless of this flag; it only matters once this specific
+  // invitation is accepted.
+  capOverride: z.boolean().optional().default(false),
 });
 
 /** Lists every invitation (any status), newest first — a small admin table, not paginated (the Founding Partner programme has no partner-count limit). */
@@ -45,6 +51,7 @@ export async function GET() {
       email: inv.email,
       code: inv.code,
       status: inv.status,
+      capOverride: inv.capOverride,
       invitedByEmail: inv.invitedByUser.email,
       expiresAt: inv.expiresAt,
       acceptedAt: inv.acceptedAt,
@@ -86,7 +93,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { name, email, expiresInDays } = parsed.data;
+  const { name, email, expiresInDays, capOverride } = parsed.data;
 
   if (email) {
     const existingPartnerUser = await db.user.findUnique({ where: { email } });
@@ -100,7 +107,7 @@ export async function POST(req: NextRequest) {
   const invitation = await db.$transaction(async (tx: Prisma.TransactionClient) => {
     const code = await generateUniqueInvitationCode(tx);
     const created = await tx.partnerInvitation.create({
-      data: { name, email: email ?? null, code, invitedBy: user.id, expiresAt },
+      data: { name, email: email ?? null, code, invitedBy: user.id, expiresAt, capOverride },
     });
     await tx.auditLog.create({
       data: {
@@ -108,7 +115,7 @@ export async function POST(req: NextRequest) {
         action: "founding_partner.invited",
         targetType: "partner_invitation",
         targetId: created.id,
-        metadata: { name, email: email ?? null, code, expiresAt },
+        metadata: { name, email: email ?? null, code, expiresAt, capOverride },
         ipAddress: req.headers.get("x-forwarded-for") ?? undefined,
       },
     });

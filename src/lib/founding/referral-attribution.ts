@@ -34,7 +34,29 @@ export async function resolveReferralAttribution(req: NextRequest, applicantEmai
     select: { id: true, status: true, user: { select: { email: true } } },
   });
   if (!partner || partner.status !== "ACTIVE") return null;
-  if (partner.user.email.toLowerCase() === applicantEmail.toLowerCase()) return null;
+
+  if (partner.user.email.toLowerCase() === applicantEmail.toLowerCase()) {
+    // A real self-referral attempt, not just "no attribution" — worth a
+    // rule-based flag for admin review (see AbuseFlag's own comment on
+    // why this is narrow, auto-detected, review-only). Never blocks the
+    // application itself; only means it goes through with no
+    // attribution, same as any other "no attribution" outcome here.
+    // Best-effort: a flag-write failure must never break the applicant's
+    // own submission over it.
+    try {
+      await db.abuseFlag.create({
+        data: {
+          type: "SELF_REFERRAL_ATTEMPT",
+          foundingPartnerId: partner.id,
+          reason: `Referral link visit and application both used the same email address (${applicantEmail}).`,
+          autoDetected: true,
+        },
+      });
+    } catch (err) {
+      console.error("[referral-attribution] failed to write SELF_REFERRAL_ATTEMPT flag", err);
+    }
+    return null;
+  }
 
   return partner.id;
 }

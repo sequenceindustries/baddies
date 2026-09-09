@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db/client";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { hashPassword, createSession } from "@/lib/auth/session";
 import { verifyPartnerInviteToken } from "@/lib/founding/partner-invite-token";
 import { checkRateLimitByIp, rateLimitResponse } from "@/lib/security/rate-limit";
 import { sendUserEmailVerification } from "@/lib/notifications/user-email-verification";
+import { assertFoundingPartnerCapNotReached, FoundingPartnerCapReachedError } from "@/lib/founding/partner-cap";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -85,9 +86,13 @@ export async function POST(req: NextRequest) {
   const invitationId2 = invitation.id;
 
   // referralCode collisions are astronomically unlikely at nanoid(8) with
-  // at most 10 partners ever, but a short retry loop costs nothing and
+  // at most 50 partners ever, but a short retry loop costs nothing and
   // avoids a hard 500 on the one-in-a-billion case.
-  async function createWithFreshReferralCode(tx: Prisma.TransactionClient, attemptsLeft = 5): Promise<{ userId: string; partnerId: string; referralCode: string }> {
+  async function createWithFreshReferralCode(
+    tx: Prisma.TransactionClient,
+    joinedPositionNumber: number,
+    attemptsLeft = 5
+  ): Promise<{ userId: string; partnerId: string; referralCode: string }> {
     const referralCode = nanoid(8);
     try {
       const user = await tx.user.create({
@@ -107,49 +112,71 @@ export async function POST(req: NextRequest) {
         },
       });
       const partner = await tx.foundingPartner.create({
-        data: { userId: user.id, invitationId: invitationId2, referralCode },
+        data: { userId: user.id, invitationId: invitationId2, referralCode, joinedPositionNumber },
       });
       return { userId: user.id, partnerId: partner.id, referralCode };
     } catch (err) {
       const isUniqueViolation = typeof err === "object" && err !== null && "code" in err && (err as { code?: string }).code === "P2002";
       if (isUniqueViolation && attemptsLeft > 1) {
-        return createWithFreshReferralCode(tx, attemptsLeft - 1);
+        return createWithFreshReferralCode(tx, joinedPositionNumber, attemptsLeft - 1);
       }
       throw err;
     }
   }
 
-  const result = await db.$transaction(async (tx: Prisma.TransactionClient) => {
-    const { userId, partnerId, referralCode } = await createWithFreshReferralCode(tx);
+  const capOverride = invitation.capOverride;
 
-    await tx.agreementAcceptance.create({
-      data: {
-        agreementId: agreement.id,
-        userId,
-        ipAddress: req.headers.get("x-forwarded-for") ?? undefined,
+  let result: { userId: string; referralCode: string };
+  try {
+    result = await db.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        // Serializable so a genuine race between two concurrent accept
+        // requests at exactly the cap can't both read "49 active" and
+        // both succeed — Postgres itself rejects one as a serialization
+        // failure rather than this count ever being trusted stale.
+        const joinedPositionNumber = await assertFoundingPartnerCapNotReached(tx, capOverride);
+
+        const { userId, partnerId, referralCode } = await createWithFreshReferralCode(tx, joinedPositionNumber);
+
+        await tx.agreementAcceptance.create({
+          data: {
+            agreementId: agreement.id,
+            userId,
+            ipAddress: req.headers.get("x-forwarded-for") ?? undefined,
+          },
+        });
+
+        await tx.partnerInvitation.update({
+          where: { id: invitation.id },
+          // email recorded here too, purely as this invitation's own audit
+          // trail of who accepted with what address — see its schema comment.
+          data: { status: "ACCEPTED", acceptedAt: new Date(), email },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            actorId: userId,
+            action: "founding_partner.activated",
+            targetType: "founding_partner",
+            targetId: partnerId,
+            metadata: { invitationId: invitation.id, joinedPositionNumber },
+            ipAddress: req.headers.get("x-forwarded-for") ?? undefined,
+          },
+        });
+
+        return { userId, referralCode };
       },
-    });
-
-    await tx.partnerInvitation.update({
-      where: { id: invitation.id },
-      // email recorded here too, purely as this invitation's own audit
-      // trail of who accepted with what address — see its schema comment.
-      data: { status: "ACCEPTED", acceptedAt: new Date(), email },
-    });
-
-    await tx.auditLog.create({
-      data: {
-        actorId: userId,
-        action: "founding_partner.activated",
-        targetType: "founding_partner",
-        targetId: partnerId,
-        metadata: { invitationId: invitation.id },
-        ipAddress: req.headers.get("x-forwarded-for") ?? undefined,
-      },
-    });
-
-    return { userId, referralCode };
-  });
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
+  } catch (err) {
+    if (err instanceof FoundingPartnerCapReachedError) {
+      return NextResponse.json(
+        { error: `${err.message} Contact the team about the waitlist.` },
+        { status: 409 }
+      );
+    }
+    throw err;
+  }
 
   // Never lets a notification failure fail or block activation itself —
   // the account above is already committed regardless, same reasoning

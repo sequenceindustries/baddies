@@ -34,13 +34,19 @@ export async function getCurrentRevenueShareRule(type: RevenueShareRuleType): Pr
 
 /**
  * Resolves which revenue-share rule applies to a given creator's revenue
- * event: STANDARD_CREATOR_SHARE (80%) normally, or
- * PARTNER_REFERRED_CREATOR_SHARE (85%) if this creator's original
- * Founding Baddie application is currently attributed to a Founding
- * Partner. Also returns that partner's id (or null) so the caller can
- * stamp LedgerEntry.foundingPartnerId — the partner's whole "eligible
- * reward history" is just every LedgerEntry with that id, never a
- * derived/cached figure.
+ * event, and whether that event should also credit a Founding Partner.
+ *
+ * Founding Partner Programme v2: every creator — referred or not — gets
+ * the flat STANDARD_CREATOR_SHARE (80%). A referred creator's higher
+ * personal cut (the old PARTNER_REFERRED_CREATOR_SHARE / 85% mechanism)
+ * is retired; the platform's former extra 5% instead funds the
+ * partner's own 10% commission (see PartnerCommission / postRevenueEvent
+ * in src/lib/ledger/service.ts). This function still resolves and
+ * returns the attribution itself (foundingPartnerId +
+ * referralAttributionId) so the caller can both stamp
+ * LedgerEntry.foundingPartnerId (attribution/reporting, unconditional)
+ * and — for a SUBSCRIPTION event only — compute that partner's
+ * commission against the correct ReferralAttribution row.
  *
  * CreatorProfile has no direct FK to FoundingApplication (a Founding
  * Baddie's application predates their real account) — bridged by email,
@@ -49,7 +55,9 @@ export async function getCurrentRevenueShareRule(type: RevenueShareRuleType): Pr
  */
 export async function resolveCreatorRevenueShare(
   creatorProfileId: string
-): Promise<{ rule: RevenueShareRule; foundingPartnerId: string | null }> {
+): Promise<{ rule: RevenueShareRule; foundingPartnerId: string | null; referralAttributionId: string | null }> {
+  const rule = await getCurrentRevenueShareRule("STANDARD_CREATOR_SHARE");
+
   const creatorProfile = await db.creatorProfile.findUnique({
     where: { id: creatorProfileId },
     select: { user: { select: { email: true } } },
@@ -58,15 +66,16 @@ export async function resolveCreatorRevenueShare(
   if (creatorProfile) {
     const foundingApplication = await db.foundingApplication.findFirst({
       where: { email: creatorProfile.user.email },
-      select: { referralAttribution: { select: { foundingPartnerId: true } } },
+      select: { referralAttribution: { select: { id: true, foundingPartnerId: true } } },
     });
     if (foundingApplication?.referralAttribution) {
       return {
-        rule: await getCurrentRevenueShareRule("PARTNER_REFERRED_CREATOR_SHARE"),
+        rule,
         foundingPartnerId: foundingApplication.referralAttribution.foundingPartnerId,
+        referralAttributionId: foundingApplication.referralAttribution.id,
       };
     }
   }
 
-  return { rule: await getCurrentRevenueShareRule("STANDARD_CREATOR_SHARE"), foundingPartnerId: null };
+  return { rule, foundingPartnerId: null, referralAttributionId: null };
 }
