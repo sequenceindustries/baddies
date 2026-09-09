@@ -57,9 +57,17 @@ export default function ApplicationNextSteps({ applicationId }: { applicationId:
 
       <div style={stepCardStyle}>
         <StepStatus done={identitySubmitted} label="Identity & ID document" />
-        {!identitySubmitted && !loading && <IdentityForm applicationId={applicationId} onSubmitted={reloadStatus} />}
-        {identitySubmitted && (
+        {identitySubmitted ? (
           <p style={stepHintStyle}>Submitted — our team will review it as part of your application.</p>
+        ) : !loading && !emailVerified ? (
+          // Locked, not just listed second — per explicit product
+          // decision, an applicant can't get ahead of the pipeline by
+          // skipping straight to identity before confirming their
+          // email. POST /api/founding/apply/[id]/identity enforces the
+          // same rule server-side, so this isn't just a UI suggestion.
+          <p style={stepHintStyle}>Verify your email above first, then you can submit your ID.</p>
+        ) : (
+          !loading && <IdentityForm applicationId={applicationId} onSubmitted={reloadStatus} />
         )}
       </div>
     </div>

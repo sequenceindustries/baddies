@@ -43,12 +43,27 @@ function isAtLeast18(dateOfBirth: Date): boolean {
  * email/response themselves).
  */
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const application = await db.foundingApplication.findUnique({ where: { id: params.id } });
+  const application = await db.foundingApplication.findUnique({
+    where: { id: params.id },
+    include: { contact: { select: { emailVerifiedAt: true } } },
+  });
   if (!application) {
     return NextResponse.json({ error: "Application not found." }, { status: 404 });
   }
   if (application.status === "REJECTED") {
     return NextResponse.json({ error: "This application was not accepted and can't be updated." }, { status: 403 });
+  }
+  // Gates ID/identity submission behind email verification — per
+  // explicit product decision, the dashboard's own "verify your email"
+  // step must actually limit what an applicant can do next, not just
+  // suggest it. Defense in depth: ApplicationNextSteps.tsx already hides
+  // this form client-side until emailVerified, this is the same rule
+  // enforced server-side against a direct API call.
+  if (!application.contact?.emailVerifiedAt) {
+    return NextResponse.json(
+      { error: "Verify your email before submitting your identity documents." },
+      { status: 403 }
+    );
   }
 
   const json = await req.json().catch(() => null);
