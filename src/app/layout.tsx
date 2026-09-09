@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Nav } from "@/components/ui";
 import { AgeGate } from "@/components/age-gate";
+import { BottomTabBar } from "@/components/bottom-tab-bar";
 
 export const metadata: Metadata = {
   title: "baddies",
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AgeGate>
           <Nav comingSoon={comingSoon} />
           {children}
+          <BottomTabBar />
         </AgeGate>
       </body>
     </html>

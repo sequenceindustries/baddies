@@ -305,3 +305,34 @@ a[href]:hover {
 .heart-pop {
     animation: heart-pop 0.8s ease-out forwards;
 }
+
+/* Mobile bottom tab bar (components/bottom-tab-bar.tsx, BottomTabBar) —
+   same allowlisted-mobile-only pattern as the nav hamburger above, same
+   680px breakpoint. Hidden by default; the component itself is always
+   mounted (so its own useSession() survives a breakpoint crossing) and
+   decides per-render whether to return null at all, so this class only
+   needs to hide it back above 680px as a second guard. */
+.bottom-tab-bar {
+    display: none;
+}
+
+@media (max-width: 680px) {
+    .bottom-tab-bar {
+        display: flex;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 50;
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+        padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+
+    /* Reserves space so page content never renders underneath the fixed
+       bar above — toggled on <body> by the component itself, scoped to
+       this same breakpoint so it's a no-op on desktop even if left set. */
+    body.has-bottom-tab-bar {
+        padding-bottom: 58px;
+    }
+}
