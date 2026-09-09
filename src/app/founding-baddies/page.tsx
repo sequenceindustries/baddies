@@ -585,11 +585,21 @@ function FormFieldset({
   hint?: string;
   children: React.ReactNode;
 }) {
+  // <fieldset>/<legend> kept for real semantics (a screen reader
+  // announces the legend as this group's label) but NOT for visuals —
+  // a fieldset's background/box-shadow/border-radius only ever paints
+  // behind its "content box", which by spec excludes the legend, so
+  // styling the <fieldset> itself directly left the legend floating
+  // above/outside the box instead of reading as its heading. The actual
+  // box is a plain <div> instead, same pattern as Section's own
+  // heading-outside-the-box layout above.
   return (
-    <fieldset style={fieldsetStyle}>
+    <fieldset style={fieldsetWrapStyle}>
       <legend style={legendStyle}>{legend}</legend>
-      {hint && <p style={fieldsetHintStyle}>{hint}</p>}
-      {children}
+      <div style={fieldsetBoxStyle}>
+        {hint && <p style={fieldsetHintStyle}>{hint}</p>}
+        {children}
+      </div>
     </fieldset>
   );
 }
@@ -818,28 +828,36 @@ const formStyle: React.CSSProperties = { marginTop: "1rem" };
 // Border removed in favor of a background + glow shadow — same box
 // treatment used everywhere else on this page, applied to the form's
 // own section groupings too.
-const fieldsetStyle: React.CSSProperties = {
-  // Explicit "none" (not just omitted) — a bare <fieldset> has a UA
-  // stylesheet default border (2px groove) that only omitting the
-  // property doesn't clear.
+// The outer <fieldset> itself now carries no visual styling at all
+// (see FormFieldset's own comment on why) — just layout: no default UA
+// border/min-width quirks, and the bottom margin that keeps this
+// section's box clear of the next section's legend.
+const fieldsetWrapStyle: React.CSSProperties = {
   border: "none",
-  background: "var(--surface)",
-  borderRadius: "14px",
-  padding: "1.5rem",
-  // Wide enough to clear --glow's own drop-shadow (12px offset + 40px
-  // blur) — at the old 1.5rem gap, one fieldset's shadow visibly bled
-  // onto the top of the next one since (unlike every other glow box on
-  // this page/the landing page) these stack directly on top of each
-  // other with nothing between them.
+  minWidth: 0,
+  padding: 0,
   margin: "0 0 2.5rem",
-  boxShadow: "var(--glow)",
 };
 
 const legendStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)",
   fontSize: "1.02rem",
   fontWeight: 600,
-  padding: "0 0.5rem",
+  padding: 0,
+  margin: "0 0 0.9rem",
+  width: "100%",
+};
+
+// The actual visible box — a plain div, so background/box-shadow/
+// border-radius paint exactly the way every other box on this page
+// does, with the legend now sitting above it as a normal heading
+// rather than a fieldset's special (and here, background-excluded)
+// legend box.
+const fieldsetBoxStyle: React.CSSProperties = {
+  background: "var(--surface)",
+  borderRadius: "14px",
+  padding: "1.5rem",
+  boxShadow: "var(--glow)",
 };
 
 const fieldsetHintStyle: React.CSSProperties = {
