@@ -16,7 +16,7 @@ import {
 interface StatusResponse {
   valid: boolean;
   reason?: "missing_token" | "invalid_token" | "already_accepted" | "revoked" | "expired" | "agreement_unavailable";
-  email?: string;
+  name?: string;
   agreement?: { title: string; version: string; bodyText: string };
 }
 
@@ -42,6 +42,7 @@ export default function PartnerInvitePage() {
 
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [agreesToPartnerAgreement, setAgreesToPartnerAgreement] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +51,14 @@ export default function PartnerInvitePage() {
   useEffect(() => {
     fetch(`/api/partner-invite/status?token=${encodeURIComponent(token)}`)
       .then((r) => r.json())
-      .then(setStatus)
+      .then((body: StatusResponse) => {
+        setStatus(body);
+        // Pre-filled from what admin entered when creating the invite —
+        // still a plain editable field, since this is just a starting
+        // point, not a locked-in identity (see AcceptSchema's comment
+        // on why this page collects a real email itself now).
+        if (body.valid && body.name) setDisplayName(body.name);
+      })
       .catch(() => setStatus({ valid: false, reason: "invalid_token" }));
   }, [token]);
 
@@ -79,7 +87,7 @@ export default function PartnerInvitePage() {
     const res = await fetch("/api/partner-invite/accept", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, displayName, password, agreesToPartnerAgreement }),
+      body: JSON.stringify({ token, displayName, email, password, agreesToPartnerAgreement }),
     });
 
     setSubmitting(false);
@@ -98,8 +106,8 @@ export default function PartnerInvitePage() {
     <main style={pageWrapStyle}>
       <h1 style={displayHeadingStyle}>Become a Founding Partner</h1>
       <p style={{ color: "var(--text-muted)", marginBottom: "1.5rem", fontSize: "0.92rem" }}>
-        You&apos;ve been invited to activate a Founding Partner account for <strong>{status.email}</strong>.
-        Review the agreement below, then set a password to activate your private dashboard.
+        You&apos;ve been invited to activate a Founding Partner account, <strong>{status.name}</strong>.
+        Review the agreement below, then set an email and password to activate your private dashboard.
       </p>
 
       <div style={{ ...cardStyle, marginBottom: "1.5rem" }}>
@@ -131,6 +139,16 @@ export default function PartnerInvitePage() {
               onChange={(e) => setDisplayName(e.target.value)}
               minLength={2}
               maxLength={50}
+              required
+            />
+          </Field>
+
+          <Field label="Email" hint="This creates your Baddies account — used to sign in.">
+            <input
+              type="email"
+              style={inputStyle}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               required
             />
           </Field>

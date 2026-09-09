@@ -88,7 +88,14 @@ describe.skipIf(!dbAvailable)("resolveCreatorRevenueShare + postRevenueEvent (in
 
   async function createTestPartner(email: string) {
     const invitation = await db.partnerInvitation.create({
-      data: { email, invitedBy: (await db.user.findFirstOrThrow({ where: { role: "ADMIN" } })).id, status: "ACCEPTED", acceptedAt: new Date() },
+      data: {
+        name: "Test Partner",
+        code: `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        email,
+        invitedBy: (await db.user.findFirstOrThrow({ where: { role: "ADMIN" } })).id,
+        status: "ACCEPTED",
+        acceptedAt: new Date(),
+      },
     });
     cleanupInvitationIds.push(invitation.id);
     const user = await db.user.create({

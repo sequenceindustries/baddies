@@ -58,15 +58,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     ? Math.max(Math.floor((invitation.expiresAt.getTime() - Date.now()) / 1000), 1)
     : undefined;
   const inviteUrl = await buildPartnerInviteUrl(invitation.id, ttlSeconds);
-  let emailSent = true;
-  try {
-    await sendPartnerInviteEmail(inviteUrl, invitation.email, invitation.expiresAt);
-  } catch (err) {
-    console.error("[partner-invitations] resend email failed", err);
-    emailSent = false;
+  // Only attempted when this invitation actually has an email on file —
+  // see the create route's own comment on why that's optional now.
+  let emailSent = false;
+  if (invitation.email) {
+    try {
+      await sendPartnerInviteEmail(inviteUrl, invitation.email, invitation.name, invitation.expiresAt);
+      emailSent = true;
+    } catch (err) {
+      console.error("[partner-invitations] resend email failed", err);
+    }
   }
 
   // Same reasoning as the create route: always return the real link,
-  // regardless of whether the email itself actually sent.
+  // regardless of whether an email exists/sent.
   return NextResponse.json({ invitationId: updated.id, resendCount: updated.resendCount, inviteUrl, emailSent });
 }

@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * founding/* token-gated read: a mailed link has no session yet. Returns
  * enough for the accept-invite page to render the right state (valid +
  * agreement text, or a specific reason it can't proceed) without ever
- * exposing the invitation id itself or another invitee's email.
+ * exposing the invitation id itself.
  */
 export async function GET(req: NextRequest) {
   // 20 per 15 minutes per IP — the accept page calls this once per load;
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     valid: true,
-    email: invitation.email,
+    name: invitation.name,
     agreement: { title: agreement.title, version: agreement.version, bodyText: agreement.bodyText },
   });
 }

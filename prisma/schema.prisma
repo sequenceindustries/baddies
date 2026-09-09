@@ -1311,9 +1311,27 @@ enum PartnerInvitationStatus {
 // token's signature and this row's live status/expiresAt, so admin
 // revocation always takes effect immediately regardless of what the link
 // itself still claims.
+//
+// Identified by name + a generated reference code, not email — per
+// explicit product decision, admin won't have an email address for
+// every prospective partner. `email` is optional: a courtesy contact
+// address when admin happens to have one (used only to send/resend the
+// invite notification), never required and never authoritative. The
+// invitee's real login email is whatever they submit themselves on
+// POST /api/partner-invite/accept (same as a normal registration) —
+// this row's own `email` is overwritten with that value once accepted,
+// purely as this invitation's own audit trail of who accepted with what
+// address.
 model PartnerInvitation {
-  id     String                  @id @default(cuid())
-  email  String
+  id    String  @id @default(cuid())
+  name  String
+  email String?
+  // Short, generated, human-shareable reference ("Invite #482917") so
+  // an admin can refer to/track an invitation by something other than
+  // an email address they may not have. Not itself a secret — the real
+  // access control is the signed link token, exactly as this model's
+  // own comment above describes; this is a reference number only.
+  code   String                  @unique
   status PartnerInvitationStatus @default(PENDING)
 
   invitedBy     String // admin User.id
@@ -1331,7 +1349,7 @@ model PartnerInvitation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([email])
+  @@index([name])
   @@index([status])
   @@map("partner_invitations")
 }

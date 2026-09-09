@@ -18,13 +18,17 @@ export async function buildPartnerInviteUrl(invitationId: string, ttlSeconds?: n
 }
 
 /**
- * Fired when an admin creates (or resends) a Founding Partner invitation.
- * Same shape as sendOnboardingApprovedEmail: a self-contained signed
- * token (src/lib/founding/partner-invite-token.ts) rather than a bare
- * id, since this link is mailed to someone with no account yet.
+ * Fired when an admin creates (or resends) a Founding Partner invitation
+ * AND happens to have an email address for them — email is optional on
+ * PartnerInvitation now (see its own schema comment), so this is only
+ * ever a bonus notification, never the invite's only channel. Same
+ * shape as sendOnboardingApprovedEmail: a self-contained signed token
+ * (src/lib/founding/partner-invite-token.ts) rather than a bare id,
+ * since this link is mailed to someone with no account yet.
  */
 export function buildPartnerInviteEmail(
   inviteUrl: string,
+  name: string,
   expiresAt: Date | null
 ): { subject: string; text: string } {
   const subject = "You're invited: Founding Partner at baddies";
@@ -32,7 +36,7 @@ export function buildPartnerInviteEmail(
     ? `This invitation expires on ${expiresAt.toLocaleDateString()}.`
     : "This invitation doesn't expire until it's used or revoked.";
   const text = [
-    "Hi,",
+    `Hi ${name},`,
     "",
     "You've been invited to become a Founding Partner at baddies — a private, invitation-only role helping bring the first generation of creators onto the platform.",
     "",
@@ -56,7 +60,12 @@ export function buildPartnerInviteEmail(
  * are always the exact same token, never two different ones from two
  * separate signings.
  */
-export async function sendPartnerInviteEmail(inviteUrl: string, to: string, expiresAt: Date | null): Promise<void> {
-  const { subject, text } = buildPartnerInviteEmail(inviteUrl, expiresAt);
+export async function sendPartnerInviteEmail(
+  inviteUrl: string,
+  to: string,
+  name: string,
+  expiresAt: Date | null
+): Promise<void> {
+  const { subject, text } = buildPartnerInviteEmail(inviteUrl, name, expiresAt);
   await getNotificationProvider().sendEmail({ to, subject, text });
 }

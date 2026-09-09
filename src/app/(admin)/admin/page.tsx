@@ -2859,7 +2859,9 @@ function ResetRosterPanel() {
 
 interface PartnerInvitationRow {
   id: string;
-  email: string;
+  name: string;
+  email: string | null;
+  code: string;
   status: string;
   invitedByEmail: string;
   expiresAt: string | null;
@@ -2923,6 +2925,9 @@ function FoundingPartnersPanel() {
   const [partners, setPartners] = useState<FoundingPartnerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  // Optional — see PartnerInvitation's own schema comment on why email
+  // can't be required here (admin won't have one for everyone).
   const [email, setEmail] = useState("");
   const [expiresInDays, setExpiresInDays] = useState("14");
   const [inviting, setInviting] = useState(false);
@@ -2931,13 +2936,13 @@ function FoundingPartnersPanel() {
   const [distTotal, setDistTotal] = useState("");
   const [savingDist, setSavingDist] = useState(false);
   // Surfaces the real, working invite link after sending/resending —
-  // never solely dependent on the email actually landing (see the
-  // invitations routes' own comment: a sandboxed provider, a typo, a
-  // spam filter can all silently eat the email with no other channel
-  // left). Copyable so it can go out via DM, WhatsApp, anywhere.
-  const [inviteLinkInfo, setInviteLinkInfo] = useState<{ email: string; url: string; emailSent: boolean } | null>(
-    null
-  );
+  // never solely dependent on an invite email existing/landing (see the
+  // invitations routes' own comment: no address at all, a sandboxed
+  // provider, a typo, a spam filter can all mean no email ever arrives).
+  // Copyable so it can go out via DM, WhatsApp, anywhere.
+  const [inviteLinkInfo, setInviteLinkInfo] = useState<
+    { name: string; code: string; url: string; emailSent: boolean; hadEmail: boolean } | null
+  >(null);
   const [linkCopied, setLinkCopied] = useState(false);
 
   function reload() {
@@ -2960,19 +2965,30 @@ function FoundingPartnersPanel() {
   async function sendInvite(e: React.FormEvent) {
     e.preventDefault();
     setInviting(true);
-    const sentToEmail = email;
+    const sentToName = name;
     const res = await fetch("/api/admin/partners/invitations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, expiresInDays: expiresInDays ? Number(expiresInDays) : undefined }),
+      body: JSON.stringify({
+        name,
+        email: email || undefined,
+        expiresInDays: expiresInDays ? Number(expiresInDays) : undefined,
+      }),
     });
     setInviting(false);
     if (res.ok) {
       const body = await res.json().catch(() => null);
       if (body?.inviteUrl) {
-        setInviteLinkInfo({ email: sentToEmail, url: body.inviteUrl, emailSent: Boolean(body.emailSent) });
+        setInviteLinkInfo({
+          name: sentToName,
+          code: body.code,
+          url: body.inviteUrl,
+          emailSent: Boolean(body.emailSent),
+          hadEmail: Boolean(email),
+        });
         setLinkCopied(false);
       }
+      setName("");
       setEmail("");
       reload();
     } else {
@@ -2994,13 +3010,19 @@ function FoundingPartnersPanel() {
 
   async function resendInvite(id: string) {
     setBusyId(id);
-    const invitee = invitations.find((inv) => inv.id === id)?.email ?? "";
+    const invitation = invitations.find((inv) => inv.id === id);
     const res = await fetch(`/api/admin/partners/invitations/${id}/resend`, { method: "POST" });
     setBusyId(null);
     if (res.ok) {
       const body = await res.json().catch(() => null);
       if (body?.inviteUrl) {
-        setInviteLinkInfo({ email: invitee, url: body.inviteUrl, emailSent: Boolean(body.emailSent) });
+        setInviteLinkInfo({
+          name: invitation?.name ?? "",
+          code: invitation?.code ?? "",
+          url: body.inviteUrl,
+          emailSent: Boolean(body.emailSent),
+          hadEmail: Boolean(invitation?.email),
+        });
         setLinkCopied(false);
       }
       reload();
@@ -3074,12 +3096,19 @@ function FoundingPartnersPanel() {
 
       <form onSubmit={sendInvite} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", margin: "1rem 0 2rem" }}>
         <input
+          type="text"
+          style={memberSearchInputStyle}
+          placeholder="Invitee name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+        />
+        <input
           type="email"
           style={memberSearchInputStyle}
-          placeholder="Invitee email"
+          placeholder="Email (optional)"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          required
         />
         <select style={statusSelectStyle} value={expiresInDays} onChange={(e) => setExpiresInDays(e.target.value)}>
           <option value="">No expiry</option>
@@ -3096,19 +3125,27 @@ function FoundingPartnersPanel() {
         <div
           style={{
             background: "var(--surface-raised)",
-            border: `1px solid ${inviteLinkInfo.emailSent ? "var(--border)" : "var(--danger)"}`,
+            border: `1px solid ${inviteLinkInfo.hadEmail && !inviteLinkInfo.emailSent ? "var(--danger)" : "var(--border)"}`,
             borderRadius: "var(--radius)",
             padding: "0.9rem 1rem",
             marginBottom: "2rem",
           }}
         >
           <div style={{ fontSize: "0.85rem", marginBottom: "0.5rem" }}>
-            {inviteLinkInfo.emailSent ? (
-              <>Invite link for <strong>{inviteLinkInfo.email}</strong> — the email was sent too, but you can copy this and send it yourself (DM, WhatsApp, wherever actually reaches them).</>
+            {!inviteLinkInfo.hadEmail ? (
+              <>
+                Invite link for <strong>{inviteLinkInfo.name}</strong> (code <code>{inviteLinkInfo.code}</code>) — no
+                email on file, so copy this link and send it directly (DM, WhatsApp, in person, wherever reaches them).
+              </>
+            ) : inviteLinkInfo.emailSent ? (
+              <>
+                Invite link for <strong>{inviteLinkInfo.name}</strong> (code <code>{inviteLinkInfo.code}</code>) — the
+                email was sent too, but you can copy this and send it yourself as well.
+              </>
             ) : (
               <>
                 <span style={{ color: "var(--danger)", fontWeight: 600 }}>
-                  The invite email to {inviteLinkInfo.email} failed to send
+                  The invite email for {inviteLinkInfo.name} failed to send
                 </span>{" "}
                 — check the server logs for why (e.g. a sandboxed notification provider). The invitation itself
                 still exists — copy this link and send it directly instead.
@@ -3144,9 +3181,12 @@ function FoundingPartnersPanel() {
               {invitations.map((inv) => (
                 <div key={inv.id} style={rowCardStyle}>
                   <div>
-                    <div style={{ fontSize: "0.9rem" }}>{inv.email}</div>
+                    <div style={{ fontSize: "0.9rem" }}>
+                      {inv.name} · code <code>{inv.code}</code>
+                    </div>
                     <div style={mutedSmallStyle}>
                       {inv.status} · invited by {inv.invitedByEmail} · {new Date(inv.createdAt).toLocaleDateString()}
+                      {inv.email && ` · ${inv.email}`}
                       {inv.expiresAt && ` · expires ${new Date(inv.expiresAt).toLocaleDateString()}`}
                       {inv.resendCount > 0 && ` · resent ${inv.resendCount}x`}
                     </div>

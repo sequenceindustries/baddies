@@ -6,6 +6,7 @@ import type { Prisma } from "@prisma/client";
 import { hashPassword, createSession } from "@/lib/auth/session";
 import { verifyPartnerInviteToken } from "@/lib/founding/partner-invite-token";
 import { checkRateLimitByIp, rateLimitResponse } from "@/lib/security/rate-limit";
+import { sendUserEmailVerification } from "@/lib/notifications/user-email-verification";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -14,6 +15,10 @@ export const dynamic = "force-dynamic";
 const AcceptSchema = z.object({
   token: z.string().min(1),
   displayName: z.string().min(2).max(50),
+  // The invitee's own real login email — an invitation no longer
+  // carries one (see PartnerInvitation's schema comment), so this is
+  // where it's actually collected, same as a normal registration.
+  email: z.string().email(),
   password: z.string().min(10, "Password must be at least 10 characters"),
   agreesToPartnerAgreement: z.literal(true, {
     errorMap: () => ({ message: "You must accept the Founding Partner agreement to activate your account." }),
@@ -42,7 +47,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { token, displayName, password } = parsed.data;
+  const { token, displayName, email, password } = parsed.data;
 
   const invitationId = await verifyPartnerInviteToken(token);
   if (!invitationId) {
@@ -60,7 +65,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "This invitation has expired." }, { status: 409 });
   }
 
-  const existingUser = await db.user.findUnique({ where: { email: invitation.email } });
+  const existingUser = await db.user.findUnique({ where: { email } });
   if (existingUser) {
     return NextResponse.json({ error: "An account with this email already exists." }, { status: 409 });
   }
@@ -74,10 +79,9 @@ export async function POST(req: NextRequest) {
   }
 
   const passwordHash = await hashPassword(password);
-  // Copied to plain, non-nullable locals before the closure below — TS
+  // Copied to a plain, non-nullable local before the closure below — TS
   // control-flow narrowing (invitation is not null, checked above)
   // doesn't persist through a nested function boundary.
-  const invitationEmail = invitation.email;
   const invitationId2 = invitation.id;
 
   // referralCode collisions are astronomically unlikely at nanoid(8) with
@@ -88,10 +92,14 @@ export async function POST(req: NextRequest) {
     try {
       const user = await tx.user.create({
         data: {
-          email: invitationEmail,
+          email,
           passwordHash,
           role: "PARTNER",
-          emailVerified: new Date(), // admin sent this invite directly to a known address
+          // Unverified, same as a normal registration — this is the
+          // invitee's own self-submitted email (see AcceptSchema's
+          // comment), not one admin already confirmed by mailing to it,
+          // so it gets the same real verification email everyone else's
+          // account does (sent below, once this transaction commits).
           ageVerified: true,
           ageVerifiedAt: new Date(),
           profile: { create: { displayName } },
@@ -124,7 +132,9 @@ export async function POST(req: NextRequest) {
 
     await tx.partnerInvitation.update({
       where: { id: invitation.id },
-      data: { status: "ACCEPTED", acceptedAt: new Date() },
+      // email recorded here too, purely as this invitation's own audit
+      // trail of who accepted with what address — see its schema comment.
+      data: { status: "ACCEPTED", acceptedAt: new Date(), email },
     });
 
     await tx.auditLog.create({
@@ -140,6 +150,16 @@ export async function POST(req: NextRequest) {
 
     return { userId, referralCode };
   });
+
+  // Never lets a notification failure fail or block activation itself —
+  // the account above is already committed regardless, same reasoning
+  // as every other notification send in this codebase (e.g. register's
+  // own call to this exact function).
+  try {
+    await sendUserEmailVerification(result.userId, email, displayName);
+  } catch (err) {
+    console.error("[partner-invite-accept] email verification send failed", err);
+  }
 
   const { token: sessionToken, expiresAt } = await createSession(result.userId, "PARTNER", {
     userAgent: req.headers.get("user-agent") ?? undefined,
