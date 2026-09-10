@@ -279,9 +279,12 @@ function NavLinks({
             landing page too (roleHomePath, below), not just a
             reachable-via-nav extra. Only FAN gets "My subscriptions" —
             that's a fan-specific concern, not part of this feed-access
-            widening. PARTNER is deliberately left out of both (not
-            requested; partners have their own dashboard-focused nav
-            already). */}
+            widening. PARTNER now gets Home/Discover too, per direct
+            follow-up ("partner dashboard page doesn't have feed") —
+            a partner had no nav link to the feed at all despite
+            Home/Discover already being everyone else's default; their
+            own dashboard stays the actual landing page (roleHomePath
+            below is untouched), this just makes the feed reachable. */}
         {user.role === "ADMIN" && (
           <Link href="/admin" style={linkStyle}>
             Admin
@@ -292,21 +295,17 @@ function NavLinks({
             Partner Dashboard
           </Link>
         )}
-        {(user.role === "FAN" || user.role === "CREATOR" || user.role === "ADMIN") && (
-          <Link href="/feed" style={linkStyle}>
-            Home
-          </Link>
-        )}
+        <Link href="/feed" style={linkStyle}>
+          Home
+        </Link>
         {user.role === "FAN" && (
           <Link href="/fan-subscriptions" style={linkStyle}>
             My subscriptions
           </Link>
         )}
-        {user.role !== "PARTNER" && (
-          <Link href="/discovery" style={linkStyle}>
-            Discover
-          </Link>
-        )}
+        <Link href="/discovery" style={linkStyle}>
+          Discover
+        </Link>
         {(user.role === "FAN" || user.role === "PARTNER") && !user.creatorProfile && (
           <Link href="/apply" style={primaryLinkStyle}>
             Become a creator

@@ -289,7 +289,7 @@ export default function AdminDashboardPage() {
         </div>
       </aside>
 
-      <main style={adminContentStyle}>
+      <main className="admin-content" style={adminContentStyle}>
         <div style={{ ...adminContentHeaderStyle, borderColor: activeGroup?.color ?? "var(--border)" }}>
           <span style={{ ...adminContentEyebrowStyle, color: activeGroup?.color ?? "var(--accent)" }}>
             {activeGroup?.label ?? "Command Centre"}
@@ -821,7 +821,7 @@ function MembersPanel({ lockedRole }: { lockedRole?: "CREATOR" }) {
           <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
             {members.map((m) => (
               <div key={m.userId} style={rowCardStyle}>
-                <div style={{ cursor: "pointer", flex: 1 }} onClick={() => setSelectedUserId(m.userId)} role="button">
+                <div style={rowInfoClickableStyle} onClick={() => setSelectedUserId(m.userId)} role="button">
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 600, fontSize: "0.9rem" }}>
                     {m.displayName ?? m.email}
                     <span style={roleBadgeStyle(m.role)}>{humanizeKey(m.role)}</span>
@@ -2453,7 +2453,7 @@ function TrustAndSafetyPanel() {
           <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
             {cases.map((c) => (
               <div key={c.caseId} style={rowCardStyle}>
-                <div style={{ cursor: "pointer", flex: 1 }} onClick={() => setSelectedCase(c)} role="button">
+                <div style={rowInfoClickableStyle} onClick={() => setSelectedCase(c)} role="button">
                   <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>
                     {c.report ? humanizeKey(c.report.reason) : "Unknown reason"} ·{" "}
                     {c.target.type === "content" ? c.target.creatorEmail : c.target.type === "user" ? c.target.email : "unknown target"}
@@ -4061,7 +4061,7 @@ function ContentLibrary() {
           <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
             {items.map((item) => (
               <div key={item.contentId} style={rowCardStyle}>
-                <div style={{ cursor: "pointer", flex: 1 }} onClick={() => setSelectedId(item.contentId)} role="button">
+                <div style={rowInfoClickableStyle} onClick={() => setSelectedId(item.contentId)} role="button">
                   <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>{item.caption || "(no caption)"}</div>
                   <div style={mutedSmallStyle}>
                     {item.creatorEmail} · {humanizeKey(item.mediaType)} · {humanizeKey(item.accessLevel)} ·{" "}
@@ -4437,6 +4437,16 @@ const rowCardStyle: React.CSSProperties = {
   justifyContent: "space-between",
   gap: "1rem",
 };
+
+// The clickable text column inside a rowCardStyle row (Members/Creators,
+// Trust & Safety cases, Content queue) — real, confirmed overflow bug:
+// `flex: 1` alone defaults to `min-width: auto`, so next to the fixed-
+// width action buttons (flexShrink: 0) this column refused to shrink
+// below its own text's intrinsic width (a long email, a long caption)
+// and pushed the whole row — and with it the page — wider than a phone
+// viewport. `minWidth: 0` is what actually lets a flex child shrink
+// smaller than its content and let that content wrap/truncate instead.
+const rowInfoClickableStyle: React.CSSProperties = { cursor: "pointer", flex: 1, minWidth: 0 };
 
 const approveButtonStyle: React.CSSProperties = {
   background: "var(--accent)",

@@ -327,8 +327,17 @@ function checkoutButtonStyle(active: boolean): React.CSSProperties {
 
 const mainStyle: React.CSSProperties = { padding: "2.5rem 1.75rem 4rem", maxWidth: "1100px", margin: "0 auto" };
 
+// Real, confirmed overflow bug: three non-wrapping flex children (the
+// fixed 96px avatar, the name/bio text block, and the Follow/Message/
+// Report action column) added up to more than a phone viewport's width
+// on their own — avatar + gaps + the action column's own ~188px content
+// alone already exceeded a 375px screen's content width before the text
+// block even got a chance to shrink. flexWrap lets the action column
+// drop to its own line below the avatar+name row instead of forcing
+// the whole header wider than the screen.
 const headerStyle: React.CSSProperties = {
   display: "flex",
+  flexWrap: "wrap",
   gap: "1.5rem",
   alignItems: "stretch",
   marginBottom: "2.5rem",
@@ -358,7 +367,7 @@ const avatarStyle: React.CSSProperties = {
 // Overrides the app-wide `main { text-align: center }` rule — this
 // header reads as a left-aligned identity block (avatar, name, bio),
 // not centered page copy.
-const headerTextBlockStyle: React.CSSProperties = { flex: 1, textAlign: "left" };
+const headerTextBlockStyle: React.CSSProperties = { flex: 1, minWidth: 0, textAlign: "left" };
 
 // Follow+Message sit vertically centered in the header's height
 // (justifyContent: center); Report gets marginTop: auto so it's pinned

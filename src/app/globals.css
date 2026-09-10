@@ -274,6 +274,23 @@ a[href]:hover {
         top: auto !important;
     }
 
+    /* Real, confirmed overflow bug: adminContentStyle's `minWidth: 0`
+       only constrains the flex MAIN axis, which is horizontal in the
+       desktop row layout above — but .admin-shell switches to a column
+       flex layout right here, making that axis vertical. On the cross
+       axis (width, in column mode), a flex item under the default
+       `align-items: stretch` still won't shrink below its own content's
+       intrinsic minimum width, so a long member row/email/filter row
+       inside pushed <main> itself wider than the 860px-and-below
+       stacked sidebar above it (confirmed: main measured ~65px wider
+       than the real viewport on Members/Creators/Applications). A
+       definite width forces it to the same content-box width as the
+       sidebar instead of deferring to content. */
+    .admin-content {
+        width: 100%;
+        min-width: 0;
+    }
+
     /* The stacked sidebar's 12 tabs used to render as a full-height list
        above the content — real, confirmed breakage (needing an almost
        full screen of scrolling before reaching anything the tab

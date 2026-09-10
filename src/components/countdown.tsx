@@ -76,8 +76,18 @@ const labelStyle: React.CSSProperties = {
   color: "var(--accent)",
 };
 
+// Real, confirmed mobile bug: 4 units at their minWidth (96px) plus
+// padding and gaps add up to ~475px — wider than a phone viewport (as
+// narrow as 375px). Without wrapping, that width forced the *whole*
+// page to overflow horizontally (this row sits inside the landing
+// page's full-bleed .hero-plain, width:100vw), clipping both these
+// numbers and the hero paragraph off both edges with no way to scroll
+// to them. flexWrap lets it fall back to a centered 2x2 grid on narrow
+// screens instead of forcing one row no matter what.
 const unitRowStyle: React.CSSProperties = {
   display: "flex",
+  flexWrap: "wrap",
+  justifyContent: "center",
   gap: "1.1rem",
 };
 
