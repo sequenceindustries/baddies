@@ -79,7 +79,15 @@ export function GridThumbnail({
     <button
       ref={tileRef}
       onClick={onOpen}
-      style={variant === "discovery" ? { ...tileStyle, borderRadius: 0 } : tileStyle}
+      // Discovery variant: square corners (0 radius) plus a taller,
+      // portrait aspect ratio — 3:4 (width:height) means height =
+      // width * 4/3, which combined with the container's own 20% width
+      // increase (see discovery/page.tsx's mainStyle) works out to rows
+      // 60% taller than the original square tile, per direct follow-up
+      // feedback ("columns 20% larger, rows 60% larger"). The
+      // creator-profile grid (no variant passed) keeps its original
+      // square 1:1 tile untouched.
+      style={variant === "discovery" ? { ...tileStyle, borderRadius: 0, aspectRatio: "3 / 4" } : tileStyle}
       aria-label="Open post"
     >
       {item.lock.locked ? (

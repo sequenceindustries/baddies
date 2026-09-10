@@ -341,14 +341,17 @@ a[href]:hover {
    explicit column counts (not the previous auto-fill(140px), which
    packed as many small tiles as fit) so tiles read as deliberately
    larger, and a real inline style can't express the breakpoint below
-   anyway. max-width: 100% (originally capped at 80% — widened per
-   direct feedback that the 80% cap made tiles feel too small) fills
-   the page's own existing 1100px-capped <main>, still centered via
+   anyway. max-width: 100% fills the page's own <main> (widened to
+   1320px — was 1100px capped at 80%, then 100%, now the container
+   itself is 20% wider per direct feedback), still centered via
    margin: auto. Column counts (4 desktop / 3 mobile) are unchanged —
-   this only gives each of them more room, not fewer/more columns.
-   Square corners (no border-radius here or on GridThumbnail's own
-   tileStyle when variant="discovery") and the hidden avatar/badge
-   byline are the tile's own concern, not this container's. */
+   width increases only make each of them wider, not fewer/more
+   columns. Tile height (rows) is a separate 3:4 aspect-ratio set on
+   GridThumbnail's own tileStyle when variant="discovery" (not this
+   container's concern), working out to 60% taller than the original
+   square tile once combined with the 20% width increase. Square
+   corners and the hidden avatar/badge byline are also the tile's own
+   concern. */
 .discovery-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);

@@ -132,16 +132,23 @@ export default function DiscoveryPage() {
     <main style={mainStyle}>
       <h1 style={displayHeadingStyle}>Discover</h1>
 
+      {/* No visible submit button, per direct request — confirmed live
+          that a lone text input with zero button descendants does NOT
+          reliably get implicit Enter-submits from this app's actual
+          browser target, so requestSubmit() on Enter explicitly drives
+          the same onSubmit={handleSearch} a real submit button would
+          have, rather than relying on that HTML behavior. No
+          placeholder either, per direct request. */}
       <form onSubmit={handleSearch} style={searchRowStyle}>
         <input
           style={{ ...inputStyle, marginTop: 0, flex: 1 }}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search creators by name or bio..."
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.form?.requestSubmit();
+          }}
+          disabled={searching}
         />
-        <button type="submit" disabled={searching} style={submitButtonStyle}>
-          {searching ? "..." : "Search"}
-        </button>
         {results && (
           <button type="button" onClick={() => setResults(null)} style={clearSearchButtonStyle}>
             Clear
@@ -184,7 +191,12 @@ export default function DiscoveryPage() {
   );
 }
 
-const mainStyle: React.CSSProperties = { padding: "2.5rem 1.75rem 4rem", maxWidth: "1100px", margin: "0 auto" };
+// 1320px = 1100px * 1.2 — widened 20% per direct follow-up feedback
+// ("make the discovery columns 20% larger"). The grid itself is
+// max-width: 100% of this <main> (see globals.css's .discovery-grid),
+// so widening the container is what actually makes each of the still-4
+// (still-3 on mobile) columns 20% wider, without changing column count.
+const mainStyle: React.CSSProperties = { padding: "2.5rem 1.75rem 4rem", maxWidth: "1320px", margin: "0 auto" };
 
 const searchRowStyle: React.CSSProperties = {
   display: "flex",
@@ -193,18 +205,6 @@ const searchRowStyle: React.CSSProperties = {
   maxWidth: "560px",
   marginLeft: "auto",
   marginRight: "auto",
-};
-
-const submitButtonStyle: React.CSSProperties = {
-  padding: "0.7rem 1.25rem",
-  borderRadius: "var(--radius)",
-  fontWeight: 600,
-  fontSize: "0.9rem",
-  cursor: "pointer",
-  background: "var(--accent)",
-  color: "var(--bg)",
-  border: "none",
-  flexShrink: 0,
 };
 
 const clearSearchButtonStyle: React.CSSProperties = {

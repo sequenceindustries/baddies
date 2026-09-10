@@ -125,15 +125,19 @@ export function useSession() {
 
 /**
  * Where a signed-in visitor's "home" is — used right after login/
- * register, and by the landing page's already-signed-in redirect. Every
- * one of these URLs names its own account type (/fan-home,
- * /creator-dashboard) rather than a generic path like the old /home,
- * /dashboard — so a URL alone always says which kind of account it's
- * for, with no need to already be signed in as that type to know.
+ * register, and by the landing page's already-signed-in redirect.
+ *
+ * Per direct follow-up request ("for all, landing page should be
+ * feed"), the feed (/fan-home) is now the default landing page for
+ * FAN, CREATOR, and ADMIN alike — their own dashboard/admin panel is
+ * still reachable (Dashboard/Admin nav links, both unchanged), just no
+ * longer where they land automatically. PARTNER keeps its own
+ * dashboard as the default — it was never part of this feed-access
+ * request (no Home/Discover nav link either, see NavLinks' own
+ * comment), and a partner's referral/commission dashboard is
+ * business-critical in a way a content feed landing page would bury.
  */
 export function roleHomePath(role: SessionUser["role"]): string {
-  if (role === "ADMIN") return "/admin";
-  if (role === "CREATOR") return "/creator-dashboard";
   if (role === "PARTNER") return "/partner-dashboard";
   return "/fan-home";
 }
@@ -260,7 +264,17 @@ function NavLinks({
             independent: a Founding Partner who's also applied as a
             creator gets both links at once, since applying flips role to
             CREATOR the same way it does for a plain FAN (see
-            /api/partner/dashboard's comment). */}
+            /api/partner/dashboard's comment).
+
+            Home/Discover (the fan-facing feed + grid) are additionally
+            surfaced to CREATOR and ADMIN too, per explicit follow-up
+            request — they can browse the same feed a fan sees, but their
+            own dashboard/admin panel stays their actual default landing
+            page (roleHomePath, below, is unchanged). Only FAN gets "My
+            subscriptions" — that's a fan-specific concern, not part of
+            this feed-access widening. PARTNER is deliberately left out of
+            both (not requested; partners have their own dashboard-
+            focused nav already). */}
         {user.role === "ADMIN" && (
           <Link href="/admin" style={linkStyle}>
             Admin
@@ -276,17 +290,17 @@ function NavLinks({
             Dashboard
           </Link>
         )}
-        {user.role === "FAN" && (
-          <>
-            <Link href="/fan-home" style={linkStyle}>
-              Home
-            </Link>
-            <Link href="/fan-subscriptions" style={linkStyle}>
-              My subscriptions
-            </Link>
-          </>
+        {(user.role === "FAN" || user.role === "CREATOR" || user.role === "ADMIN") && (
+          <Link href="/fan-home" style={linkStyle}>
+            Home
+          </Link>
         )}
-        {user.role !== "ADMIN" && user.role !== "PARTNER" && (
+        {user.role === "FAN" && (
+          <Link href="/fan-subscriptions" style={linkStyle}>
+            My subscriptions
+          </Link>
+        )}
+        {user.role !== "PARTNER" && (
           <Link href="/discovery" style={linkStyle}>
             Discover
           </Link>
