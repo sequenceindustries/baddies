@@ -11,11 +11,17 @@ import { PostDetailOverlay } from "./grid-thumbnail";
  * app and none is invented here — "story" means recently-approved
  * creators, reusing the exact GET /api/discovery/new-creators query the
  * landing page's own "New Baddies" section already runs. A tap opens a
- * "quick preview": that creator's own latest post, fetched from the
- * already-paginated GET /api/creators/:id/content (Phase 3) and handed
- * to the same PostDetailOverlay/PostCard Phase 2 built — zero new API
- * routes. Renders nothing at all once there are no recently-approved
- * creators, rather than an empty/broken-looking row.
+ * "quick preview": that creator's latest real teaser (their most recent
+ * unlocked/FREE post specifically, not just their most recent post
+ * overall — a locked VIP/Exclusive post would make a poor "preview" of
+ * someone you don't follow yet, per direct follow-up feedback: "make
+ * the stories functional and show teasers"), fetched from the already-
+ * paginated GET /api/creators/:id/content (Phase 3) and handed to the
+ * same PostDetailOverlay/PostCard Phase 2 built — zero new API routes,
+ * `lock.locked` was already computed per item. Renders nothing at all
+ * once there are no recently-approved creators, and degrades to doing
+ * nothing on tap if a creator has no unlocked post on their first page
+ * of content, rather than opening an overlay with nothing free to show.
  */
 export function StoryAvatarRow() {
   const [creators, setCreators] = useState<CreatorCardData[] | null>(null);
@@ -42,10 +48,13 @@ export function StoryAvatarRow() {
     try {
       const res = await fetch(`/api/creators/${creatorProfileId}/content`);
       const body = res.ok ? await res.json() : { items: [] };
-      const first = body.items?.[0];
-      if (first) setOpenContentId(first.contentId);
-      // No posts yet for this creator — degrades to doing nothing
-      // rather than opening an overlay with nothing to show.
+      // The latest TEASER specifically — not just the latest post,
+      // which is as likely to be a locked VIP/Exclusive item as not.
+      const teaser = body.items?.find((i: { lock: { locked: boolean } }) => !i.lock.locked);
+      if (teaser) setOpenContentId(teaser.contentId);
+      // No unlocked post on this creator's first page — degrades to
+      // doing nothing rather than opening an overlay with nothing free
+      // to show.
     } finally {
       setLoadingId(null);
     }

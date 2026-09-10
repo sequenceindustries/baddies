@@ -24,10 +24,11 @@ export interface CreatorCardData {
 
 // FREE/VIP/VVIP — see prisma/schema.prisma's ContentAccessLevel comment.
 // PPV kept only for any stray legacy row; nothing can create it anymore
-// and the UI never offers it. Still used by the creator-dashboard's own
-// content list (creator-facing, not part of the fan-facing social-feed
-// redesign) after ContentCard/ContentCardData themselves were retired
-// as dead code once the redesign replaced every fan-facing consumer.
+// and the UI never offers it. Still used by /profile's own creator
+// content list (folded in from the old /creator-dashboard; creator-
+// facing, not part of the fan-facing social-feed redesign) after
+// ContentCard/ContentCardData themselves were retired as dead code once
+// the redesign replaced every fan-facing consumer.
 export type ContentAccessLevel = "FREE" | "VIP" | "VVIP" | "PPV";
 
 export const ACCESS_LABEL: Record<ContentAccessLevel, string> = {

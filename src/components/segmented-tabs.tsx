@@ -4,11 +4,12 @@
  * Shared pill-style tab bar (social-feed follow-up, "make the
  * dashboards/settings feel more like social media" via tab/segment
  * navigation, per the user's own answer to a clarifying question).
- * Extracted and generalized from src/app/(creator)/creator-dashboard/
- * page.tsx's own hand-rolled tab bar — same visual language (pill
- * buttons, solid accent fill when active) reused everywhere a page
- * gets tabs, rather than inventing a new look: creator-dashboard
- * itself, src/app/profile/page.tsx, src/app/settings/page.tsx, and
+ * Extracted and generalized from the old /creator-dashboard page's own
+ * hand-rolled tab bar — same visual language (pill buttons, solid
+ * accent fill when active) reused everywhere a page gets tabs, rather
+ * than inventing a new look: src/app/profile/page.tsx (which absorbed
+ * that dashboard's own Overview/Content/Settings tabs in a later
+ * follow-up), src/app/settings/page.tsx, and
  * src/app/fan-subscriptions/page.tsx.
  */
 export interface SegmentedTab<T extends string> {

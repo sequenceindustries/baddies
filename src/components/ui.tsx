@@ -90,8 +90,7 @@ export function useLocationDetector() {
  * change. The route-change refetch matters for Nav specifically: Nav
  * lives in the root layout, so it mounts once for the whole session
  * rather than per-page — without this, logging in (a client-side
- * router.push to /feed or /creator-dashboard, not a full page load)
- * left Nav's
+ * router.push to /feed or /profile, not a full page load) left Nav's
  * own useSession() instance holding onto its original signed-out `user:
  * null` from before login, showing "Sign in"/"Join" to someone who very
  * much was signed in, until a hard refresh remounted it. Every other
@@ -260,23 +259,29 @@ function NavLinks({
         {/* Deliberately different link sets per role (not one big list
             with items hidden) — a creator lands on tools for running
             their page, a fan lands on tools for browsing/paying, per
-            "creators shouldn't see what fans see." Dashboard and Partner
-            Dashboard both key off the relevant row's own existence
-            (creatorProfile / foundingPartner), not role — the two are
-            independent: a Founding Partner who's also applied as a
-            creator gets both links at once, since applying flips role to
-            CREATOR the same way it does for a plain FAN (see
-            /api/partner/dashboard's comment).
+            "creators shouldn't see what fans see." A creator's own
+            dashboard (Overview/Content/Settings) no longer has its own
+            nav link or route at all — it was merged into /profile as
+            additional tabs (social-feed follow-up: "remove dashboard
+            from menu and merge with profile"); /profile is already
+            reachable from AccountMenu for every signed-in role, so no
+            replacement link was needed here. Partner Dashboard still
+            keys off foundingPartner's own existence, not role — a
+            Founding Partner who's also applied as a creator gets both
+            that link and Profile's own creator tabs at once, since
+            applying flips role to CREATOR the same way it does for a
+            plain FAN (see /api/partner/dashboard's comment).
 
             Home/Discover (the fan-facing feed + grid) are additionally
             surfaced to CREATOR and ADMIN too, per explicit follow-up
-            request — they can browse the same feed a fan sees, but their
-            own dashboard/admin panel stays their actual default landing
-            page (roleHomePath, below, is unchanged). Only FAN gets "My
-            subscriptions" — that's a fan-specific concern, not part of
-            this feed-access widening. PARTNER is deliberately left out of
-            both (not requested; partners have their own dashboard-
-            focused nav already). */}
+            request — and per a later follow-up ("for all, landing page
+            should be feed"), the feed is now everyone's actual default
+            landing page too (roleHomePath, below), not just a
+            reachable-via-nav extra. Only FAN gets "My subscriptions" —
+            that's a fan-specific concern, not part of this feed-access
+            widening. PARTNER is deliberately left out of both (not
+            requested; partners have their own dashboard-focused nav
+            already). */}
         {user.role === "ADMIN" && (
           <Link href="/admin" style={linkStyle}>
             Admin
@@ -285,11 +290,6 @@ function NavLinks({
         {user.foundingPartner && (
           <Link href="/partner-dashboard" style={linkStyle}>
             Partner Dashboard
-          </Link>
-        )}
-        {user.creatorProfile && (
-          <Link href="/creator-dashboard" style={linkStyle}>
-            Dashboard
           </Link>
         )}
         {(user.role === "FAN" || user.role === "CREATOR" || user.role === "ADMIN") && (
@@ -470,15 +470,17 @@ function AccountMenu({ user, onLogout }: { user: SessionUser; onLogout: () => vo
 
 // Three real, distinct creator standings, not a decorative palette —
 // each one traces to real data (FoundingPartner row / CreatorProfile.
-// isFoundingBaddie / plain VERIFIED status), never a guess. Gold is
-// reserved for Founding Partner specifically per product decision; the
-// other two get their own colors so all three read as different at a
-// glance, same "two different colours" reasoning AccountTypeBadge's own
-// comment gives for the nav's account-type indicator.
+// isFoundingBaddie / plain VERIFIED status), never a guess. Per direct
+// follow-up request, the badge itself dropped its text label entirely
+// (just the tick now — label kept here only as an aria-label/title for
+// accessibility, never rendered) and its colors were reassigned: gold
+// for a Founding Partner (unchanged), blue for a Founding baddie
+// (unchanged — "remain the blue tick"), pink for every other verified
+// creator (was green — "normal creators will use a pink tick").
 const CREATOR_BADGE_KIND = {
   partner: { label: "Founding Partner", color: "#d4af37" },
   founding: { label: "Founding baddie", color: "var(--accent)" },
-  baddie: { label: "baddie", color: "var(--success)" },
+  baddie: { label: "Verified baddie", color: "var(--accent-wine)" },
 } as const;
 
 export function CheckTick({ color, size = 13 }: { color: string; size?: number }) {
@@ -495,8 +497,11 @@ export function CheckTick({ color, size = 13 }: { color: string; size?: number }
  * somehow holds both (the same dual-role shape FoundingPartner/
  * CreatorProfile already allow elsewhere in this app) — a real Founding
  * Partner badge is the more specific, more significant fact. Neither
- * flag set falls back to the plain "baddie" badge every verified
- * creator had before this distinction existed.
+ * flag set falls back to the plain "Verified baddie" badge every
+ * verified creator had before this distinction existed. Renders as a
+ * bare colored tick now, no text label — the label still exists as this
+ * span's title/aria-label so the distinction stays available on hover
+ * and to screen readers, just not always-visible text.
  */
 export function VerifiedBadge({
   isFoundingPartner = false,
@@ -507,9 +512,8 @@ export function VerifiedBadge({
 }) {
   const kind = isFoundingPartner ? CREATOR_BADGE_KIND.partner : isFoundingBaddie ? CREATOR_BADGE_KIND.founding : CREATOR_BADGE_KIND.baddie;
   return (
-    <span style={{ ...badgeStyle, color: kind.color }}>
+    <span style={badgeStyle} title={kind.label} aria-label={kind.label}>
       <CheckTick color={kind.color} />
-      {kind.label}
     </span>
   );
 }
@@ -520,8 +524,9 @@ export function VerifiedBadge({
  * account or a creator account. Creator gets its onboarding status
  * appended (e.g. "Creator · Pending") since "Creator" alone doesn't say
  * whether they can actually publish/monetise yet. Verified creators get
- * the standalone VerifiedBadge (green) in the nav instead of this pill —
- * see Nav — so the only colors this one actually renders are blue (Fan/
+ * the standalone VerifiedBadge (a colored tick — gold/blue/pink, see its
+ * own comment) in the nav instead of this pill — see Nav — so the only
+ * colors this one actually renders are blue (Fan/
  * Admin/general) and muted gray (still-pending creator).
  */
 function AccountTypeBadge({

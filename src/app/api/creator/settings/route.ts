@@ -40,8 +40,16 @@ export async function GET() {
     subscriberCountVisible: creator.subscriberCountVisible,
     locationVisible: creator.locationVisible,
     coverImageUrl: creator.coverImageUrl,
+    handle: creator.handle,
   });
 }
+
+// Lowercase letters, digits, underscores — the same shape Instagram/
+// Twitter-style handles use elsewhere. Enforced here in application
+// code (Zod), not a DB CHECK constraint, matching this schema's own
+// existing convention (see e.g. EXCLUSIVE_MIN_PRICE_USD's own comment
+// on where format/business rules for this route live).
+const HANDLE_REGEX = /^[a-z0-9_]{3,20}$/;
 
 const UpdateSettingsSchema = z.object({
   unlimitedOptedIn: z.boolean().optional(),
@@ -51,6 +59,16 @@ const UpdateSettingsSchema = z.object({
   exclusivePriceUsd: z
     .number()
     .min(EXCLUSIVE_MIN_PRICE_USD, `Must be at least $${EXCLUSIVE_MIN_PRICE_USD}.`)
+    .optional(),
+  // null clears a previously-set handle back to unset; omitted leaves
+  // it untouched. Never auto-generated from displayName — a creator
+  // picks their own, same as any real social platform's handle field.
+  handle: z
+    .string()
+    .nullable()
+    .refine((v) => v === null || HANDLE_REGEX.test(v), {
+      message: "Handle must be 3-20 characters: lowercase letters, numbers, and underscores only.",
+    })
     .optional(),
 });
 
@@ -72,15 +90,26 @@ export async function PATCH(req: NextRequest) {
   }
   const { exclusivePriceUsd, ...rest } = parsed.data;
 
-  const updated = await db.creatorProfile.update({
-    where: { id: creator.id },
-    data: {
-      ...rest,
-      ...(exclusivePriceUsd !== undefined
-        ? { vvipPriceOverride: new Prisma.Decimal(exclusivePriceUsd) }
-        : {}),
-    },
-  });
+  let updated;
+  try {
+    updated = await db.creatorProfile.update({
+      where: { id: creator.id },
+      data: {
+        ...rest,
+        ...(exclusivePriceUsd !== undefined
+          ? { vvipPriceOverride: new Prisma.Decimal(exclusivePriceUsd) }
+          : {}),
+      },
+    });
+  } catch (err) {
+    // P2002 = unique constraint violation — someone else already holds
+    // this handle. A generic, honest 409 rather than exposing anything
+    // about who.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return NextResponse.json({ error: "That handle is already taken." }, { status: 409 });
+    }
+    throw err;
+  }
 
   const pricing = await resolveCreatorPricing(updated);
 
@@ -90,5 +119,6 @@ export async function PATCH(req: NextRequest) {
     subscriberCountVisible: updated.subscriberCountVisible,
     locationVisible: updated.locationVisible,
     coverImageUrl: updated.coverImageUrl,
+    handle: updated.handle,
   });
 }

@@ -17,6 +17,7 @@ export interface PostCardItem {
   creator: {
     creatorProfileId: string;
     displayName: string | null;
+    handle: string | null;
     avatarUrl: string | null;
     coverImageUrl: string | null;
     isFoundingPartner: boolean;
@@ -205,6 +206,7 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
               {item.creator.displayName ?? "Unnamed creator"}
             </Link>
             <VerifiedBadge isFoundingPartner={item.creator.isFoundingPartner} isFoundingBaddie={item.creator.isFoundingBaddie} />
+            {item.creator.handle && <span style={postHandleStyle}>@{item.creator.handle}</span>}
             {item.publishedAt && <span style={postTimeStyle}>· {timeAgo(item.publishedAt)}</span>}
           </div>
           {item.context && <div style={postContextLineStyle}>{CONTEXT_LABEL[item.context]}</div>}
@@ -267,13 +269,16 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
         </button>
       </div>
 
-      {/* Instagram's own "username caption" convention — bold name
-          prefix inline with the caption text, at the bottom of the
-          card rather than under the header. */}
+      {/* Instagram's own "username caption" convention — bold prefix
+          inline with the caption text, at the bottom of the card rather
+          than under the header. Uses the real @handle when this creator
+          has set one (the reference this whole treatment was matching
+          shows a handle here, not a display name), falling back to
+          displayName for a creator who hasn't set one yet. */}
       {item.caption && (
         <p style={postCaptionStyle}>
           <Link href={`/creators/${item.creator.creatorProfileId}`} style={postCaptionNameStyle}>
-            {item.creator.displayName ?? "Unnamed creator"}
+            {item.creator.handle ? `@${item.creator.handle}` : item.creator.displayName ?? "Unnamed creator"}
           </Link>{" "}
           {item.caption}
         </p>
@@ -585,6 +590,7 @@ const postCreatorNameStyle: React.CSSProperties = {
 };
 
 const postTimeStyle: React.CSSProperties = { fontSize: "0.8rem", color: "var(--text-muted)" };
+const postHandleStyle: React.CSSProperties = { fontSize: "0.8rem", color: "var(--text-muted)" };
 
 // Muted, plain — matches the reference's "Suggested for you" treatment
 // exactly (a subtitle line, not a colored accent chip like the

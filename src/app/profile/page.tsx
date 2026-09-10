@@ -8,29 +8,66 @@ import {
   cardStyle,
   Field,
   inputStyle,
+  checkboxRowStyle,
   primaryButtonStyle,
   errorBannerStyle,
   LocationField,
+  ImageUploadField,
 } from "@/components/ui";
 import { SegmentedTabs } from "@/components/segmented-tabs";
+import { VerificationFlow } from "@/components/verification-capture";
+import { ACCESS_LABEL } from "@/components/cards";
+import { EXCLUSIVE_MIN_PRICE_USD } from "@/lib/creator/pricing";
 
-type ProfileTab = "profile" | "application";
+type ProfileTab = "profile" | "overview" | "content" | "settings" | "application";
+
+type CreatorStatus =
+  | "PENDING"
+  | "VERIFICATION_REQUIRED"
+  | "UNDER_REVIEW"
+  | "VERIFIED"
+  | "SUSPENDED"
+  | "REJECTED"
+  | "BANNED";
+
+// FREE/VIP/VVIP — see prisma/schema.prisma's ContentAccessLevel comment.
+type AccessLevel = "FREE" | "VIP" | "VVIP";
+
+interface OwnContentItem {
+  contentId: string;
+  mediaType: "IMAGE" | "VIDEO" | "AUDIO";
+  accessLevel: AccessLevel;
+  priceUsd: string | number | null;
+  caption: string | null;
+  status: string;
+  moderationStatus: string;
+  publishedAt: string | null;
+  createdAt: string;
+  likeCount: number;
+}
 
 /**
  * Public identity — display name, bio, avatar, location, and what kind
- * of account this is. Split from account-level settings (password,
- * sessions, email verification — see /settings) per explicit product
- * decision: this page used to be called "Settings" and hold both; now
- * "Settings" is its own page with real account functions and this one
- * is just what shows on your profile. That split stays exactly as it
- * was — the social-feed follow-up's tab/segment navigation goes
- * *within* this page, not back across the two.
+ * of account this is — PLUS, for a creator, everything that used to
+ * live on the separate /creator-dashboard route (status, verification,
+ * onboarding checklist, stats, content upload/management, and creator-
+ * specific pricing/privacy settings), folded in here as additional
+ * tabs per direct request ("remove dashboard from menu and merge with
+ * profile"). Account-level settings (password, sessions, email
+ * verification — see /settings) stay a genuinely separate page, exactly
+ * as they were before this merge — that split was a deliberate earlier
+ * product decision this request didn't touch, only the dashboard/
+ * profile one was.
  *
- * A fan sees a single "Profile" tab (no second tab to switch to — the
- * bar isn't rendered at all in that case, matching creator-dashboard's
- * own "don't show tabs with nothing to switch between" convention); a
- * creator additionally gets "Application details" (their own
- * read-only submitted identity/verification info).
+ * Tab set depends on account type: a fan sees just "Profile" (no bar at
+ * all — nothing to switch between). A creator additionally gets
+ * "Overview"/"Content"/"Settings" (the old dashboard tabs, only while
+ * their account is active — not REJECTED/BANNED, matching that page's
+ * own original gating) and "Application details" (their own read-only
+ * submitted identity/verification info, shown regardless of active
+ * status). StatusPanel and the pending-verification notice are tab-
+ * agnostic — they showed above the tab body on every dashboard tab
+ * before this merge, and still do here.
  */
 export default function ProfilePage() {
   const { user, loading } = useSession();
@@ -45,17 +82,41 @@ export default function ProfilePage() {
     );
   }
 
-  const showApplicationTab = Boolean(user.creatorProfile);
+  const creatorStatus = user.creatorProfile?.status as CreatorStatus | undefined;
+  const creatorActive = Boolean(creatorStatus) && creatorStatus !== "REJECTED" && creatorStatus !== "BANNED";
+
   const tabs: { value: ProfileTab; label: string }[] = [{ value: "profile", label: "Profile" }];
-  if (showApplicationTab) tabs.push({ value: "application", label: "Application details" });
+  if (creatorActive) {
+    tabs.push({ value: "overview", label: "Overview" }, { value: "content", label: "Content" }, { value: "settings", label: "Settings" });
+  }
+  if (user.creatorProfile) {
+    tabs.push({ value: "application", label: "Application details" });
+  }
+  // A tab that only appears while the account is active shouldn't leave
+  // the viewer stranded on it if their status changes underneath them
+  // (e.g. re-checking this page after a suspension) — falls back to
+  // "profile" rather than rendering a body for a tab that's disappeared.
+  const activeTab = tabs.some((t) => t.value === tab) ? tab : "profile";
 
   return (
     <main style={mainStyle}>
       <h1 style={{ ...displayHeadingStyle, textAlign: "center" }}>Profile</h1>
 
-      {tabs.length > 1 && <SegmentedTabs tabs={tabs} active={tab} onChange={setTab} />}
+      {user.creatorProfile && creatorStatus && <StatusPanel status={creatorStatus} />}
 
-      {tab === "profile" && (
+      {tabs.length > 1 && <SegmentedTabs tabs={tabs} active={activeTab} onChange={setTab} />}
+
+      {/* Repeats regardless of which tab is open — StatusPanel's own
+          message above is easy to lose sight of once you've scrolled
+          into Content or Overview, and Content in particular still
+          shows the full upload form to a not-yet-verified creator (the
+          real gate is server-side, on submit) with nothing nearby
+          saying they can't actually publish yet. */}
+      {creatorStatus && (creatorStatus === "PENDING" || creatorStatus === "VERIFICATION_REQUIRED" || creatorStatus === "UNDER_REVIEW") && (
+        <PendingVerificationNotice status={creatorStatus} />
+      )}
+
+      {activeTab === "profile" && (
         <>
           <AccountTypePanel
             role={user.role}
@@ -66,7 +127,15 @@ export default function ProfilePage() {
           <ProfileSettings />
         </>
       )}
-      {tab === "application" && showApplicationTab && <ApplicationDetailsPanel />}
+      {activeTab === "overview" && creatorActive && (
+        <div style={overviewGridStyle}>
+          <OnboardingChecklist />
+          <StatsPanel />
+        </div>
+      )}
+      {activeTab === "content" && creatorActive && <ContentPanel />}
+      {activeTab === "settings" && creatorActive && <CreatorSettingsPanel />}
+      {activeTab === "application" && user.creatorProfile && <ApplicationDetailsPanel />}
     </main>
   );
 }
@@ -135,11 +204,9 @@ function AccountTypePanel({
           Become a creator →
         </Link>
       )}
-      {creatorProfile && (
-        <Link href="/creator-dashboard" style={{ ...linkStyle, display: "block" }}>
-          Manage pricing, privacy, and content from your Dashboard →
-        </Link>
-      )}
+      {/* No "go manage your dashboard" link here anymore — Overview/
+          Content/Settings are tabs on this same page now (see the
+          SegmentedTabs above), not a separate route to point at. */}
       {foundingPartner && (
         <Link href="/partner-dashboard" style={{ ...linkStyle, display: "block" }}>
           Go to your Partner dashboard →
@@ -359,6 +426,629 @@ function AvatarField({ avatarUrl, onChange }: { avatarUrl: string | null; onChan
   );
 }
 
+/**
+ * A short, persistent reminder that stays visible under the tab bar no
+ * matter which tab is open — StatusPanel's own message up top is easy
+ * to lose sight of once you've scrolled into Content or Overview, and
+ * Content in particular still shows the full upload form to a
+ * not-yet-verified creator (the real gate is server-side, on submit).
+ */
+function PendingVerificationNotice({
+  status,
+}: {
+  status: "PENDING" | "VERIFICATION_REQUIRED" | "UNDER_REVIEW";
+}) {
+  const copy: Record<typeof status, string> = {
+    PENDING: "Application pending — content and stats unlock once you're verified.",
+    VERIFICATION_REQUIRED: "Verification pending — finish the steps above before you can publish.",
+    UNDER_REVIEW: "Verification submitted — awaiting admin review before you can publish.",
+  };
+  return (
+    <div style={pendingNoticeStyle}>
+      <span aria-hidden="true">⏳</span> {copy[status]}
+    </div>
+  );
+}
+
+/**
+ * Phase 4's onboarding checklist — reuses three endpoints the rest of
+ * this page already calls (no new backend needed): /api/profile for
+ * the picture/bio, /api/creator/settings for the featured image, and
+ * /api/creator/content for whether each tier has at least one post.
+ * Purely a progress nudge, not a gate — a creator can ignore it and
+ * everything else here still works.
+ */
+function OnboardingChecklist() {
+  const [items, setItems] = useState<{ label: string; done: boolean }[] | null>(null);
+
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/profile").then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/creator/settings").then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/creator/content").then((r) => (r.ok ? r.json() : { items: [] })),
+    ]).then(([profile, settings, content]) => {
+      const tiers = new Set((content?.items ?? []).map((i: OwnContentItem) => i.accessLevel));
+      setItems([
+        { label: "Profile picture", done: Boolean(profile?.avatarUrl) },
+        { label: "Featured image", done: Boolean(settings?.coverImageUrl) },
+        { label: "Creator bio", done: Boolean(profile?.bio) },
+        { label: "Teasers content", done: tiers.has("FREE") },
+        { label: "VIP content", done: tiers.has("VIP") },
+        { label: "Exclusive content", done: tiers.has("VVIP") },
+      ]);
+    });
+  }, []);
+
+  if (!items) return null;
+  const doneCount = items.filter((i) => i.done).length;
+  if (doneCount === items.length) return null; // fully set up — no need to keep nudging
+
+  return (
+    <div style={cardStyle}>
+      <h2 style={{ ...sectionHeadingStyle, marginTop: 0, marginBottom: "0.3rem" }}>Get discovered</h2>
+      <p style={{ ...mutedSmallStyle, marginTop: 0, marginBottom: "1rem" }}>
+        {doneCount} of {items.length} set up — finish these to look your best to fans and other Founding baddies.
+      </p>
+      <div style={checklistGridStyle}>
+        {items.map((item) => (
+          <span key={item.label} style={checklistPillStyle(item.done)}>
+            {item.done ? "✓" : "○"} {item.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface CreatorStats {
+  followerCount: number;
+  subscriberCount: number;
+  publishedCount: number;
+  totalCount: number;
+  totalLikes: number;
+  referredByPartner: boolean;
+}
+
+/** Overview's at-a-glance numbers — see GET /api/creator/stats for what each figure means and why it's computed separately from the public creator-profile endpoint. */
+function StatsPanel() {
+  const [stats, setStats] = useState<CreatorStats | null>(null);
+
+  useEffect(() => {
+    fetch("/api/creator/stats")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (body) setStats(body);
+      });
+  }, []);
+
+  if (!stats) return null;
+
+  return (
+    <div style={cardStyle}>
+      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Stats</h2>
+      <div style={statsGridStyle}>
+        <WalletStat label="Followers" value={stats.followerCount} format="int" />
+        <WalletStat label="Subscribers" value={stats.subscriberCount} format="int" />
+        <WalletStat label="Published posts" value={stats.publishedCount} format="int" />
+        <WalletStat label="Total uploads" value={stats.totalCount} format="int" />
+        <WalletStat label="Total likes" value={stats.totalLikes} format="int" />
+      </div>
+      {/* Founding Partner Programme v2, spec §11 — quiet and private
+          only: no partner identity, no incentive language, no public
+          badge. Baddies stays a creator subscription platform first. */}
+      {stats.referredByPartner && (
+        <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", margin: "0.85rem 0 0" }}>
+          You joined Baddies through a Founding Partner referral.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// Wallet has its own page (src/app/wallet/page.tsx), reached from the
+// nav's account menu ("Wallet ($balance)") — not a card here.
+
+function WalletStat({
+  label,
+  value,
+  format = "usd",
+}: {
+  label: string;
+  value: number;
+  format?: "usd" | "int";
+}) {
+  return (
+    <div>
+      <div style={{ fontSize: "1.4rem", fontWeight: 600, fontFamily: "var(--font-display)" }}>
+        {format === "usd" ? `$${value.toFixed(2)}` : value.toLocaleString()}
+      </div>
+      <div style={mutedSmallStyle}>{label}</div>
+    </div>
+  );
+}
+
+function StatusPanel({ status }: { status: CreatorStatus }) {
+  const copy: Record<CreatorStatus, string> = {
+    PENDING: "Application received.",
+    VERIFICATION_REQUIRED: "Complete your identity, age, and liveness verification below.",
+    UNDER_REVIEW: "Verification complete — awaiting admin approval.",
+    VERIFIED: "You're a Verified baddie. You can publish monetised content.",
+    SUSPENDED: "Your creator account is suspended.",
+    REJECTED: "Your application was not approved.",
+    BANNED: "Your creator account has been banned.",
+  };
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: "2rem" }}>
+      <p style={{ margin: 0, fontSize: "0.95rem" }}>
+        <strong>Status:</strong> {status}
+      </p>
+      <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", marginTop: "0.5rem" }}>{copy[status]}</p>
+
+      {status === "VERIFICATION_REQUIRED" && <VerificationFlow />}
+    </div>
+  );
+}
+
+interface CreatorSettingsData {
+  effectiveVvipPriceUsd: number;
+  unlimitedOptedIn: boolean;
+  subscriberCountVisible: boolean;
+  locationVisible: boolean;
+  handle: string | null;
+}
+
+const HANDLE_PATTERN = /^[a-z0-9_]{3,20}$/;
+
+/** Pricing, VIP-pass opt-in, privacy toggles, and this creator's own @handle — a creator-specific "Settings" tab, distinct from the account-level /settings page (password/sessions/email). */
+function CreatorSettingsPanel() {
+  const [data, setData] = useState<CreatorSettingsData | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Kept as separate string fields rather than folded straight into
+  // `data` — both need to be freely-typeable mid-keystroke (a number
+  // input's value like "5.", or a handle the user hasn't finished
+  // typing yet), and neither needs to round-trip through more than one
+  // parse/normalize step on submit.
+  const [priceInput, setPriceInput] = useState("");
+  const [handleInput, setHandleInput] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/creator/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (!cancelled && body) {
+          setData(body);
+          setPriceInput(body.effectiveVvipPriceUsd.toFixed(2));
+          setHandleInput(body.handle ?? "");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!data) return;
+    const exclusivePriceUsd = Number(priceInput);
+    if (!Number.isFinite(exclusivePriceUsd) || exclusivePriceUsd < EXCLUSIVE_MIN_PRICE_USD) {
+      setError(`Exclusive price must be at least $${EXCLUSIVE_MIN_PRICE_USD.toFixed(2)}.`);
+      return;
+    }
+    const normalizedHandle = handleInput.trim().toLowerCase();
+    if (normalizedHandle && !HANDLE_PATTERN.test(normalizedHandle)) {
+      setError("Handle must be 3-20 characters: lowercase letters, numbers, and underscores only.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    setSaved(false);
+    const res = await fetch("/api/creator/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        exclusivePriceUsd,
+        unlimitedOptedIn: data.unlimitedOptedIn,
+        subscriberCountVisible: data.subscriberCountVisible,
+        locationVisible: data.locationVisible,
+        handle: normalizedHandle || null,
+      }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(body?.error ?? "Save failed.");
+      return;
+    }
+    const body: CreatorSettingsData = await res.json();
+    setData(body);
+    setPriceInput(body.effectiveVvipPriceUsd.toFixed(2));
+    setHandleInput(body.handle ?? "");
+    setSaved(true);
+  }
+
+  if (!data) return null;
+
+  return (
+    <div style={cardStyle}>
+      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Creator settings</h2>
+      <form onSubmit={handleSubmit}>
+        {error && <div style={errorBannerStyle}>{error}</div>}
+        <Field label="Handle" hint="3-20 characters: lowercase letters, numbers, and underscores. Shown as @handle wherever your posts appear. Leave blank to have none.">
+          <div style={priceInputRowStyle}>
+            <span style={priceAffixStyle}>@</span>
+            <input
+              style={priceInputStyle}
+              value={handleInput}
+              onChange={(e) => setHandleInput(e.target.value)}
+              maxLength={20}
+              placeholder="yourhandle"
+            />
+          </div>
+        </Field>
+        <Field
+          label="Exclusive subscription price (USD)"
+          hint={`Set your own price for fans who subscribe directly to you — $${EXCLUSIVE_MIN_PRICE_USD.toFixed(2)}/mo minimum.`}
+        >
+          <div style={priceInputRowStyle}>
+            <span style={priceAffixStyle}>$</span>
+            <input
+              style={priceInputStyle}
+              type="number"
+              min={EXCLUSIVE_MIN_PRICE_USD}
+              step="0.01"
+              value={priceInput}
+              onChange={(e) => setPriceInput(e.target.value)}
+              required
+            />
+            <span style={priceAffixStyle}>/mo</span>
+          </div>
+        </Field>
+        <label style={checkboxRowStyle}>
+          <input
+            type="checkbox"
+            checked={data.unlimitedOptedIn}
+            onChange={(e) => setData({ ...data, unlimitedOptedIn: e.target.checked })}
+          />
+          Include my VIP-tier content in the platform-wide VIP Pass
+        </label>
+        <label style={checkboxRowStyle}>
+          <input
+            type="checkbox"
+            checked={data.subscriberCountVisible}
+            onChange={(e) => setData({ ...data, subscriberCountVisible: e.target.checked })}
+          />
+          Show subscriber count publicly
+        </label>
+        <label style={checkboxRowStyle}>
+          <input
+            type="checkbox"
+            checked={data.locationVisible}
+            onChange={(e) => setData({ ...data, locationVisible: e.target.checked })}
+          />
+          Show country and city publicly
+        </label>
+        <button type="submit" style={primaryButtonStyle} disabled={saving}>
+          {saving ? "Saving..." : saved ? "✓ Saved" : "Save creator settings"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * The image shown for this creator on discovery cards (Top Baddies,
+ * Baddies Near You, etc.) — CreatorProfile.coverImageUrl under the
+ * hood, same field /apply can optionally set at signup. Lives in
+ * Content management (not Settings) because it's about what represents
+ * this creator's content, not account configuration. Leaving it unset
+ * falls back to the latest published Free post automatically (see
+ * src/lib/discovery/creator-card.ts).
+ */
+function FeaturedImagePanel() {
+  const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null | undefined>(undefined); // undefined = loading
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/creator/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (body) setFeaturedImageUrl(body.coverImageUrl ?? null);
+      });
+  }, []);
+
+  async function save(next: string | null) {
+    setFeaturedImageUrl(next);
+    setSaving(true);
+    setError(null);
+    setSaved(false);
+    const res = await fetch("/api/creator/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ coverImageUrl: next }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(body?.error ?? "Save failed.");
+      return;
+    }
+    setSaved(true);
+  }
+
+  if (featuredImageUrl === undefined) return null;
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: "2rem" }}>
+      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Featured image</h2>
+      <p style={{ ...mutedSmallStyle, marginTop: "-0.6rem", marginBottom: "1.1rem" }}>
+        What shows on The Baddest, baddies near you, and other discovery cards. Keep it
+        non-explicit. Leave blank to use your latest Teasers post instead.
+      </p>
+      <ImageUploadField label="Featured image" value={featuredImageUrl} onChange={save} shape="rect" />
+      {saving && <p style={{ ...mutedSmallStyle, marginBottom: 0 }}>Saving...</p>}
+      {saved && !saving && <p style={{ ...mutedSmallStyle, marginBottom: 0 }}>✓ Saved</p>}
+      {error && <div style={{ ...errorBannerStyle, marginBottom: 0 }}>{error}</div>}
+    </div>
+  );
+}
+
+/**
+ * Content history and control: every item this creator has ever
+ * uploaded (see GET /api/creator/content's own comment on why it's
+ * unfiltered by status), each with a Delete action. Delete is a soft
+ * delete (DELETE /api/creator/content/:id — see that route's comment)
+ * so it stays in this history afterward, just labeled Removed with no
+ * further action available on it.
+ */
+function ContentPanel() {
+  const [items, setItems] = useState<OwnContentItem[]>([]);
+  const [loadingItems, setLoadingItems] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  function reload() {
+    setLoadingItems(true);
+    fetch("/api/creator/content")
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((body) => setItems(body.items ?? []))
+      .finally(() => setLoadingItems(false));
+  }
+
+  useEffect(reload, []);
+
+  async function publish(contentId: string) {
+    const res = await fetch(`/api/creator/content/${contentId}/publish`, { method: "POST" });
+    if (res.ok) reload();
+  }
+
+  async function remove(contentId: string) {
+    if (!window.confirm("Delete this post? It will no longer be visible to anyone.")) return;
+    setDeletingId(contentId);
+    const res = await fetch(`/api/creator/content/${contentId}`, { method: "DELETE" });
+    setDeletingId(null);
+    if (res.ok) reload();
+  }
+
+  return (
+    <>
+      <FeaturedImagePanel />
+      <UploadForm onUploaded={reload} />
+
+      <h2 style={sectionHeadingStyle}>Content history</h2>
+      {loadingItems ? (
+        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+      ) : items.length === 0 ? (
+        <p style={{ color: "var(--text-muted)" }}>Nothing uploaded yet.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          {items.map((item) => {
+            const removed = item.status === "REMOVED";
+            return (
+              <div key={item.contentId} style={rowCardStyle}>
+                <div style={{ opacity: removed ? 0.55 : 1 }}>
+                  <div style={{ fontSize: "0.9rem" }}>{item.caption || "(no caption)"}</div>
+                  <div style={mutedSmallStyle}>
+                    {item.mediaType} · {ACCESS_LABEL[item.accessLevel]} ·{" "}
+                    {removed ? "removed" : item.publishedAt ? "live" : item.status.toLowerCase()} · ♥{" "}
+                    {item.likeCount}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
+                  {/* Uploads publish immediately (see the upload route) —
+                      this only ever fires for older rows from before that
+                      change. */}
+                  {item.status === "APPROVED" && !item.publishedAt && (
+                    <button onClick={() => publish(item.contentId)} style={publishButtonStyle}>
+                      Publish
+                    </button>
+                  )}
+                  {!removed && (
+                    <button
+                      onClick={() => remove(item.contentId)}
+                      disabled={deletingId === item.contentId}
+                      style={deleteButtonStyle}
+                    >
+                      {deletingId === item.contentId ? "..." : "Delete"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100MB per file — matches the API route's own ceiling
+
+function UploadForm({ onUploaded }: { onUploaded: () => void }) {
+  const [caption, setCaption] = useState("");
+  const [accessLevel, setAccessLevel] = useState<AccessLevel>("FREE");
+  const [files, setFiles] = useState<File[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function handleFilesChosen(fileList: FileList | null) {
+    setError(null);
+    const chosen = Array.from(fileList ?? []);
+    const tooLarge = chosen.filter((f) => f.size > MAX_UPLOAD_BYTES);
+    if (tooLarge.length > 0) {
+      setError(`${tooLarge.length === 1 ? "One file exceeds" : `${tooLarge.length} files exceed`} the 100MB limit and won't be included: ${tooLarge.map((f) => f.name).join(", ")}`);
+    }
+    setFiles(chosen.filter((f) => f.size <= MAX_UPLOAD_BYTES));
+  }
+
+  async function uploadOne(file: File): Promise<string | null> {
+    const mediaType = file.type.startsWith("video/")
+      ? "VIDEO"
+      : file.type.startsWith("audio/")
+        ? "AUDIO"
+        : "IMAGE";
+    const base64Data = await fileToBase64(file);
+    const res = await fetch("/api/creator/content", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mediaType,
+        mimeType: file.type,
+        base64Data,
+        accessLevel,
+        caption: caption || undefined,
+      }),
+    });
+    if (res.ok) return null;
+    const body = await res.json().catch(() => null);
+    return typeof body?.error === "string" ? body.error : "Upload failed.";
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (files.length === 0) {
+      setError("Choose at least one file to upload.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+
+    // Sequential, not parallel — this is one creator's own upload queue,
+    // not a race; keeping it sequential also keeps "Uploading 2 of 5..."
+    // an honest, literal count rather than an approximation.
+    const failures: string[] = [];
+    for (const [i, currentFile] of files.entries()) {
+      setProgress({ done: i, total: files.length });
+      const err = await uploadOne(currentFile);
+      if (err) failures.push(`${currentFile.name}: ${err}`);
+    }
+    setProgress(null);
+    setSubmitting(false);
+
+    if (failures.length > 0) {
+      setError(
+        failures.length === files.length
+          ? `Upload failed for all ${files.length} file(s).\n${failures.join("\n")}`
+          : `${files.length - failures.length} of ${files.length} uploaded. ${failures.length} failed:\n${failures.join("\n")}`
+      );
+    }
+    setCaption("");
+    setFiles([]);
+    onUploaded();
+  }
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: "2rem" }}>
+      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Upload content</h2>
+      <p style={{ ...mutedSmallStyle, marginTop: "-0.6rem", marginBottom: "1.1rem" }}>
+        Goes live immediately — no admin approval, no waiting.
+      </p>
+      <form onSubmit={handleSubmit}>
+        {error && <div style={{ ...errorBannerStyle, whiteSpace: "pre-line" }}>{error}</div>}
+
+        <Field label="Files" hint="Up to 100MB per file. Select more than one to upload them all at once.">
+          <div style={fileFieldRowStyle}>
+            <label style={fileUploadButtonStyle}>
+              {files.length > 0 ? "Change files" : "Choose files"}
+              <input
+                type="file"
+                accept="image/*,video/*,audio/*"
+                multiple
+                onChange={(e) => handleFilesChosen(e.target.files)}
+                style={hiddenFileInputStyle}
+              />
+            </label>
+            <span style={mutedSmallStyle}>
+              {files.length === 0
+                ? "No files chosen"
+                : files.length === 1
+                  ? files[0]?.name
+                  : `${files.length} files chosen`}
+            </span>
+          </div>
+        </Field>
+
+        <Field label="Caption" hint="Optional. Applied to every file in this batch.">
+          <input style={inputStyle} value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={2000} />
+        </Field>
+
+        <Field
+          label="Access level"
+          hint="Teasers: anyone. VIP: unlocked by the platform-wide VIP pass. Exclusive: only your own subscribers."
+        >
+          <select
+            style={inputStyle}
+            value={accessLevel}
+            onChange={(e) => setAccessLevel(e.target.value as AccessLevel)}
+          >
+            <option value="FREE">Teasers</option>
+            <option value="VIP">VIP</option>
+            <option value="VVIP">Exclusive</option>
+          </select>
+        </Field>
+
+        <button type="submit" style={primaryButtonStyle} disabled={submitting}>
+          {submitting && progress ? `Uploading ${progress.done + 1} of ${progress.total}...` : submitting ? "Uploading..." : "Upload"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.split(",")[1] ?? "");
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Widened from the original Profile-only 620px to match the old
+// dashboard's 760px now that Overview/Content/Settings (2-column grids,
+// an upload form) live here too — the simpler Profile/Application tabs
+// just get a bit more side whitespace at this width, same as several
+// other pages in this app already sit at.
+const mainStyle: React.CSSProperties = { padding: "2.5rem 1.75rem", maxWidth: "760px", margin: "0 auto" };
+
+const sectionHeadingStyle: React.CSSProperties = {
+  fontFamily: "var(--font-display)",
+  fontSize: "1.2rem",
+  fontWeight: 500,
+  margin: "0 0 1.1rem",
+};
+
+const mutedSmallStyle: React.CSSProperties = { fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "0.2rem" };
+
 const avatarFieldRowStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -405,11 +1095,145 @@ const removeAvatarButtonStyle: React.CSSProperties = {
   cursor: "pointer",
 };
 
-const mainStyle: React.CSSProperties = { padding: "2.5rem 1.75rem", maxWidth: "620px", margin: "0 auto" };
-
-const sectionHeadingStyle: React.CSSProperties = {
-  fontFamily: "var(--font-display)",
-  fontSize: "1.2rem",
-  fontWeight: 500,
-  margin: "0 0 1.1rem",
+const pendingNoticeStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "0.5rem",
+  textAlign: "center",
+  background: "var(--surface)",
+  color: "var(--accent)",
+  borderRadius: "999px",
+  padding: "0.6rem 1.2rem",
+  fontSize: "0.85rem",
+  fontWeight: 600,
+  marginBottom: "1.75rem",
+  boxShadow: "var(--glow)",
 };
+
+// Side by side on wide screens (Get discovered left, Stats right),
+// stacking to one column on narrow ones — same two-column pattern as
+// the landing page's "how it works" sections.
+const overviewGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+  gap: "1.5rem",
+  alignItems: "start",
+};
+
+// A real 2-column grid instead of flex-wrap — flex-wrap packed items
+// left-to-right by whatever fit, so which item ended up "under" which
+// was just an accident of label length (e.g. Creator bio only ever
+// landed next to Featured image because both happened to be short). A
+// grid gives every item a real, consistent column.
+const checklistGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, 1fr)",
+  gap: "0.6rem",
+};
+
+function checklistPillStyle(done: boolean): React.CSSProperties {
+  return {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "0.35rem",
+    fontSize: "0.8rem",
+    fontWeight: 600,
+    color: done ? "var(--success)" : "var(--text-muted)",
+    border: `1px solid ${done ? "var(--success)" : "var(--border)"}`,
+    borderRadius: "999px",
+    padding: "0.3rem 0.75rem",
+  };
+}
+
+// A real 2-column grid instead of flex-wrap — flex-wrap sized each stat
+// to its own label width, so "Followers"/"Subscribers" didn't land in
+// the same columns as "Published posts"/"Total uploads" underneath
+// them. A grid keeps every row's columns aligned.
+const statsGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, 1fr)",
+  gap: "1.5rem 2rem",
+};
+
+const priceInputRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.5rem",
+  marginTop: "0.4rem",
+};
+
+const priceAffixStyle: React.CSSProperties = {
+  color: "var(--text-muted)",
+  fontSize: "0.95rem",
+  fontWeight: 600,
+};
+
+const priceInputStyle: React.CSSProperties = {
+  ...inputStyle,
+  marginTop: 0,
+  width: "120px",
+};
+
+const rowCardStyle: React.CSSProperties = {
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: "12px",
+  padding: "0.9rem 1.1rem",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "1rem",
+};
+
+const publishButtonStyle: React.CSSProperties = {
+  background: "var(--accent)",
+  color: "var(--bg)",
+  border: "none",
+  borderRadius: "var(--radius)",
+  padding: "0.4rem 0.85rem",
+  fontSize: "0.82rem",
+  fontWeight: 600,
+  cursor: "pointer",
+  flexShrink: 0,
+};
+
+const deleteButtonStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "1px solid var(--danger)",
+  color: "var(--danger)",
+  borderRadius: "var(--radius)",
+  padding: "0.4rem 0.85rem",
+  fontSize: "0.82rem",
+  fontWeight: 600,
+  cursor: "pointer",
+  flexShrink: 0,
+};
+
+const fileFieldRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.7rem",
+  flexWrap: "wrap",
+  marginTop: "0.4rem",
+};
+
+// Same ghost-accent-button treatment used for the ID upload on
+// /founding-baddies (src/app/founding-baddies/ApplicationNextSteps.tsx)
+// and LocationField's "Detect my location" in components/ui.tsx — a real
+// button, not the browser's own unstyled file-input chrome.
+const fileUploadButtonStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "0.5rem 1rem",
+  borderRadius: "var(--radius)",
+  border: "1px solid var(--accent)",
+  color: "var(--accent)",
+  background: "transparent",
+  fontWeight: 600,
+  fontSize: "0.85rem",
+  cursor: "pointer",
+  flexShrink: 0,
+};
+
+const hiddenFileInputStyle: React.CSSProperties = { display: "none" };

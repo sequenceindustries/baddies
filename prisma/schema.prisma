@@ -365,6 +365,16 @@ model CreatorProfile {
   // provider-hosted records rather than raw documents.
   legalNameEncrypted String? // encrypted at rest; never returned to clients directly
 
+  // A real, unique, creator-chosen handle ("@handle") — a social-
+  // media-style username, separate from Profile.displayName (not
+  // unique, can contain spaces/emoji). Nullable/opt-in: never auto-
+  // generated from displayName (see the settings route's own comment
+  // on why), so an existing creator simply has none until they set
+  // one. Format (lowercase letters/digits/underscores, 3-20 chars) is
+  // enforced in application code, not a DB constraint — see
+  // src/app/api/creator/settings/route.ts's HANDLE_REGEX.
+  handle String? @unique
+
   coverImageUrl     String?
   // Deliberately unread now — Exclusive (VVIP) pricing is a fixed
   // $9.99/mo for every creator, not creator-settable. See

@@ -307,14 +307,15 @@ function ApplicationForm() {
       return;
     }
     setSubmitted(true);
-    // Straight to the real creator dashboard, not a Founding-specific
+    // Straight to the real creator profile, not a Founding-specific
     // status page — a Founding Baddie IS a creator applicant from the
     // moment they submit (POST /api/founding/apply now creates a real
     // CreatorProfile at VERIFICATION_REQUIRED alongside the account), so
-    // /creator-dashboard already renders the right thing for them: the
-    // real VerificationFlow (identity+ID, live capture, liveness), not a
+    // /profile already renders the right thing for them: the real
+    // VerificationFlow (identity+ID, live capture, liveness) that lives
+    // there now (folded in from the old /creator-dashboard), not a
     // separate bespoke checklist. See that route's own doc comment.
-    router.push("/creator-dashboard");
+    router.push("/profile");
   }
 
   // Covers the brief gap between a successful submit and router.push

@@ -11,6 +11,7 @@ interface CreatorProfileResponse {
   creatorProfileId: string;
   userId: string;
   displayName: string | null;
+  handle: string | null;
   bio: string | null;
   avatarUrl: string | null;
   coverImageUrl: string | null;
@@ -185,9 +186,10 @@ export default function CreatorProfilePage() {
           )}
         </div>
         <div style={headerTextBlockStyle}>
-          <h1 style={{ ...displayHeadingStyle, marginBottom: "0.3rem" }}>
+          <h1 style={{ ...displayHeadingStyle, marginBottom: "0.2rem" }}>
             {creator.displayName ?? "Unnamed creator"}
           </h1>
+          {creator.handle && <p style={handleStyle}>@{creator.handle}</p>}
           <VerifiedBadge isFoundingPartner={creator.isFoundingPartner} isFoundingBaddie={creator.isFoundingBaddie} />
           {(creator.city || creator.country) && (
             <p style={mutedStyle}>{[creator.city, creator.country].filter(Boolean).join(", ")}</p>
@@ -374,6 +376,7 @@ const headerActionsStyle: React.CSSProperties = {
 const headerActionButtonsRowStyle: React.CSSProperties = { display: "flex", gap: "0.5rem" };
 
 const mutedStyle: React.CSSProperties = { color: "var(--text-muted)", fontSize: "0.9rem", margin: "0.2rem 0" };
+const handleStyle: React.CSSProperties = { color: "var(--text-muted)", fontSize: "0.9rem", margin: "0 0 0.6rem" };
 
 const statsRowStyle: React.CSSProperties = {
   display: "flex",

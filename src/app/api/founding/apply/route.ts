@@ -77,7 +77,7 @@ const ApplySchema = z.object({
  * (passwordHash, ageVerified, Profile, Wallet, a trial grant if
  * enabled), and signs them in immediately. From here on their real
  * identity/age/liveness verification happens through the ordinary
- * creator flow (VerificationFlow on /creator-dashboard) — that's what
+ * creator flow (VerificationFlow on /profile) — that's what
  * "their dashboard should be that of creators" means in practice, not
  * a separate Founding-specific status page. See FoundingApplication's
  * own schema comment for why this route creates an account at all.
@@ -216,7 +216,7 @@ export async function POST(req: NextRequest) {
       });
     }
     // Same shape POST /api/creator/apply creates for the ordinary path —
-    // VERIFICATION_REQUIRED is what makes /creator-dashboard render the
+    // VERIFICATION_REQUIRED is what makes /profile render the
     // real VerificationFlow (identity+ID, live capture, liveness) for
     // this account from the moment they sign in.
     await tx.creatorProfile.create({
@@ -266,7 +266,7 @@ export async function POST(req: NextRequest) {
     // POST /api/auth/register sends), not the older Founding-specific
     // one — this route now creates a real User/CreatorProfile, and
     // that's the account whose emailVerified column actually matters
-    // (surfaced on /creator-dashboard, not a Founding-only status page).
+    // (surfaced on /profile, not a Founding-only status page).
     await sendUserEmailVerification(userId, application.email, application.stageName);
   } catch (err) {
     console.error("[founding-apply] email verification send failed", err);

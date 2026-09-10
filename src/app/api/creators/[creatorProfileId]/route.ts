@@ -40,6 +40,7 @@ export async function GET(
     creatorProfileId: creator.id,
     userId: creator.userId,
     displayName: creator.user.profile?.displayName,
+    handle: creator.handle,
     bio: creator.user.profile?.bio,
     avatarUrl: creator.user.profile?.avatarUrl,
     coverImageUrl: creator.coverImageUrl,

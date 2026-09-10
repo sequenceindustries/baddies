@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
  * account creation. Authenticated (unlike those two, which have no
  * session yet): this is for someone who already has an account and
  * just missed or lost the original email, surfaced as a "Resend" action
- * wherever emailVerified === false is shown (see /creator-dashboard's
+ * wherever emailVerified === false is shown (see /profile's
  * StatusPanel).
  */
 export async function POST() {

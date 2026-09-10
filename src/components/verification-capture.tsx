@@ -28,8 +28,9 @@ function blobToBase64(blob: Blob): Promise<string> {
 
 /**
  * The full 3-step real creator verification wizard — used on both
- * /apply's VERIFICATION_REQUIRED screen and creator-dashboard's
- * StatusPanel, so the flow only exists once:
+ * /apply's VERIFICATION_REQUIRED screen and /profile's own StatusPanel
+ * (folded in from the old /creator-dashboard in a later follow-up), so
+ * the flow only exists once:
  *   1. Details + ID document (a regular form + regular upload).
  *   2. Identity + Age: a live selfie-holding-ID photo (camera capture,
  *      never a file picker).

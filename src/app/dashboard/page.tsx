@@ -4,16 +4,17 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 /**
- * /dashboard moved to /creator-dashboard so every page's URL says which
- * account type it's for at a glance (see /feed, /creator-dashboard,
- * /fan-subscriptions) instead of a generic name that only made sense
- * once you already knew the app. This redirect exists only so an old
- * link/bookmark to /dashboard still lands somewhere real.
+ * /dashboard moved to /creator-dashboard (a creator-only URL at the
+ * time), then folded into /profile as additional tabs once the
+ * dashboard itself was merged there (social-feed follow-up — see
+ * /app/creator-dashboard/page.tsx's own redirect comment). This
+ * redirect exists only so an old link/bookmark to /dashboard still
+ * lands somewhere real.
  */
 export default function DashboardRedirectPage() {
   const router = useRouter();
   useEffect(() => {
-    router.replace("/creator-dashboard");
+    router.replace("/profile");
   }, [router]);
   return null;
 }

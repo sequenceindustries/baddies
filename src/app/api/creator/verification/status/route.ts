@@ -6,7 +6,7 @@ import { db } from "@/lib/db/client";
 export const dynamic = "force-dynamic";
 
 /**
- * Lets the VerificationFlow wizard (used on /apply and creator-dashboard)
+ * Lets the VerificationFlow wizard (used on /apply and /profile)
  * know which of its 3 steps are already done, so it shows the right step
  * (and an "awaiting review" state for later steps) instead of always
  * starting from step 1.
