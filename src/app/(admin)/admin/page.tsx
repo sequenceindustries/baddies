@@ -185,6 +185,15 @@ function NavGroups({ tab, onSelect, badges }: { tab: Tab; onSelect: (t: Tab) => 
 export default function AdminDashboardPage() {
   const { user, loading } = useSession();
   const [tab, setTab] = useState<Tab>("Overview");
+  // Mobile-only: the sidebar's 12 tabs stacked above the content (see
+  // .admin-sidebar's own comment on why it stacks below 860px) used to
+  // mean scrolling nearly a full screen of nav before reaching any
+  // content. Collapsed by default on that breakpoint — a toggle row
+  // shows the current tab and expands the full grouped list on tap,
+  // matching the "collapsible drawer" this was always meant to become.
+  // Ignored above 860px (CSS keeps the full sidebar always visible
+  // there regardless of this flag — see .admin-nav-groups.collapsed).
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [range, setRange] = useState<RangeKey>("7d");
   const [ccData, setCcData] = useState<CommandCentreData | null>(null);
   const [ccLoading, setCcLoading] = useState(true);
@@ -256,7 +265,28 @@ export default function AdminDashboardPage() {
           <span style={adminBrandMarkStyle} aria-hidden="true" />
           <span style={adminBrandTextStyle}>Command Centre</span>
         </div>
-        <NavGroups tab={tab} onSelect={setTab} badges={ccData?.badges} />
+        <button
+          type="button"
+          className="admin-nav-toggle"
+          style={adminNavToggleStyle}
+          onClick={() => setMobileNavOpen((v) => !v)}
+          aria-expanded={mobileNavOpen}
+        >
+          <span>{tab}</span>
+          <span aria-hidden="true" style={{ transform: mobileNavOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s ease" }}>
+            ▾
+          </span>
+        </button>
+        <div className={`admin-nav-groups${mobileNavOpen ? "" : " collapsed"}`}>
+          <NavGroups
+            tab={tab}
+            onSelect={(t) => {
+              setTab(t);
+              setMobileNavOpen(false);
+            }}
+            badges={ccData?.badges}
+          />
+        </div>
       </aside>
 
       <main style={adminContentStyle}>
@@ -4238,6 +4268,26 @@ const adminBrandTextStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)",
   fontSize: "0.98rem",
   fontWeight: 600,
+};
+
+// Hidden by default (desktop); .admin-nav-toggle in globals.css turns
+// this on only below the same 860px breakpoint the sidebar itself
+// stacks at, matching the nav-hamburger/bottom-tab-bar convention of
+// "always mounted, CSS decides visibility" used elsewhere in this app.
+const adminNavToggleStyle: React.CSSProperties = {
+  display: "none",
+  width: "100%",
+  alignItems: "center",
+  justifyContent: "space-between",
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: "8px",
+  color: "var(--text)",
+  fontSize: "0.9rem",
+  fontWeight: 600,
+  padding: "0.65rem 0.9rem",
+  marginBottom: "0.75rem",
+  cursor: "pointer",
 };
 
 const adminContentStyle: React.CSSProperties = { flex: 1, minWidth: 0 };

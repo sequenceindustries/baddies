@@ -273,6 +273,22 @@ a[href]:hover {
         position: static !important;
         top: auto !important;
     }
+
+    /* The stacked sidebar's 12 tabs used to render as a full-height list
+       above the content — real, confirmed breakage (needing an almost
+       full screen of scrolling before reaching anything the tab
+       actually shows). Below this same breakpoint, the toggle row
+       becomes visible and the grouped nav list collapses behind it
+       until tapped open (component logic in (admin)/admin/page.tsx).
+       Both rules are no-ops above 860px regardless of the toggle's own
+       state, so nothing changes for desktop. */
+    .admin-nav-toggle {
+        display: flex !important;
+    }
+
+    .admin-nav-groups.collapsed {
+        display: none;
+    }
 }
 
 /* Double-tap-to-like's heart pop (Instagram convention) — PostCard
