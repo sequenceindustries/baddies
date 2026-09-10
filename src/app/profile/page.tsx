@@ -17,12 +17,12 @@ import {
 import { SegmentedTabs } from "@/components/segmented-tabs";
 import { VerificationFlow } from "@/components/verification-capture";
 import { UploadForm } from "@/components/upload-form";
-import { ACCESS_LABEL } from "@/components/cards";
+import { ACCESS_LABEL, CardAvatar, timeAgo } from "@/components/cards";
 import { EXCLUSIVE_MIN_PRICE_USD } from "@/lib/creator/pricing";
 
 // "overview" merged into "profile" per direct request ("merge Profile
 // and Overview") — see the tabs array and its render block below.
-type ProfileTab = "profile" | "content" | "settings" | "application";
+type ProfileTab = "profile" | "content" | "messages" | "settings" | "application";
 
 type CreatorStatus =
   | "PENDING"
@@ -98,7 +98,11 @@ export default function ProfilePage() {
 
   const tabs: { value: ProfileTab; label: string }[] = [{ value: "profile", label: "Profile" }];
   if (creatorActive) {
-    tabs.push({ value: "content", label: "Content" }, { value: "settings", label: "Settings" });
+    tabs.push(
+      { value: "content", label: "Content" },
+      { value: "messages", label: "Messages" },
+      { value: "settings", label: "Settings" }
+    );
   }
   if (user.creatorProfile) {
     tabs.push({ value: "application", label: "Personal Information" });
@@ -149,6 +153,7 @@ export default function ProfilePage() {
         </>
       )}
       {activeTab === "content" && creatorActive && <ContentPanel />}
+      {activeTab === "messages" && creatorActive && <MessagesPanel />}
       {activeTab === "settings" && creatorActive && <CreatorSettingsPanel />}
       {activeTab === "application" && user.creatorProfile && <ApplicationDetailsPanel />}
     </main>
@@ -906,6 +911,158 @@ function ContentPanel() {
             );
           })}
         </div>
+      )}
+    </>
+  );
+}
+
+interface ThreadSummary {
+  threadKey: string;
+  otherParty: { displayName: string | null; avatarUrl: string | null } | null;
+  lastMessage: { body: string | null; createdAt: string; fromMe: boolean };
+}
+
+/**
+ * The real follow-up to this app's original "minimal REAL send, no
+ * inbox" messaging scope (POST /api/creators/:id/message's own doc
+ * comment) — a creator previously had no way to see a message a fan
+ * sent them at all. List → detail via local state, mirroring admin's
+ * own MembersPanel/MemberDetailView pattern (src/app/(admin)/admin/
+ * page.tsx) rather than a separate route, since nothing else on this
+ * page uses sub-routing either.
+ */
+function MessagesPanel() {
+  const [threads, setThreads] = useState<ThreadSummary[] | null>(null);
+  const [selectedThreadKey, setSelectedThreadKey] = useState<string | null>(null);
+
+  function reload() {
+    fetch("/api/creator/messages")
+      .then((r) => (r.ok ? r.json() : { threads: [] }))
+      .then((body) => setThreads(body.threads ?? []));
+  }
+
+  useEffect(reload, []);
+
+  if (selectedThreadKey) {
+    return <ThreadDetailView threadKey={selectedThreadKey} onBack={() => setSelectedThreadKey(null)} onSent={reload} />;
+  }
+
+  return (
+    <>
+      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Messages</h2>
+      {threads === null ? (
+        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+      ) : threads.length === 0 ? (
+        <p style={{ color: "var(--text-muted)" }}>No messages yet.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          {threads.map((t) => (
+            <div
+              key={t.threadKey}
+              style={{ ...rowCardStyle, cursor: "pointer" }}
+              onClick={() => setSelectedThreadKey(t.threadKey)}
+              role="button"
+              tabIndex={0}
+            >
+              <CardAvatar
+                url={t.otherParty?.avatarUrl}
+                initial={(t.otherParty?.displayName ?? "?").trim().charAt(0).toUpperCase() || "?"}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>{t.otherParty?.displayName ?? "Unknown"}</div>
+                <div style={{ ...mutedSmallStyle, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {t.lastMessage.fromMe ? "You: " : ""}
+                  {t.lastMessage.body}
+                </div>
+              </div>
+              <div style={mutedSmallStyle}>{timeAgo(t.lastMessage.createdAt)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+interface ThreadMessage {
+  id: string;
+  body: string | null;
+  senderId: string;
+  createdAt: string;
+  fromMe: boolean;
+}
+
+function ThreadDetailView({ threadKey, onBack, onSent }: { threadKey: string; onBack: () => void; onSent: () => void }) {
+  const [data, setData] = useState<{ otherParty: ThreadSummary["otherParty"]; messages: ThreadMessage[] } | null>(null);
+  const [reply, setReply] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function reload() {
+    fetch(`/api/creator/messages/${threadKey}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => body && setData(body));
+  }
+
+  useEffect(reload, [threadKey]);
+
+  async function send() {
+    setSending(true);
+    setError(null);
+    const res = await fetch(`/api/creator/messages/${threadKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ body: reply }),
+    });
+    setSending(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(typeof body?.error === "string" ? body.error : "Couldn't send your reply.");
+      return;
+    }
+    setReply("");
+    reload();
+    onSent();
+  }
+
+  return (
+    <>
+      <button onClick={onBack} style={{ ...sortToggleStyle, marginBottom: "1.25rem" }}>
+        ← Back to messages
+      </button>
+
+      {!data ? (
+        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+      ) : (
+        <>
+          <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>{data.otherParty?.displayName ?? "Unknown"}</h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", marginBottom: "1.25rem" }}>
+            {data.messages.map((m) => (
+              <div key={m.id} style={{ ...rowCardStyle, justifyContent: "flex-start" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "0.9rem" }}>{m.body}</div>
+                  <div style={mutedSmallStyle}>
+                    {m.fromMe ? "You" : data.otherParty?.displayName ?? "Them"} · {timeAgo(m.createdAt)}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {error && <p style={{ ...mutedSmallStyle, color: "var(--danger)" }}>{error}</p>}
+          <div style={{ display: "flex", gap: "0.6rem" }}>
+            <input
+              style={{ ...inputStyle, flex: 1 }}
+              value={reply}
+              onChange={(e) => setReply(e.target.value)}
+              placeholder="Reply..."
+              maxLength={2000}
+            />
+            <button onClick={send} disabled={sending || reply.trim().length === 0} style={primaryButtonStyle}>
+              {sending ? "Sending..." : "Send"}
+            </button>
+          </div>
+        </>
       )}
     </>
   );
