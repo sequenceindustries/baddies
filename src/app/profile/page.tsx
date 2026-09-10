@@ -98,11 +98,17 @@ export default function ProfilePage() {
 
   const tabs: { value: ProfileTab; label: string }[] = [{ value: "profile", label: "Profile" }];
   if (creatorActive) {
-    tabs.push(
-      { value: "content", label: "Content" },
-      { value: "messages", label: "Messages" },
-      { value: "settings", label: "Settings" }
-    );
+    tabs.push({ value: "content", label: "Content" });
+  }
+  // Messages is for any signed-in user, not just creators — a fan
+  // needs to see a creator's reply just as much as a creator needs to
+  // see a fan's first message (the nav's own MessageBell, ui.tsx, is
+  // the quicker way to reach this same inbox; this tab is the full-page
+  // equivalent, same GET/POST /api/creator/messages[/[threadKey]] both
+  // already being participant-checked, not role-checked).
+  tabs.push({ value: "messages", label: "Messages" });
+  if (creatorActive) {
+    tabs.push({ value: "settings", label: "Settings" });
   }
   if (user.creatorProfile) {
     tabs.push({ value: "application", label: "Personal Information" });
@@ -153,7 +159,7 @@ export default function ProfilePage() {
         </>
       )}
       {activeTab === "content" && creatorActive && <ContentPanel />}
-      {activeTab === "messages" && creatorActive && <MessagesPanel />}
+      {activeTab === "messages" && <MessagesPanel />}
       {activeTab === "settings" && creatorActive && <CreatorSettingsPanel />}
       {activeTab === "application" && user.creatorProfile && <ApplicationDetailsPanel />}
     </main>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
+import { SOCIAL_NOTIFICATION_TYPES } from "@/lib/creator-notifications/create-notification";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -22,6 +23,11 @@ export async function GET() {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
 
-  const count = await db.notification.count({ where: { userId: user.id, readAt: null } });
+  // Excludes "message.received" — that type powers the separate
+  // MessageBell (src/components/ui.tsx) instead, so a new message never
+  // gets counted twice across two different bells.
+  const count = await db.notification.count({
+    where: { userId: user.id, readAt: null, type: { in: [...SOCIAL_NOTIFICATION_TYPES] } },
+  });
   return NextResponse.json({ count });
 }

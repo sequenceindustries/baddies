@@ -258,6 +258,7 @@ export function Nav({ comingSoon = false }: { comingSoon?: boolean }) {
           desktop spot. */}
       <div style={navTrailingGroupStyle}>
         {!loading && user?.creatorProfile && <NotificationBell />}
+        {!loading && user && <MessageBell />}
 
         {!loading && hasNavContent && (
           <button
@@ -665,6 +666,265 @@ function NotificationHeartIcon() {
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path
         d="M12 20.2l-1.35-1.23C5.9 14.9 3 12.28 3 9.06 3 6.43 5.09 4.4 7.75 4.4c1.5 0 2.94.7 3.85 1.8h.8c.91-1.1 2.35-1.8 3.85-1.8 2.66 0 4.75 2.03 4.75 4.66 0 3.22-2.9 5.84-7.65 9.92L12 20.2z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+interface ThreadSummary {
+  threadKey: string;
+  otherParty: { displayName: string | null; avatarUrl: string | null } | null;
+  lastMessage: { body: string | null; createdAt: string; fromMe: boolean };
+}
+
+interface ThreadMessage {
+  id: string;
+  body: string | null;
+  senderId: string;
+  createdAt: string;
+  fromMe: boolean;
+}
+
+/**
+ * Placed immediately after NotificationBell (direct request: "put
+ * messages icon after the notifications icon, it must also notify
+ * when theres new message") — same poll/badge/panel shape, but its own
+ * separate unread source (`Notification` rows of type
+ * "message.received", counted via GET /api/messages/unread-count —
+ * see create-notification.ts's own comment on why this type is
+ * excluded from NotificationBell's count instead of shared with it).
+ *
+ * Unlike NotificationBell's flat list, a message needs real two-way
+ * interaction — this panel is list-then-detail (thread list, tap one
+ * to read the full history and reply inline), the same shape
+ * MessagesPanel/ThreadDetailView on /profile's own Messages tab
+ * already use, reimplemented locally here (not shared/extracted) at
+ * this file's own established "small self-contained duplicate" scale
+ * — a compact nav popover and a full-width profile tab want different
+ * visual treatments, so forcing one shared component would fight both.
+ * Reuses the same GET/POST /api/creator/messages[/[threadKey]] routes
+ * either way — despite the "creator" path segment, both are already
+ * participant-checked, not role-checked, so this works identically for
+ * a fan or a creator.
+ *
+ * Rendered for every signed-in user (Nav's own call site), not just
+ * creators — a fan needs to see a creator's reply just as much as a
+ * creator needs to see a fan's first message.
+ */
+function MessageBell() {
+  const [open, setOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [threads, setThreads] = useState<ThreadSummary[] | null>(null);
+  const [selectedThreadKey, setSelectedThreadKey] = useState<string | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function poll() {
+      const res = await fetch("/api/messages/unread-count");
+      if (!cancelled && res.ok) {
+        const body = await res.json();
+        setUnreadCount(body.count);
+      }
+    }
+    poll();
+    const id = setInterval(poll, 45_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  function loadThreads() {
+    fetch("/api/creator/messages")
+      .then((r) => (r.ok ? r.json() : { threads: [] }))
+      .then((body) => setThreads(body.threads ?? []));
+  }
+
+  async function handleToggle() {
+    const opening = !open;
+    setOpen(opening);
+    setSelectedThreadKey(null);
+    if (!opening) return;
+    setUnreadCount(0);
+    await Promise.all([loadThreads(), fetch("/api/messages/mark-read", { method: "POST" })]);
+  }
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={handleToggle}
+        style={notificationBellButtonStyle}
+        aria-label="Messages"
+        aria-expanded={open}
+      >
+        <MessageBellIcon />
+        {unreadCount > 0 && <span style={notificationBadgeStyle}>{unreadCount > 9 ? "9+" : unreadCount}</span>}
+      </button>
+      {open &&
+        (selectedThreadKey ? (
+          <MessageThreadPanel
+            threadKey={selectedThreadKey}
+            onBack={() => setSelectedThreadKey(null)}
+            onSent={loadThreads}
+          />
+        ) : (
+          <div style={notificationPanelStyle}>
+            <div style={notificationPanelHeaderStyle}>Messages</div>
+            {!threads ? (
+              <div style={notificationEmptyStyle}>Loading...</div>
+            ) : threads.length === 0 ? (
+              <div style={notificationEmptyStyle}>No messages yet.</div>
+            ) : (
+              threads.map((t) => (
+                <div
+                  key={t.threadKey}
+                  style={{ ...notificationRowStyle, cursor: "pointer" }}
+                  onClick={() => setSelectedThreadKey(t.threadKey)}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <span style={notificationRowAvatarStyle}>
+                    {t.otherParty?.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={t.otherParty.avatarUrl} alt="" style={notificationRowAvatarImgStyle} />
+                    ) : (
+                      (t.otherParty?.displayName ?? "?").trim().charAt(0).toUpperCase() || "?"
+                    )}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={notificationRowTextStyle}>{t.otherParty?.displayName ?? "Unknown"}</div>
+                    <div
+                      style={{
+                        ...notificationRowTimeStyle,
+                        marginTop: "0.1rem",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {t.lastMessage.fromMe ? "You: " : ""}
+                      {t.lastMessage.body}
+                    </div>
+                  </div>
+                  <div style={notificationRowTimeStyle}>{notificationTimeAgo(t.lastMessage.createdAt)}</div>
+                </div>
+              ))
+            )}
+          </div>
+        ))}
+    </div>
+  );
+}
+
+function MessageThreadPanel({ threadKey, onBack, onSent }: { threadKey: string; onBack: () => void; onSent: () => void }) {
+  const [data, setData] = useState<{ otherParty: ThreadSummary["otherParty"]; messages: ThreadMessage[] } | null>(null);
+  const [reply, setReply] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function reload() {
+    fetch(`/api/creator/messages/${threadKey}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => body && setData(body));
+  }
+
+  useEffect(reload, [threadKey]);
+
+  async function send() {
+    setSending(true);
+    setError(null);
+    const res = await fetch(`/api/creator/messages/${threadKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ body: reply }),
+    });
+    setSending(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(typeof body?.error === "string" ? body.error : "Couldn't send your reply.");
+      return;
+    }
+    setReply("");
+    reload();
+    onSent();
+  }
+
+  return (
+    <div style={{ ...notificationPanelStyle, display: "flex", flexDirection: "column", maxHeight: "440px" }}>
+      <div style={messageThreadHeaderStyle}>
+        <button type="button" onClick={onBack} style={messageBackButtonStyle} aria-label="Back to messages">
+          ←
+        </button>
+        <span style={{ fontWeight: 600, fontSize: "0.88rem" }}>{data?.otherParty?.displayName ?? "..."}</span>
+      </div>
+      <div style={messageThreadListStyle}>
+        {!data ? (
+          <div style={notificationEmptyStyle}>Loading...</div>
+        ) : (
+          data.messages.map((m) => (
+            <div key={m.id} style={notificationRowStyle}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={notificationRowTextStyle}>{m.body}</div>
+                <div style={notificationRowTimeStyle}>
+                  {m.fromMe ? "You" : data.otherParty?.displayName ?? "Them"} · {notificationTimeAgo(m.createdAt)}
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+      {error && <div style={{ ...notificationEmptyStyle, color: "var(--danger)", padding: "0 0.9rem 0.4rem" }}>{error}</div>}
+      <div style={messageReplyRowStyle}>
+        <input
+          style={messageReplyInputStyle}
+          value={reply}
+          onChange={(e) => setReply(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && reply.trim().length > 0 && !sending) send();
+          }}
+          placeholder="Reply..."
+          maxLength={2000}
+        />
+        <button
+          type="button"
+          onClick={send}
+          disabled={sending || reply.trim().length === 0}
+          style={messageReplySendButtonStyle}
+          aria-label="Send"
+        >
+          {sending ? "..." : "Send"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MessageBellIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M3 5.5A2.5 2.5 0 0 1 5.5 3h13A2.5 2.5 0 0 1 21 5.5v9A2.5 2.5 0 0 1 18.5 17H9l-5 4v-4H5.5A2.5 2.5 0 0 1 3 14.5v-9Z"
         stroke="currentColor"
         strokeWidth="1.8"
         strokeLinejoin="round"
@@ -1610,6 +1870,61 @@ const notificationRowTimeStyle: React.CSSProperties = {
   fontSize: "0.72rem",
   color: "var(--text-muted)",
   marginTop: "0.15rem",
+};
+
+const messageThreadHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.6rem",
+  padding: "0.6rem 0.9rem",
+  borderBottom: "1px solid var(--border)",
+  flexShrink: 0,
+};
+
+const messageBackButtonStyle: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  color: "var(--text)",
+  fontSize: "1rem",
+  cursor: "pointer",
+  padding: "0.1rem 0.3rem",
+};
+
+const messageThreadListStyle: React.CSSProperties = {
+  flex: 1,
+  minHeight: 0,
+  overflowY: "auto",
+};
+
+const messageReplyRowStyle: React.CSSProperties = {
+  display: "flex",
+  gap: "0.5rem",
+  padding: "0.6rem 0.75rem",
+  borderTop: "1px solid var(--border)",
+  flexShrink: 0,
+};
+
+const messageReplyInputStyle: React.CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  background: "var(--surface-raised)",
+  border: "1px solid var(--border)",
+  borderRadius: "999px",
+  padding: "0.45rem 0.8rem",
+  fontSize: "0.82rem",
+  color: "var(--text)",
+};
+
+const messageReplySendButtonStyle: React.CSSProperties = {
+  background: "var(--accent)",
+  color: "var(--bg)",
+  border: "none",
+  borderRadius: "999px",
+  padding: "0.45rem 0.9rem",
+  fontSize: "0.82rem",
+  fontWeight: 600,
+  cursor: "pointer",
+  flexShrink: 0,
 };
 
 // text-shadow is a no-op on the flat backgrounds this also renders

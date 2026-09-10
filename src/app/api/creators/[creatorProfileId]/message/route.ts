@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
 import { threadKeyFor } from "@/lib/messages/thread-key";
+import { createNotification } from "@/lib/creator-notifications/create-notification";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -81,14 +82,21 @@ export async function POST(req: NextRequest, { params }: { params: { creatorProf
     return NextResponse.json({ error: "Subscribe to this creator to send a message." }, { status: 403 });
   }
 
+  const threadKey = threadKeyFor(user.id, creator.userId);
   const message = await db.message.create({
     data: {
       senderId: user.id,
       recipientId: creator.userId,
-      threadKey: threadKeyFor(user.id, creator.userId),
+      threadKey,
       body: parsed.data.body,
     },
     select: { id: true, createdAt: true },
+  });
+
+  await createNotification({
+    userId: creator.userId,
+    type: "message.received",
+    payload: { actorUserId: user.id, threadKey },
   });
 
   return NextResponse.json({ id: message.id, createdAt: message.createdAt }, { status: 201 });

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
 import { resolveDisplayUrl } from "@/lib/media/persist-public-image";
+import { SOCIAL_NOTIFICATION_TYPES } from "@/lib/creator-notifications/create-notification";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -32,7 +33,7 @@ export async function GET() {
   }
 
   const notifications = await db.notification.findMany({
-    where: { userId: user.id },
+    where: { userId: user.id, type: { in: [...SOCIAL_NOTIFICATION_TYPES] } },
     orderBy: { createdAt: "desc" },
     take: PAGE_SIZE,
   });

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
 import { resolveDisplayUrl } from "@/lib/media/persist-public-image";
+import { createNotification } from "@/lib/creator-notifications/create-notification";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -84,6 +85,12 @@ export async function POST(req: NextRequest, { params }: { params: { threadKey: 
   const message = await db.message.create({
     data: { senderId: user.id, recipientId, threadKey: params.threadKey, body: parsed.data.body },
     select: { id: true, createdAt: true },
+  });
+
+  await createNotification({
+    userId: recipientId,
+    type: "message.received",
+    payload: { actorUserId: user.id, threadKey: params.threadKey },
   });
 
   return NextResponse.json({ id: message.id, createdAt: message.createdAt }, { status: 201 });
