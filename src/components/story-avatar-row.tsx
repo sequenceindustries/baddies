@@ -373,9 +373,16 @@ function StoryViewerOverlay({
 // especially between stories and first post") — this row sits directly
 // above the feed's own post list, so it needed more separation than the
 // general between-posts gap (feedListStyle's own 2.5rem), not less.
+// Centered + enlarged per direct request — was left-aligned/68px items,
+// which stranded the row against the left edge on a wide feed column
+// once it stopped needing to scroll (the common case: a handful of
+// creators comfortably fits the row's own width). overflowX:auto is
+// kept for whenever the row genuinely doesn't fit (more creators than
+// the viewport can hold), same horizontal-scroll behavior as before.
 const rowStyle: React.CSSProperties = {
   display: "flex",
-  gap: "1.1rem",
+  justifyContent: "center",
+  gap: "1.3rem",
   overflowX: "auto",
   padding: "0.25rem 0.1rem 0.35rem",
   marginBottom: "3rem",
@@ -385,22 +392,22 @@ const itemStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
-  gap: "0.35rem",
+  gap: "0.4rem",
   background: "none",
   border: "none",
   cursor: "pointer",
   flexShrink: 0,
-  width: "68px",
+  width: "92px",
 };
 
 // The colored ring is the whole "story" signifier — a plain avatar with
 // a gradient-ish accent border, Instagram convention, rather than any
 // new visual language. Dimmed once seen (ringSeenStyle) — see isSeen.
 const ringStyle: React.CSSProperties = {
-  width: "62px",
-  height: "62px",
+  width: "84px",
+  height: "84px",
   borderRadius: "50%",
-  padding: "2.5px",
+  padding: "3px",
   background: "linear-gradient(135deg, var(--accent), var(--accent-wine))",
   display: "flex",
   alignItems: "center",
@@ -423,19 +430,19 @@ const avatarStyle: React.CSSProperties = {
   justifyContent: "center",
   overflow: "hidden",
   fontWeight: 600,
-  fontSize: "1.1rem",
+  fontSize: "1.4rem",
   color: "var(--accent)",
 };
 
 const avatarImgStyle: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover" };
 
 const nameStyle: React.CSSProperties = {
-  fontSize: "0.72rem",
+  fontSize: "0.78rem",
   color: "var(--text-muted)",
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
-  maxWidth: "68px",
+  maxWidth: "92px",
 };
 
 const viewerBackdropStyle: React.CSSProperties = {
