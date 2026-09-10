@@ -574,6 +574,14 @@ model Content {
   moderationStatus ContentStatus @default(DRAFT)
   contentHash      String? // dedup / provenance
 
+  // A real, incrementing count — never a projection. Bumped by
+  // GET /api/content/:id/media (the one real "someone actually loaded
+  // this" signal that already exists) on every successful, entitled
+  // fetch, excluding the content's own creator and admin previews —
+  // see that route's own comment. Powers Content history's "what
+  // performed best" view, per direct request.
+  viewCount Int @default(0)
+
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

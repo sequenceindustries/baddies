@@ -41,6 +41,7 @@ export async function GET() {
       moderationStatus: true,
       publishedAt: true,
       createdAt: true,
+      viewCount: true,
       _count: { select: { likes: true } },
     },
   });
@@ -56,6 +57,7 @@ export async function GET() {
       moderationStatus: item.moderationStatus,
       publishedAt: item.publishedAt,
       createdAt: item.createdAt,
+      viewCount: item.viewCount,
       likeCount: item._count.likes,
     })),
   });

@@ -1,8 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { PostCard, type PostCardItem } from "@/components/post-card";
 import { StoryAvatarRow } from "@/components/story-avatar-row";
+import { UploadForm } from "@/components/upload-form";
+import { useSession } from "@/components/ui";
 
 /**
  * The feed — Twitter/X-style single-column, infinite-scroll vertical
@@ -83,6 +86,8 @@ export default function FeedPage() {
 
       {vipPassActive === false && <VipPassBanner />}
 
+      <FeedComposer />
+
       <StoryAvatarRow />
 
       {initialLoading ? (
@@ -151,6 +156,148 @@ function VipPassBanner() {
     </div>
   );
 }
+
+/**
+ * A way for creators to post without leaving the feed, per direct
+ * request ("create a way for creators to post while on their feed
+ * page, without having to go to the dashboard") — reuses the exact
+ * same UploadForm the Profile page's Content tab already has (see
+ * components/upload-form.tsx), just collapsed behind a single prompt
+ * row until tapped. Shown while the account is active (not REJECTED/
+ * BANNED), matching Content tab's own gating on Profile.
+ *
+ * Deliberately does NOT try to splice the new post into the feed list
+ * above, or assume a reload will show it — /api/feed's own scope rules
+ * narrow the home feed to creators the viewer follows/subscribes to/is
+ * suggested (see that route's comment), so a creator's own fresh post
+ * often won't appear in their OWN feed at all. A confident, honest
+ * "Posted" confirmation with a link to where it definitely does show
+ * up (Content history) beats a silent reload that might show nothing
+ * different and read as broken.
+ */
+function FeedComposer() {
+  const { user } = useSession();
+  const [open, setOpen] = useState(false);
+  const [justPosted, setJustPosted] = useState(false);
+
+  const creatorStatus = user?.creatorProfile?.status;
+  const creatorActive = Boolean(creatorStatus) && creatorStatus !== "REJECTED" && creatorStatus !== "BANNED";
+  if (!creatorActive) return null;
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} style={composerPromptStyle}>
+        <span style={composerPromptIconStyle} aria-hidden="true">
+          +
+        </span>
+        Share something new
+      </button>
+    );
+  }
+
+  return (
+    <div style={composerCardStyle}>
+      <div style={composerHeaderStyle}>
+        <h2 style={{ margin: 0, fontSize: "1rem", fontWeight: 600 }}>Share something new</h2>
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(false);
+            setJustPosted(false);
+          }}
+          style={composerCloseButtonStyle}
+          aria-label="Close composer"
+        >
+          ×
+        </button>
+      </div>
+      {justPosted ? (
+        <div>
+          <p style={{ margin: 0, fontWeight: 600 }}>Posted ✓</p>
+          <p style={{ margin: "0.4rem 0 1rem", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+            It&apos;s live now. Your feed here only shows creators you follow/subscribe to, so a post of your own
+            may not show up in this list — you&apos;ll always find it on{" "}
+            <Link href="/profile?tab=content" style={{ color: "var(--accent)" }}>
+              your Content history
+            </Link>
+            .
+          </p>
+          <button type="button" onClick={() => setJustPosted(false)} style={composerPostAnotherButtonStyle}>
+            Post another
+          </button>
+        </div>
+      ) : (
+        <UploadForm bare onUploaded={() => setJustPosted(true)} />
+      )}
+    </div>
+  );
+}
+
+const composerPromptStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.6rem",
+  width: "100%",
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: "12px",
+  padding: "0.9rem 1.1rem",
+  marginBottom: "1.5rem",
+  color: "var(--text-muted)",
+  fontSize: "0.92rem",
+  fontWeight: 600,
+  cursor: "pointer",
+  textAlign: "left",
+};
+
+const composerPromptIconStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "28px",
+  height: "28px",
+  borderRadius: "50%",
+  background: "var(--accent-soft)",
+  color: "var(--accent)",
+  fontSize: "1.2rem",
+  flexShrink: 0,
+};
+
+const composerCardStyle: React.CSSProperties = {
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: "16px",
+  padding: "1.25rem",
+  marginBottom: "1.5rem",
+};
+
+const composerHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  marginBottom: "1rem",
+};
+
+const composerCloseButtonStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "none",
+  color: "var(--text-muted)",
+  fontSize: "1.3rem",
+  lineHeight: 1,
+  cursor: "pointer",
+  padding: "0.2rem",
+};
+
+const composerPostAnotherButtonStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "1px solid var(--accent)",
+  color: "var(--accent)",
+  borderRadius: "var(--radius)",
+  padding: "0.55rem 1.1rem",
+  fontWeight: 600,
+  fontSize: "0.85rem",
+  cursor: "pointer",
+};
 
 const bannerStyle: React.CSSProperties = {
   background: "var(--surface)",

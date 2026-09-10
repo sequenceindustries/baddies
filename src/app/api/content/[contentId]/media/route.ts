@@ -49,5 +49,24 @@ export async function GET(
     }))
   );
 
+  // Real view count, per direct request ("show views/impressions...
+  // so creators know what performed best") — this route is the one
+  // genuine "someone actually loaded this" choke point every media
+  // fetch already passes through, so no new instrumentation call
+  // sites are needed anywhere else. Excludes the content's own
+  // creator (own_content) and an admin's own preview (admin_override)
+  // — neither is a real audience view, and without this exclusion a
+  // creator checking their own Content tab (which shows a thumbnail
+  // preview per row — see ContentPanel) would inflate their own count
+  // just by looking at it. Best-effort: a failure here should never
+  // turn a successful media fetch into an error for the viewer.
+  if (entitlement.reason !== "own_content" && entitlement.reason !== "admin_override") {
+    try {
+      await db.content.update({ where: { id: content.id }, data: { viewCount: { increment: 1 } } });
+    } catch {
+      // non-critical — the media response above is what actually matters
+    }
+  }
+
   return NextResponse.json({ contentId: content.id, reason: entitlement.reason, media: urls });
 }

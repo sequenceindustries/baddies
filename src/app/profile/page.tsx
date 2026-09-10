@@ -16,10 +16,13 @@ import {
 } from "@/components/ui";
 import { SegmentedTabs } from "@/components/segmented-tabs";
 import { VerificationFlow } from "@/components/verification-capture";
+import { UploadForm } from "@/components/upload-form";
 import { ACCESS_LABEL } from "@/components/cards";
 import { EXCLUSIVE_MIN_PRICE_USD } from "@/lib/creator/pricing";
 
-type ProfileTab = "profile" | "overview" | "content" | "settings" | "application";
+// "overview" merged into "profile" per direct request ("merge Profile
+// and Overview") — see the tabs array and its render block below.
+type ProfileTab = "profile" | "content" | "settings" | "application";
 
 type CreatorStatus =
   | "PENDING"
@@ -43,6 +46,7 @@ interface OwnContentItem {
   moderationStatus: string;
   publishedAt: string | null;
   createdAt: string;
+  viewCount: number;
   likeCount: number;
 }
 
@@ -61,13 +65,19 @@ interface OwnContentItem {
  *
  * Tab set depends on account type: a fan sees just "Profile" (no bar at
  * all — nothing to switch between). A creator additionally gets
- * "Overview"/"Content"/"Settings" (the old dashboard tabs, only while
- * their account is active — not REJECTED/BANNED, matching that page's
- * own original gating) and "Application details" (their own read-only
+ * "Content"/"Settings" (the old dashboard tabs, only while their
+ * account is active — not REJECTED/BANNED, matching that page's own
+ * original gating) and "Application details" (their own read-only
  * submitted identity/verification info, shown regardless of active
  * status). StatusPanel and the pending-verification notice are tab-
  * agnostic — they showed above the tab body on every dashboard tab
  * before this merge, and still do here.
+ *
+ * "Overview" (the onboarding checklist + stats) was its own tab
+ * through an earlier revision — merged directly into "Profile" per a
+ * later direct request ("merge Profile and Overview"), so a creator's
+ * account summary, at-a-glance stats, and editable profile fields all
+ * live on the one tab now instead of being split across two.
  */
 export default function ProfilePage() {
   const { user, loading } = useSession();
@@ -87,7 +97,7 @@ export default function ProfilePage() {
 
   const tabs: { value: ProfileTab; label: string }[] = [{ value: "profile", label: "Profile" }];
   if (creatorActive) {
-    tabs.push({ value: "overview", label: "Overview" }, { value: "content", label: "Content" }, { value: "settings", label: "Settings" });
+    tabs.push({ value: "content", label: "Content" }, { value: "settings", label: "Settings" });
   }
   if (user.creatorProfile) {
     tabs.push({ value: "application", label: "Application details" });
@@ -124,14 +134,18 @@ export default function ProfilePage() {
             foundingPartner={user.foundingPartner}
             createdAt={user.createdAt}
           />
+          {/* Overview merged into this tab per direct request — a
+              creator's onboarding checklist + stats used to be a
+              separate tab, now sits right below the account summary,
+              above the editable profile form. */}
+          {creatorActive && (
+            <div style={overviewGridStyle}>
+              <OnboardingChecklist />
+              <StatsPanel />
+            </div>
+          )}
           <ProfileSettings />
         </>
-      )}
-      {activeTab === "overview" && creatorActive && (
-        <div style={overviewGridStyle}>
-          <OnboardingChecklist />
-          <StatsPanel />
-        </div>
       )}
       {activeTab === "content" && creatorActive && <ContentPanel />}
       {activeTab === "settings" && creatorActive && <CreatorSettingsPanel />}
@@ -770,6 +784,12 @@ function ContentPanel() {
   const [items, setItems] = useState<OwnContentItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // "Best performing" per direct request ("make it a useful section, so
+  // creators know what performed best") — sorts by the new real
+  // viewCount (ties broken by likes) instead of the default reverse-
+  // chronological order, which stays the default since that's what you
+  // want when managing/finding a specific post, not comparing them.
+  const [sortMode, setSortMode] = useState<"newest" | "top">("newest");
 
   function reload() {
     setLoadingItems(true);
@@ -794,28 +814,62 @@ function ContentPanel() {
     if (res.ok) reload();
   }
 
+  const sortedItems =
+    sortMode === "newest"
+      ? items
+      : [...items].sort((a, b) => b.viewCount - a.viewCount || b.likeCount - a.likeCount);
+
   return (
     <>
       <FeaturedImagePanel />
       <UploadForm onUploaded={reload} />
 
-      <h2 style={sectionHeadingStyle}>Content history</h2>
+      <div style={contentHistoryHeaderStyle}>
+        <h2 style={{ ...sectionHeadingStyle, margin: 0 }}>Content history</h2>
+        {items.length > 1 && (
+          <div style={sortToggleGroupStyle}>
+            <button
+              type="button"
+              onClick={() => setSortMode("newest")}
+              style={sortMode === "newest" ? sortToggleActiveStyle : sortToggleStyle}
+            >
+              Newest
+            </button>
+            <button
+              type="button"
+              onClick={() => setSortMode("top")}
+              style={sortMode === "top" ? sortToggleActiveStyle : sortToggleStyle}
+            >
+              Best performing
+            </button>
+          </div>
+        )}
+      </div>
       {loadingItems ? (
         <p style={{ color: "var(--text-muted)" }}>Loading...</p>
       ) : items.length === 0 ? (
         <p style={{ color: "var(--text-muted)" }}>Nothing uploaded yet.</p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          {items.map((item) => {
+          {sortedItems.map((item) => {
             const removed = item.status === "REMOVED";
+            const dateLabel = new Date(item.publishedAt ?? item.createdAt).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            });
             return (
               <div key={item.contentId} style={rowCardStyle}>
-                <div style={{ opacity: removed ? 0.55 : 1 }}>
+                <ContentThumbnail contentId={item.contentId} mediaType={item.mediaType} dimmed={removed} />
+                <div style={{ opacity: removed ? 0.55 : 1, flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: "0.9rem" }}>{item.caption || "(no caption)"}</div>
                   <div style={mutedSmallStyle}>
-                    {item.mediaType} · {ACCESS_LABEL[item.accessLevel]} ·{" "}
-                    {removed ? "removed" : item.publishedAt ? "live" : item.status.toLowerCase()} · ♥{" "}
-                    {item.likeCount}
+                    {dateLabel} · {ACCESS_LABEL[item.accessLevel]} ·{" "}
+                    {removed ? "removed" : item.publishedAt ? "live" : item.status.toLowerCase()}
+                  </div>
+                  <div style={mutedSmallStyle}>
+                    👁 {item.viewCount.toLocaleString()} {item.viewCount === 1 ? "view" : "views"} · ♥{" "}
+                    {item.likeCount.toLocaleString()}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
@@ -846,214 +900,78 @@ function ContentPanel() {
   );
 }
 
-const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100MB per file — matches the API route's own ceiling
+/**
+ * A small, lazily-loaded preview per Content history row, per direct
+ * request ("include preview of content") — same IntersectionObserver-
+ * gated /media fetch PostCard/GridThumbnail already use, so a long
+ * history list doesn't fire dozens of media requests at once. This is
+ * the creator's OWN content, so /media's entitlement check always
+ * resolves to "own_content" — and that route's own comment explains why
+ * that reason is specifically excluded from the real view-count
+ * increment, so a creator checking their own history never inflates
+ * their own numbers just by looking at it. Renders a static first frame
+ * for video (no autoplay/controls — this is a list thumbnail, not a
+ * player) and a plain note icon for audio, which has no visual frame.
+ */
+function ContentThumbnail({
+  contentId,
+  mediaType,
+  dimmed,
+}: {
+  contentId: string;
+  mediaType: "IMAGE" | "VIDEO" | "AUDIO";
+  dimmed: boolean;
+}) {
+  const [media, setMedia] = useState<{ mimeType: string; signedUrl: string } | null>(null);
+  const [inView, setInView] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const tileRef = useRef<HTMLDivElement | null>(null);
+  const fetchedRef = useRef(false);
 
-function UploadForm({ onUploaded }: { onUploaded: () => void }) {
-  const [caption, setCaption] = useState("");
-  const [accessLevel, setAccessLevel] = useState<AccessLevel>("FREE");
-  const [files, setFiles] = useState<File[]>([]);
-  const [dragActive, setDragActive] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Live thumbnail/video previews — "here's what you're about to post"
-  // feedback instead of a bare filename list, per direct request ("make
-  // the content upload more social media like too"). Object URLs are
-  // regenerated whenever `files` changes and every URL this effect
-  // created is revoked on the way out (both the next run and unmount),
-  // so adding/removing files repeatedly never leaks memory.
-  const [previews, setPreviews] = useState<string[]>([]);
   useEffect(() => {
-    const urls = files.map((f) => URL.createObjectURL(f));
-    setPreviews(urls);
-    return () => urls.forEach((u) => URL.revokeObjectURL(u));
-  }, [files]);
+    const el = tileRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "300px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
-  function addFiles(fileList: FileList | File[] | null) {
-    setError(null);
-    const chosen = Array.from(fileList ?? []);
-    const tooLarge = chosen.filter((f) => f.size > MAX_UPLOAD_BYTES);
-    if (tooLarge.length > 0) {
-      setError(`${tooLarge.length === 1 ? "One file exceeds" : `${tooLarge.length} files exceed`} the 100MB limit and won't be included: ${tooLarge.map((f) => f.name).join(", ")}`);
-    }
-    const ok = chosen.filter((f) => f.size <= MAX_UPLOAD_BYTES);
-    if (ok.length > 0) setFiles((prev) => [...prev, ...ok]);
-  }
-
-  function removeFile(index: number) {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
-    e.preventDefault();
-    setDragActive(false);
-    addFiles(e.dataTransfer.files);
-  }
-
-  async function uploadOne(file: File): Promise<string | null> {
-    const mediaType = file.type.startsWith("video/")
-      ? "VIDEO"
-      : file.type.startsWith("audio/")
-        ? "AUDIO"
-        : "IMAGE";
-    const base64Data = await fileToBase64(file);
-    const res = await fetch("/api/creator/content", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mediaType,
-        mimeType: file.type,
-        base64Data,
-        accessLevel,
-        caption: caption || undefined,
-      }),
-    });
-    if (res.ok) return null;
-    const body = await res.json().catch(() => null);
-    return typeof body?.error === "string" ? body.error : "Upload failed.";
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (files.length === 0) {
-      setError("Choose at least one file to upload.");
-      return;
-    }
-    setSubmitting(true);
-    setError(null);
-
-    // Sequential, not parallel — this is one creator's own upload queue,
-    // not a race; keeping it sequential also keeps "Uploading 2 of 5..."
-    // an honest, literal count rather than an approximation.
-    const failures: string[] = [];
-    for (const [i, currentFile] of files.entries()) {
-      setProgress({ done: i, total: files.length });
-      const err = await uploadOne(currentFile);
-      if (err) failures.push(`${currentFile.name}: ${err}`);
-    }
-    setProgress(null);
-    setSubmitting(false);
-
-    if (failures.length > 0) {
-      setError(
-        failures.length === files.length
-          ? `Upload failed for all ${files.length} file(s).\n${failures.join("\n")}`
-          : `${files.length - failures.length} of ${files.length} uploaded. ${failures.length} failed:\n${failures.join("\n")}`
-      );
-    }
-    setCaption("");
-    setFiles([]);
-    onUploaded();
-  }
+  useEffect(() => {
+    if (!inView || fetchedRef.current) return;
+    fetchedRef.current = true;
+    fetch(`/api/content/${contentId}/media`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (body?.media?.[0]) setMedia(body.media[0]);
+        else setFailed(true);
+      })
+      .catch(() => setFailed(true));
+  }, [inView, contentId]);
 
   return (
-    <div style={{ ...cardStyle, marginBottom: "2rem" }}>
-      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Upload content</h2>
-      <p style={{ ...mutedSmallStyle, marginTop: "-0.6rem", marginBottom: "1.1rem" }}>
-        Goes live immediately — no admin approval, no waiting.
-      </p>
-      <form onSubmit={handleSubmit}>
-        {error && <div style={{ ...errorBannerStyle, whiteSpace: "pre-line" }}>{error}</div>}
-
-        <Field label="Photos & videos" hint="Up to 100MB per file — drop several at once to post them all together.">
-          {files.length === 0 ? (
-            <div
-              style={dragActive ? { ...dropzoneStyle, ...dropzoneActiveStyle } : dropzoneStyle}
-              onClick={() => fileInputRef.current?.click()}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragActive(true);
-              }}
-              onDragLeave={() => setDragActive(false)}
-              onDrop={handleDrop}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click();
-              }}
-            >
-              <UploadCloudIcon />
-              <span style={dropzoneTextStyle}>Drag photos or videos here, or click to browse</span>
-            </div>
-          ) : (
-            <div style={previewGridStyle}>
-              {files.map((file, i) => (
-                <div key={`${file.name}-${file.lastModified}-${i}`} style={previewTileStyle}>
-                  {file.type.startsWith("video/") ? (
-                    <video src={previews[i]} style={previewMediaStyle} muted playsInline />
-                  ) : file.type.startsWith("image/") ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={previews[i]} alt="" style={previewMediaStyle} />
-                  ) : (
-                    <span style={previewAudioIconStyle}>♪</span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => removeFile(i)}
-                    style={previewRemoveButtonStyle}
-                    aria-label={`Remove ${file.name}`}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-              <button type="button" onClick={() => fileInputRef.current?.click()} style={previewAddTileStyle} aria-label="Add more files">
-                +
-              </button>
-            </div>
-          )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,video/*,audio/*"
-            multiple
-            onChange={(e) => {
-              addFiles(e.target.files);
-              e.target.value = "";
-            }}
-            style={hiddenFileInputStyle}
-          />
-        </Field>
-
-        <Field label="Caption" hint="Optional. Applied to every file in this batch.">
-          <input style={inputStyle} value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={2000} />
-        </Field>
-
-        <Field
-          label="Access level"
-          hint="Teasers: anyone. VIP: unlocked by the platform-wide VIP pass. Exclusive: only your own subscribers."
-        >
-          <select
-            style={inputStyle}
-            value={accessLevel}
-            onChange={(e) => setAccessLevel(e.target.value as AccessLevel)}
-          >
-            <option value="FREE">Teasers</option>
-            <option value="VIP">VIP</option>
-            <option value="VVIP">Exclusive</option>
-          </select>
-        </Field>
-
-        <button type="submit" style={primaryButtonStyle} disabled={submitting}>
-          {submitting && progress ? `Uploading ${progress.done + 1} of ${progress.total}...` : submitting ? "Uploading..." : "Upload"}
-        </button>
-      </form>
+    <div ref={tileRef} style={{ ...contentThumbnailStyle, opacity: dimmed ? 0.55 : 1 }}>
+      {media ? (
+        mediaType === "VIDEO" ? (
+          <video src={media.signedUrl} muted style={contentThumbnailMediaStyle} />
+        ) : mediaType === "AUDIO" ? (
+          <span aria-hidden="true">♪</span>
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={media.signedUrl} alt="" style={contentThumbnailMediaStyle} />
+        )
+      ) : failed ? (
+        <span aria-hidden="true">—</span>
+      ) : null}
     </div>
   );
-}
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result.split(",")[1] ?? "");
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 }
 
 // Widened from the original Profile-only 620px to match the old
@@ -1164,6 +1082,58 @@ const rowCardStyle: React.CSSProperties = {
   gap: "1rem",
 };
 
+const contentThumbnailStyle: React.CSSProperties = {
+  width: "56px",
+  height: "56px",
+  borderRadius: "10px",
+  background: "var(--surface-raised)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "var(--text-muted)",
+  fontSize: "1.2rem",
+  overflow: "hidden",
+  flexShrink: 0,
+};
+
+const contentThumbnailMediaStyle: React.CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+};
+
+const contentHistoryHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  flexWrap: "wrap",
+  gap: "0.6rem",
+  marginBottom: "0.9rem",
+};
+
+const sortToggleGroupStyle: React.CSSProperties = {
+  display: "flex",
+  gap: "0.4rem",
+};
+
+const sortToggleStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "1px solid var(--border)",
+  color: "var(--text-muted)",
+  borderRadius: "999px",
+  padding: "0.35rem 0.85rem",
+  fontSize: "0.78rem",
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+const sortToggleActiveStyle: React.CSSProperties = {
+  ...sortToggleStyle,
+  background: "var(--accent)",
+  borderColor: "var(--accent)",
+  color: "var(--bg)",
+};
+
 const publishButtonStyle: React.CSSProperties = {
   background: "var(--accent)",
   color: "var(--bg)",
@@ -1187,116 +1157,3 @@ const deleteButtonStyle: React.CSSProperties = {
   cursor: "pointer",
   flexShrink: 0,
 };
-
-// Dropzone — replaces the old plain "Choose files" button + filename
-// text with a real drag-and-drop target, per direct request ("make the
-// content upload more social media like too"). Dashed border reads as
-// "drop things here" without borrowing any other component's solid-
-// border card language.
-const dropzoneStyle: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: "0.6rem",
-  padding: "2.25rem 1.5rem",
-  borderRadius: "16px",
-  border: "1.5px dashed var(--border)",
-  background: "var(--surface-raised)",
-  color: "var(--text-muted)",
-  cursor: "pointer",
-  marginTop: "0.4rem",
-  transition: "border-color 0.15s ease, background 0.15s ease",
-};
-
-const dropzoneActiveStyle: React.CSSProperties = {
-  borderColor: "var(--accent)",
-  background: "var(--accent-soft)",
-};
-
-const dropzoneTextStyle: React.CSSProperties = {
-  fontSize: "0.85rem",
-  textAlign: "center",
-};
-
-// Instagram/TikTok-style "here's what you're about to post" thumbnail
-// grid, once at least one file is chosen — replaces the dropzone in
-// place rather than sitting below it.
-const previewGridStyle: React.CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: "0.6rem",
-  marginTop: "0.4rem",
-};
-
-const previewTileStyle: React.CSSProperties = {
-  position: "relative",
-  width: "84px",
-  height: "84px",
-  borderRadius: "12px",
-  overflow: "hidden",
-  background: "var(--surface-raised)",
-  flexShrink: 0,
-};
-
-const previewMediaStyle: React.CSSProperties = {
-  width: "100%",
-  height: "100%",
-  objectFit: "cover",
-};
-
-const previewAudioIconStyle: React.CSSProperties = {
-  display: "flex",
-  width: "100%",
-  height: "100%",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: "1.6rem",
-  color: "var(--accent)",
-};
-
-const previewRemoveButtonStyle: React.CSSProperties = {
-  position: "absolute",
-  top: "4px",
-  right: "4px",
-  width: "20px",
-  height: "20px",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  borderRadius: "50%",
-  border: "none",
-  background: "rgba(0, 0, 0, 0.65)",
-  color: "#fff",
-  fontSize: "0.9rem",
-  lineHeight: 1,
-  cursor: "pointer",
-};
-
-const previewAddTileStyle: React.CSSProperties = {
-  width: "84px",
-  height: "84px",
-  borderRadius: "12px",
-  border: "1.5px dashed var(--border)",
-  background: "transparent",
-  color: "var(--text-muted)",
-  fontSize: "1.5rem",
-  cursor: "pointer",
-  flexShrink: 0,
-};
-
-const hiddenFileInputStyle: React.CSSProperties = { display: "none" };
-
-function UploadCloudIcon() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M7.5 17.5h8.75a3.25 3.25 0 0 0 .5-6.46 4.5 4.5 0 0 0-8.66-1.59A3.75 3.75 0 0 0 7.5 17.5Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-      <path d="M12 10.5v6.5M9.5 13l2.5-2.5 2.5 2.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
