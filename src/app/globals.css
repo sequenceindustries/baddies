@@ -420,3 +420,23 @@ a[href]:hover {
         grid-template-columns: repeat(3, 1fr);
     }
 }
+
+/* Admin Command Centre's "Platform" KPI row (Overview tab) — a fixed
+   column count instead of heroStatGridStyle's auto-fit(minmax(200px,1fr)).
+   auto-fit greedily fills each row with however many 200px+ columns
+   physically fit, which for exactly 5 cards on a typical wide desktop
+   computed 5 columns — correct only by coincidence; add or remove one
+   card (or resize the window) and it strands a card alone on its own
+   mostly-empty row, same failure mode .discovery-grid's own fixed
+   repeat(N, 1fr) + breakpoint already avoids for the same reason. */
+.overview-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1rem;
+}
+
+@media (max-width: 680px) {
+    .overview-stat-grid {
+        grid-template-columns: repeat(1, 1fr);
+    }
+}

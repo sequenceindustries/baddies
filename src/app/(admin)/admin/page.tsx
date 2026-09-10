@@ -395,42 +395,60 @@ function OverviewPanel({
 
       {data && (
         <>
-          {/* Headline row — the numbers an admin checks first. Fewer,
-              larger cards than a wall of equally-weighted stats;
-              clickable where a real destination exists. */}
-          <div style={heroStatGridStyle}>
-            <KpiCard
-              label="Total users"
-              value={data.kpis.totalUsers.value.toLocaleString()}
-              newInRange={data.kpis.totalUsers.newInRange}
-              deltaPct={data.kpis.totalUsers.deltaPct}
-              onClick={() => onNavigate("Members")}
-            />
-            <KpiCard
-              label="Creators"
-              value={data.kpis.creators.value.toLocaleString()}
-              newInRange={data.kpis.creators.newInRange}
-              deltaPct={data.kpis.creators.deltaPct}
-              onClick={() => onNavigate("Creators")}
-            />
-            <KpiCard label="Active subscriptions" value={data.kpis.activeSubscriptions.value.toLocaleString()} />
-            <KpiCard
-              label="Revenue"
-              value={money(data.kpis.revenue.inRangeUsd)}
-              caption={`${money(data.kpis.revenue.allTimeUsd)} all-time`}
-            />
-            <KpiCard
-              label="Content"
-              value={data.kpis.content.value.toLocaleString()}
-              newInRange={data.kpis.content.newInRange}
-              deltaPct={data.kpis.content.deltaPct}
-              onClick={() => onNavigate("Content")}
-            />
-            <KpiCard label="Open issues" value={data.kpis.openIssues.toLocaleString()} alert={data.kpis.openIssues > 0} />
-          </div>
+          {/* What needs YOUR attention, first — before any general
+              health metrics. Its own heading carries the same total
+              openIssues used to show as a disconnected 6th KPI card
+              below (openModerationCases + pendingFoundingReview +
+              pendingCreatorReview + pendingPayouts, see command-centre/
+              route.ts) — that was the same number shown twice, in two
+              unconnected places, at two different levels of detail.
+              One count, attached to its own real breakdown, instead. */}
+          <ActionRequiredSection items={data.actionRequired} openIssues={data.kpis.openIssues} onNavigate={onNavigate} />
+
+          {/* Platform health — the numbers an admin skims after acting
+              on anything urgent above. Fewer, larger cards than a wall
+              of equally-weighted stats; clickable where a real
+              destination exists. Fixed 5-column grid (.overview-stat-
+              grid, globals.css) rather than heroStatGridStyle's
+              auto-fit — auto-fit strands a card alone on an otherwise-
+              empty row the moment the card count and window width don't
+              divide evenly, which is exactly what happened with the old
+              6th "Open issues" card (now moved above, into its own
+              section) at typical desktop widths. */}
+          <section style={{ marginBottom: "2.5rem" }}>
+            <h2 style={sectionHeadingStyle}>Platform</h2>
+            <div className="overview-stat-grid">
+              <KpiCard
+                label="Total users"
+                value={data.kpis.totalUsers.value.toLocaleString()}
+                newInRange={data.kpis.totalUsers.newInRange}
+                deltaPct={data.kpis.totalUsers.deltaPct}
+                onClick={() => onNavigate("Members")}
+              />
+              <KpiCard
+                label="Creators"
+                value={data.kpis.creators.value.toLocaleString()}
+                newInRange={data.kpis.creators.newInRange}
+                deltaPct={data.kpis.creators.deltaPct}
+                onClick={() => onNavigate("Creators")}
+              />
+              <KpiCard label="Active subscriptions" value={data.kpis.activeSubscriptions.value.toLocaleString()} />
+              <KpiCard
+                label="Revenue"
+                value={money(data.kpis.revenue.inRangeUsd)}
+                caption={`${money(data.kpis.revenue.allTimeUsd)} all-time`}
+              />
+              <KpiCard
+                label="Content"
+                value={data.kpis.content.value.toLocaleString()}
+                newInRange={data.kpis.content.newInRange}
+                deltaPct={data.kpis.content.deltaPct}
+                onClick={() => onNavigate("Content")}
+              />
+            </div>
+          </section>
 
           <FoundingBaddiesSection data={data.foundingBaddies} onDrill={onDrillFounding} />
-          <ActionRequiredSection items={data.actionRequired} onNavigate={onNavigate} />
 
           <section style={{ marginBottom: "2.5rem" }}>
             <h2 style={sectionHeadingStyle}>Growth</h2>
@@ -555,14 +573,19 @@ function FoundingBaddiesSection({
 
 function ActionRequiredSection({
   items,
+  openIssues,
   onNavigate,
 }: {
   items: CommandCentreData["actionRequired"];
+  openIssues: number;
   onNavigate: (tab: Tab) => void;
 }) {
   return (
     <section style={{ marginBottom: "2.5rem" }}>
-      <h2 style={sectionHeadingStyle}>Action required</h2>
+      <h2 style={sectionHeadingStyle}>
+        Action required
+        {openIssues > 0 && <span style={{ color: "var(--danger)" }}> ({openIssues})</span>}
+      </h2>
       {items.length === 0 ? (
         <p style={{ color: "var(--success)", fontWeight: 600 }}>You&apos;re all caught up.</p>
       ) : (
