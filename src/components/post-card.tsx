@@ -682,26 +682,42 @@ const postCaptionNameStyle: React.CSSProperties = {
   fontWeight: 600,
 };
 
+// Fixed 4:5 box (Instagram's own default feed-post ratio) with
+// object-fit: cover on the media inside it, per direct feedback ("make
+// sure the image fills the container, no black space on the sides") —
+// the previous object-fit: contain + black background pillar/letter-
+// boxed any photo whose own aspect ratio didn't exactly match the
+// rendered width. A fixed box + cover always fills edge-to-edge
+// (cropping instead of padding), and as a side effect gives every post
+// in the feed the same rhythm while scrolling, matching real feed apps
+// rather than every card being a different height.
 const postMediaWrapStyle: React.CSSProperties = {
   position: "relative",
   overflow: "hidden",
   background: "var(--surface-raised)",
-  minHeight: "220px",
+  aspectRatio: "4 / 5",
   display: "flex",
   cursor: "pointer",
+  // On top of postCardStyle's own 0.6rem flex gap — per direct
+  // feedback ("make space between image and caption and user handle
+  // at the top"), the media needed clearer separation from the header
+  // above and the caption below than the tighter gaps used elsewhere
+  // in the card (e.g. context line to media, engagement row to
+  // caption), which stay untouched.
+  marginTop: "0.5rem",
+  marginBottom: "0.5rem",
 };
 
 const postMediaElementStyle: React.CSSProperties = {
   width: "100%",
-  maxHeight: "620px",
-  objectFit: "contain",
+  height: "100%",
+  objectFit: "cover",
   display: "block",
-  background: "#000",
 };
 
 const postMediaLoadingStyle: React.CSSProperties = {
   width: "100%",
-  minHeight: "220px",
+  height: "100%",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",

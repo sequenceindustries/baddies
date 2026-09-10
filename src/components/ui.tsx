@@ -208,6 +208,7 @@ export function Nav({ comingSoon = false }: { comingSoon?: boolean }) {
             comingSoon={comingSoon}
             onLogout={handleLogout}
             layout="row"
+            pathname={pathname}
           />
         )}
       </div>
@@ -235,6 +236,7 @@ export function Nav({ comingSoon = false }: { comingSoon?: boolean }) {
           comingSoon={comingSoon}
           onLogout={handleLogout}
           layout="column"
+          pathname={pathname}
         />
       </div>
     )}
@@ -257,6 +259,7 @@ function NavLinks({
   comingSoon,
   onLogout,
   layout,
+  pathname,
 }: {
   user: SessionUser | null;
   hideAuthLinks: boolean;
@@ -264,7 +267,17 @@ function NavLinks({
   comingSoon: boolean;
   onLogout: () => void;
   layout: "row" | "column";
+  // Minimal current-page indication, per direct request ("highlight
+  // where the user is... minimal indication") — just brightens/bolds
+  // whichever link's href matches the current route (navLinkStyle,
+  // below) rather than adding a background pill or border; every other
+  // link stays the same muted gray it always was.
+  pathname: string;
 }) {
+  function navLinkStyle(href: string, base: React.CSSProperties) {
+    return pathname === href ? { ...base, ...activeLinkStyle } : base;
+  }
+
   if (user) {
     return (
       <>
@@ -305,28 +318,28 @@ function NavLinks({
             a partner's own business-specific tool last rather than
             pushed in front of them. */}
         {user.role === "ADMIN" && (
-          <Link href="/admin" style={linkStyle}>
+          <Link href="/admin" style={navLinkStyle("/admin", linkStyle)}>
             Admin
           </Link>
         )}
-        <Link href="/feed" style={linkStyle}>
+        <Link href="/feed" style={navLinkStyle("/feed", linkStyle)}>
           Home
         </Link>
         {user.role === "FAN" && (
-          <Link href="/fan-subscriptions" style={linkStyle}>
+          <Link href="/fan-subscriptions" style={navLinkStyle("/fan-subscriptions", linkStyle)}>
             My subscriptions
           </Link>
         )}
-        <Link href="/discovery" style={linkStyle}>
+        <Link href="/discovery" style={navLinkStyle("/discovery", linkStyle)}>
           Discover
         </Link>
         {(user.role === "FAN" || user.role === "PARTNER") && !user.creatorProfile && (
-          <Link href="/apply" style={primaryLinkStyle}>
+          <Link href="/apply" style={navLinkStyle("/apply", primaryLinkStyle)}>
             Become a creator
           </Link>
         )}
         {user.foundingPartner && (
-          <Link href="/partner-dashboard" style={linkStyle}>
+          <Link href="/partner-dashboard" style={navLinkStyle("/partner-dashboard", linkStyle)}>
             Partner Dashboard
           </Link>
         )}
@@ -351,7 +364,7 @@ function NavLinks({
   // back in, just "Log in" alone, not the Join/Founding-Baddie CTA.
   if (hideAuthLinks) {
     return showLoginLink ? (
-      <Link href="/login" style={linkStyle}>
+      <Link href="/login" style={navLinkStyle("/login", linkStyle)}>
         Log in
       </Link>
     ) : null;
@@ -359,7 +372,7 @@ function NavLinks({
 
   return (
     <>
-      <Link href="/login" style={linkStyle}>
+      <Link href="/login" style={navLinkStyle("/login", linkStyle)}>
         Sign in
       </Link>
       {comingSoon ? (
@@ -369,11 +382,11 @@ function NavLinks({
         // Founding Baddies is the one fan/creator-facing path that
         // actually works right now, so that's the CTA new visitors get
         // instead.
-        <Link href="/founding-baddies" style={primaryLinkStyle}>
+        <Link href="/founding-baddies" style={navLinkStyle("/founding-baddies", primaryLinkStyle)}>
           Become a Founding Baddie
         </Link>
       ) : (
-        <Link href="/register" style={primaryLinkStyle}>
+        <Link href="/register" style={navLinkStyle("/register", primaryLinkStyle)}>
           Join
         </Link>
       )}
@@ -1194,6 +1207,16 @@ const linkStyle: React.CSSProperties = {
 const primaryLinkStyle: React.CSSProperties = {
   ...linkStyle,
   color: "var(--accent)",
+  fontWeight: 600,
+};
+
+// Minimal current-page indication (NavLinks' own navLinkStyle helper) —
+// just brighter + bold, layered on top of whichever base style
+// (linkStyle or primaryLinkStyle) the link already had, per direct
+// request ("highlight where the user is... minimal indication") rather
+// than a background pill/underline.
+const activeLinkStyle: React.CSSProperties = {
+  color: "var(--text)",
   fontWeight: 600,
 };
 

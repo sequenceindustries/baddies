@@ -67,8 +67,9 @@ interface OwnContentItem {
  * all — nothing to switch between). A creator additionally gets
  * "Content"/"Settings" (the old dashboard tabs, only while their
  * account is active — not REJECTED/BANNED, matching that page's own
- * original gating) and "Application details" (their own read-only
- * submitted identity/verification info, shown regardless of active
+ * original gating) and "Personal Information" (labeled "Application
+ * details" through an earlier revision — their own read-only submitted
+ * identity/verification info, shown regardless of active
  * status). StatusPanel and the pending-verification notice are tab-
  * agnostic — they showed above the tab body on every dashboard tab
  * before this merge, and still do here.
@@ -100,7 +101,7 @@ export default function ProfilePage() {
     tabs.push({ value: "content", label: "Content" }, { value: "settings", label: "Settings" });
   }
   if (user.creatorProfile) {
-    tabs.push({ value: "application", label: "Application details" });
+    tabs.push({ value: "application", label: "Personal Information" });
   }
   // A tab that only appears while the account is active shouldn't leave
   // the viewer stranded on it if their status changes underneath them
@@ -370,7 +371,7 @@ function ApplicationDetailsPanel() {
 
   return (
     <div style={{ ...cardStyle, marginBottom: "2rem" }}>
-      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Application details</h2>
+      <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Personal Information</h2>
       <p style={{ color: "var(--text-muted)", fontSize: "0.82rem", margin: "0 0 1rem" }}>
         From your creator application and identity verification. Can&apos;t be changed here.
       </p>
