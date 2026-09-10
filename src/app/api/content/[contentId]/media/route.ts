@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
 import { canAccessContent } from "@/lib/entitlements/content";
 import { getMediaStorageProvider } from "@/lib/providers/storage";
+import { selectDisplayPerPosition } from "@/lib/media/carousel";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -22,7 +23,7 @@ export async function GET(
 
   const content = await db.content.findUnique({
     where: { id: params.contentId },
-    include: { mediaAssets: true },
+    include: { mediaAssets: { orderBy: { position: "asc" } } },
   });
   if (!content) {
     return NextResponse.json({ error: "Content not found." }, { status: 404 });
@@ -41,18 +42,20 @@ export async function GET(
   }
 
   const storage = getMediaStorageProvider();
-  // Prefer the generated DISPLAY derivative (capped-dimension WebP, see
-  // image-pipeline.ts) over the ORIGINAL when one exists — video/audio
-  // and every piece of content uploaded before this pipeline shipped has
-  // no DISPLAY asset, so they fall through to ORIGINAL automatically.
-  // Response shape is unchanged either way: one entry per content.
-  const displayAssets = content.mediaAssets.filter((a: (typeof content.mediaAssets)[number]) => a.kind === "DISPLAY");
-  const chosenAssets = displayAssets.length > 0 ? displayAssets : content.mediaAssets;
+  // One entry per carousel slide (position), preferring each slide's
+  // generated DISPLAY derivative (capped-dimension WebP, see
+  // image-pipeline.ts) over its ORIGINAL when one exists — video/audio
+  // slides and every piece of content uploaded before this pipeline
+  // shipped have no DISPLAY asset, so they fall through to ORIGINAL
+  // automatically. Sorted by position — carousel order is the response
+  // array's own order, callers don't need to re-derive it.
+  const chosenAssets = selectDisplayPerPosition(content.mediaAssets);
   const urls = await Promise.all(
-    chosenAssets.map(async (asset: (typeof content.mediaAssets)[number]) => ({
+    chosenAssets.map(async (asset: (typeof chosenAssets)[number]) => ({
       mediaAssetId: asset.id,
       mimeType: asset.mimeType,
       signedUrl: await storage.getSignedReadUrl(asset.storageKey),
+      position: asset.position,
     }))
   );
 

@@ -655,9 +655,16 @@ model MediaAsset {
   kind            MediaAssetKind @default(ORIGINAL)
   width           Int?
   height          Int?
-  createdAt       DateTime       @default(now())
+  // Which carousel slide this asset belongs to within its Content — a
+  // multi-item post has multiple positions, each with its own ORIGINAL
+  // (+ optional DISPLAY) pair. Defaults to 0, which is correct for every
+  // pre-carousel row: a single-item post is effectively a 1-item
+  // carousel already at position 0.
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
 
   @@index([contentId])
+  @@index([contentId, position])
   @@map("media_assets")
 }
 

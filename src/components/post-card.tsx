@@ -33,6 +33,10 @@ export interface PostCardItem {
   context: "following" | "trending" | "suggested" | null;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
 const CONTEXT_LABEL: Record<NonNullable<PostCardItem["context"]>, string> = {
   following: "Following",
   trending: "Trending",
@@ -58,7 +62,8 @@ const CONTEXT_LABEL: Record<NonNullable<PostCardItem["context"]>, string> = {
  * ContentCard itself is untouched; this is a new, separate component.
  */
 export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockChange?: (unlocked: boolean) => void }) {
-  const [media, setMedia] = useState<{ mimeType: string; signedUrl: string } | null>(null);
+  const [mediaItems, setMediaItems] = useState<{ mimeType: string; signedUrl: string; position: number }[]>([]);
+  const [activeIndex, setActiveIndex] = useState(0);
   const [loading, setLoading] = useState(!item.lock.locked);
   const [locked, setLocked] = useState(item.lock.locked);
   const [error, setError] = useState<string | null>(null);
@@ -72,9 +77,13 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
   const [shareCopied, setShareCopied] = useState(false);
   const lastTapRef = useRef(0);
   const pendingTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const fetchedRef = useRef(false);
   const rootRef = useRef<HTMLElement | null>(null);
   const [inView, setInView] = useState(false);
+
+  const media = mediaItems[activeIndex] ?? null;
+  const isCarousel = mediaItems.length > 1;
 
   async function fetchMedia() {
     if (fetchedRef.current) return;
@@ -89,8 +98,9 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
       return;
     }
     const body = await res.json();
-    if (body.media?.[0]) {
-      setMedia(body.media[0]);
+    if (body.media?.length > 0) {
+      setMediaItems(body.media);
+      setActiveIndex(0);
       setLocked(false);
       onLockChange?.(true);
     }
@@ -141,15 +151,22 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
     }
   }
 
-  function handleMediaTap() {
+  // A single-item post: an unparameterized tap opens the full-view
+  // lightbox, exactly as before — zero change for the overwhelming
+  // majority of posts. A multi-item (carousel) post drops the lightbox
+  // entirely (matching real Instagram — a feed carousel tap navigates,
+  // it doesn't zoom) and instead advances/retreats the active slide;
+  // double-tap-to-like fires identically either way, from either tap
+  // zone, on any item count — same lastTapRef/300ms window throughout.
+  function handleMediaTap(direction?: "prev" | "next") {
     const now = Date.now();
     const isDoubleTap = now - lastTapRef.current < 300;
     lastTapRef.current = now;
 
     if (isDoubleTap) {
-      // Cancel the first tap's still-pending "open the lightbox" timer
-      // — without this, a genuine double-tap-to-like would still pop
-      // the lightbox open ~300ms later regardless.
+      // Cancel the first tap's still-pending "open the lightbox/advance
+      // the slide" timer — without this, a genuine double-tap-to-like
+      // would still fire that ~300ms later regardless.
       if (pendingTapTimeoutRef.current) {
         clearTimeout(pendingTapTimeoutRef.current);
         pendingTapTimeoutRef.current = null;
@@ -163,15 +180,45 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
       return;
     }
 
-    // A single tap opens the full view, but only after waiting out the
-    // double-tap window — cancelable by the branch above if a second
-    // tap actually arrives in time.
-    if (media) {
+    // A single tap acts, but only after waiting out the double-tap
+    // window — cancelable by the branch above if a second tap actually
+    // arrives in time.
+    if (direction) {
+      pendingTapTimeoutRef.current = setTimeout(() => {
+        setActiveIndex((i) => clamp(i + (direction === "next" ? 1 : -1), 0, mediaItems.length - 1));
+        pendingTapTimeoutRef.current = null;
+      }, 300);
+    } else if (media) {
       pendingTapTimeoutRef.current = setTimeout(() => {
         setExpanded(true);
         pendingTapTimeoutRef.current = null;
       }, 300);
     }
+  }
+
+  // Hand-rolled swipe detection (no gesture library exists anywhere in
+  // this codebase) — only active on a real carousel. A genuine swipe is
+  // unambiguous (no double-tap window to wait out): it navigates
+  // immediately and cancels any pending single-tap timer the same way a
+  // real double-tap already does. The 1.5x horizontal-vs-vertical ratio
+  // keeps a normal vertical feed-scroll that happens to start on the
+  // media from ever being mistaken for a slide change.
+  const SWIPE_THRESHOLD_PX = 50;
+  function onTouchStart(e: React.TouchEvent) {
+    touchStartRef.current = { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY };
+  }
+  function onTouchEnd(e: React.TouchEvent) {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start || !isCarousel) return;
+    const dx = e.changedTouches[0]!.clientX - start.x;
+    const dy = e.changedTouches[0]!.clientY - start.y;
+    if (Math.abs(dx) < SWIPE_THRESHOLD_PX || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    if (pendingTapTimeoutRef.current) {
+      clearTimeout(pendingTapTimeoutRef.current);
+      pendingTapTimeoutRef.current = null;
+    }
+    setActiveIndex((i) => clamp(i + (dx < 0 ? 1 : -1), 0, mediaItems.length - 1));
   }
 
   async function handleUnlock() {
@@ -244,21 +291,39 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
         <PostOptionsMenu contentId={item.contentId} />
       </header>
 
-      <div style={postMediaWrapStyle} onClick={handleMediaTap} role="button" aria-label="Post media">
+      <div
+        style={postMediaWrapStyle}
+        onClick={isCarousel ? undefined : () => handleMediaTap()}
+        onTouchStart={isCarousel ? onTouchStart : undefined}
+        onTouchEnd={isCarousel ? onTouchEnd : undefined}
+        role="button"
+        aria-label="Post media"
+      >
         {locked ? (
           <LockedMediaBlock item={item} unlocking={unlocking} onUnlock={handleUnlock} error={error} />
         ) : media ? (
           <>
             {media.mimeType.startsWith("video/") ? (
-              <video src={media.signedUrl} controls style={postMediaElementStyle} />
+              <video key={activeIndex} src={media.signedUrl} controls style={postMediaElementStyle} />
             ) : media.mimeType.startsWith("audio/") ? (
-              <audio src={media.signedUrl} controls style={{ width: "100%" }} onClick={(e) => e.stopPropagation()} />
+              <audio key={activeIndex} src={media.signedUrl} controls style={{ width: "100%" }} onClick={(e) => e.stopPropagation()} />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={media.signedUrl} alt="" style={postMediaElementStyle} />
+              <img key={activeIndex} src={media.signedUrl} alt="" style={postMediaElementStyle} />
             )}
             {heartPopKey && (
               <HeartPop key={heartPopKey} onDone={() => setHeartPopKey(null)} />
+            )}
+            {isCarousel && (
+              <>
+                <button onClick={() => handleMediaTap("prev")} style={{ ...mediaTapZoneStyle, left: 0 }} aria-label="Previous item" />
+                <button onClick={() => handleMediaTap("next")} style={{ ...mediaTapZoneStyle, right: 0 }} aria-label="Next item" />
+                <div style={mediaDotsWrapStyle}>
+                  {mediaItems.map((m, i) => (
+                    <span key={m.position} style={mediaDotStyle(i === activeIndex)} />
+                  ))}
+                </div>
+              </>
             )}
           </>
         ) : (
@@ -310,7 +375,9 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
         </p>
       )}
 
-      {expanded && media && <MediaLightbox mimeType={media.mimeType} url={media.signedUrl} onClose={() => setExpanded(false)} />}
+      {expanded && !isCarousel && media && (
+        <MediaLightbox mimeType={media.mimeType} url={media.signedUrl} onClose={() => setExpanded(false)} />
+      )}
       {messageOpen && (
         <ComposeMessageModal creatorProfileId={item.creator.creatorProfileId} onClose={() => setMessageOpen(false)} />
       )}
@@ -735,6 +802,45 @@ const heartPopWrapStyle: React.CSSProperties = {
   color: "#fff",
   pointerEvents: "none",
 };
+
+// Left/right invisible tap zones for carousel navigation — same pattern
+// as the Stories viewer's own tap zones (story-avatar-row.tsx). Serves
+// both mouse click (desktop) and touch tap (mobile); real swipes are
+// handled separately via onTouchStart/onTouchEnd on the wrap itself.
+const mediaTapZoneStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 0,
+  bottom: 0,
+  width: "50%",
+  background: "transparent",
+  border: "none",
+  cursor: "pointer",
+};
+
+// Instagram convention — small dots, bottom-center, only rendered for a
+// real carousel (>1 item). Instant index swap, no animation, matching
+// this session's own "don't over-build" pattern from the Stories
+// viewer's segment bar.
+const mediaDotsWrapStyle: React.CSSProperties = {
+  position: "absolute",
+  bottom: "10px",
+  left: 0,
+  right: 0,
+  display: "flex",
+  justifyContent: "center",
+  gap: "5px",
+  zIndex: 2,
+  pointerEvents: "none",
+};
+
+function mediaDotStyle(active: boolean): React.CSSProperties {
+  return {
+    width: "6px",
+    height: "6px",
+    borderRadius: "50%",
+    background: active ? "#fff" : "rgba(255,255,255,0.45)",
+  };
+}
 
 const postEngagementRowStyle: React.CSSProperties = {
   display: "flex",

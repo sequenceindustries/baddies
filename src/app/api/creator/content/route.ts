@@ -74,10 +74,18 @@ export async function GET() {
  * `getSignedUploadUrl` method for that without changing call sites
  * elsewhere.
  */
-const UploadSchema = z.object({
+const ItemSchema = z.object({
   mediaType: z.enum(["IMAGE", "VIDEO", "AUDIO"]),
   mimeType: z.string().min(1),
   base64Data: z.string().min(1),
+});
+
+const UploadSchema = z.object({
+  // A single post can now carry multiple ordered items (a carousel) —
+  // 10 matches Instagram's own carousel cap. accessLevel/caption are
+  // shared across the whole post, matching the upload UI (one caption,
+  // one tier, applied to the whole batch — see upload-form.tsx).
+  items: z.array(ItemSchema).min(1).max(10),
   // FREE/VIP/VVIP — see prisma/schema.prisma's ContentAccessLevel comment.
   // PPV is retired from the product and deliberately not accepted here,
   // even though the enum value still exists in the database.
@@ -138,7 +146,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { mediaType, mimeType, base64Data, accessLevel, caption } = parsed.data;
+  const { items, accessLevel, caption } = parsed.data;
 
   // Deliberately no "verified creators only" gate on VIP/Exclusive here —
   // a creator can post at any access level as soon as they can upload at
@@ -147,129 +155,140 @@ export async function POST(req: NextRequest) {
   // signals shown elsewhere, not which tiers a creator is allowed to use.
 
   const storage = getMediaStorageProvider();
-  const buffer = Buffer.from(base64Data, "base64");
   const MAX_BYTES = 100 * 1024 * 1024; // 100MB per file
-  if (buffer.byteLength > MAX_BYTES) {
-    return NextResponse.json({ error: "File exceeds maximum allowed size." }, { status: 413 });
-  }
 
-  // Real image validation (there was none before): decode dimensions up
-  // front, outside the DB transaction, so a garbage/corrupt upload never
-  // creates a Content row at all. Also doubles as the source of the
-  // ORIGINAL asset's own width/height below. Video/audio are untouched —
-  // sharp only ever runs for IMAGE uploads.
-  let imageDims: { width: number; height: number } | null = null;
-  if (mediaType === "IMAGE") {
-    imageDims = await getImageDimensions(buffer);
-    if (!imageDims) {
-      return NextResponse.json({ error: "Uploaded file is not a valid image." }, { status: 400 });
+  // Decode and validate every item BEFORE the transaction, same
+  // guarantee this route already had for a single file — extended from
+  // "one corrupt upload never creates a Content row" to "any corrupt
+  // item anywhere in the batch aborts the whole post before any DB row
+  // exists." A carousel is all-or-nothing, never partially created.
+  const decoded: { mediaType: "IMAGE" | "VIDEO" | "AUDIO"; mimeType: string; buffer: Buffer; imageDims: { width: number; height: number } | null }[] = [];
+  for (const item of items) {
+    const buffer = Buffer.from(item.base64Data, "base64");
+    if (buffer.byteLength > MAX_BYTES) {
+      return NextResponse.json({ error: "File exceeds maximum allowed size." }, { status: 413 });
     }
+    let imageDims: { width: number; height: number } | null = null;
+    if (item.mediaType === "IMAGE") {
+      imageDims = await getImageDimensions(buffer);
+      if (!imageDims) {
+        return NextResponse.json({ error: "Uploaded file is not a valid image." }, { status: 400 });
+      }
+    }
+    decoded.push({ mediaType: item.mediaType, mimeType: item.mimeType, buffer, imageDims });
   }
 
-  const { content, mediaAsset } = await db.$transaction(async (tx: import("@prisma/client").Prisma.TransactionClient) => {
-    const createdContent = await tx.content.create({
-      data: {
-        creatorProfileId: creatorProfile.id,
-        mediaType,
-        accessLevel,
-        // No per-item pricing now that PPV is retired — VIP/VVIP content
-        // is unlocked by subscription (see the entitlement engine), not
-        // an individual price.
-        priceUsd: null,
-        caption,
-        status: "DRAFT",
-        moderationStatus: "DRAFT",
-      },
-    });
+  const { content, itemCount } = await db.$transaction(
+    async (tx: import("@prisma/client").Prisma.TransactionClient) => {
+      const createdContent = await tx.content.create({
+        data: {
+          creatorProfileId: creatorProfile.id,
+          // Post-level type is position 0's type — a real, documented
+          // choice for a mixed carousel (e.g. an image+video post), not
+          // an oversight. Every real MediaAsset carries its own accurate
+          // mimeType regardless; this field is a presentation/filter
+          // heuristic everywhere except the admin content queue's own
+          // mediaType filter, which is a known, accepted imprecision for
+          // mixed carousels specifically.
+          mediaType: decoded[0]!.mediaType,
+          accessLevel,
+          // No per-item pricing now that PPV is retired — VIP/VVIP content
+          // is unlocked by subscription (see the entitlement engine), not
+          // an individual price.
+          priceUsd: null,
+          caption,
+          status: "DRAFT",
+          moderationStatus: "DRAFT",
+        },
+      });
 
-    const upload = await storage.putObject({
-      key: `creators/${creatorProfile.id}/content/${createdContent.id}`,
-      contentType: mimeType,
-      body: buffer,
-    });
-
-    const createdAsset = await tx.mediaAsset.create({
-      data: {
-        contentId: createdContent.id,
-        storageProvider: storage.name,
-        storageKey: upload.storageKey,
-        mimeType,
-        byteSize: buffer.byteLength,
-        kind: "ORIGINAL",
-        width: imageDims?.width,
-        height: imageDims?.height,
-      },
-    });
-
-    // Generated, capped-dimension WebP derivative for actual viewer
-    // rendering — see image-pipeline.ts's own doc comment for why this
-    // is a single format rather than a real AVIF/WebP negotiation. A
-    // failure here (sharp choking despite the earlier decode check
-    // passing — rare) is not fatal: the ORIGINAL asset still serves
-    // fine, just uncompressed.
-    if (mediaType === "IMAGE") {
-      const display = await generateDisplayVariant(buffer);
-      if (display) {
-        const displayUpload = await storage.putObject({
-          key: `${upload.storageKey}-display`,
-          contentType: display.mimeType,
-          body: display.buffer,
+      for (const [position, item] of decoded.entries()) {
+        const upload = await storage.putObject({
+          key: `creators/${creatorProfile.id}/content/${createdContent.id}/${position}`,
+          contentType: item.mimeType,
+          body: item.buffer,
         });
+
         await tx.mediaAsset.create({
           data: {
             contentId: createdContent.id,
             storageProvider: storage.name,
-            storageKey: displayUpload.storageKey,
-            mimeType: display.mimeType,
-            byteSize: display.buffer.byteLength,
-            kind: "DISPLAY",
-            width: display.width,
-            height: display.height,
+            storageKey: upload.storageKey,
+            mimeType: item.mimeType,
+            byteSize: item.buffer.byteLength,
+            kind: "ORIGINAL",
+            width: item.imageDims?.width,
+            height: item.imageDims?.height,
+            position,
           },
         });
+
+        // Generated, capped-dimension WebP derivative for actual viewer
+        // rendering — see image-pipeline.ts's own doc comment for why
+        // this is a single format rather than a real AVIF/WebP
+        // negotiation. A failure here (sharp choking despite the earlier
+        // decode check passing — rare) is not fatal: the ORIGINAL asset
+        // still serves fine, just uncompressed.
+        if (item.mediaType === "IMAGE") {
+          const display = await generateDisplayVariant(item.buffer);
+          if (display) {
+            const displayUpload = await storage.putObject({
+              key: `${upload.storageKey}-display`,
+              contentType: display.mimeType,
+              body: display.buffer,
+            });
+            await tx.mediaAsset.create({
+              data: {
+                contentId: createdContent.id,
+                storageProvider: storage.name,
+                storageKey: displayUpload.storageKey,
+                mimeType: display.mimeType,
+                byteSize: display.buffer.byteLength,
+                kind: "DISPLAY",
+                width: display.width,
+                height: display.height,
+                position,
+              },
+            });
+          }
+        }
       }
-    }
 
-    // Product decision: uploads do not sit in an admin moderation queue —
-    // a verified creator's content goes live the moment they publish it,
-    // no waiting on approval. Walk the real state machine (see
-    // src/lib/content/status.ts, which no longer routes the upload path
-    // through PENDING_REVIEW) rather than just setting a status literal,
-    // so an illegal jump would throw instead of silently drifting out of
-    // sync with the one place those transitions are defined. Publish
-    // immediately too (publishedAt set here, rather than requiring a
-    // separate "Publish" click) so upload really does mean "it's live."
-    // ContentStatus.PENDING_REVIEW and the admin approve/reject routes
-    // (src/app/api/admin/content/*) are kept in place rather than
-    // deleted — useful infrastructure if a moderation queue is ever
-    // reintroduced (e.g. in response to reports), just nothing routes new
-    // uploads through it today.
-    assertContentTransition("DRAFT", "UPLOADED");
-    assertContentTransition("UPLOADED", "PROCESSING");
-    assertContentTransition("PROCESSING", "APPROVED");
-    const updatedContent = await tx.content.update({
-      where: { id: createdContent.id },
-      data: { status: "APPROVED", moderationStatus: "APPROVED", publishedAt: new Date() },
-    });
+      // Product decision: uploads do not sit in an admin moderation queue —
+      // a verified creator's content goes live the moment they publish it,
+      // no waiting on approval. Walk the real state machine (see
+      // src/lib/content/status.ts, which no longer routes the upload path
+      // through PENDING_REVIEW) rather than just setting a status literal,
+      // so an illegal jump would throw instead of silently drifting out of
+      // sync with the one place those transitions are defined. Publish
+      // immediately too (publishedAt set here, rather than requiring a
+      // separate "Publish" click) so upload really does mean "it's live."
+      // ContentStatus.PENDING_REVIEW and the admin approve/reject routes
+      // (src/app/api/admin/content/*) are kept in place rather than
+      // deleted — useful infrastructure if a moderation queue is ever
+      // reintroduced (e.g. in response to reports), just nothing routes new
+      // uploads through it today.
+      assertContentTransition("DRAFT", "UPLOADED");
+      assertContentTransition("UPLOADED", "PROCESSING");
+      assertContentTransition("PROCESSING", "APPROVED");
+      const updatedContent = await tx.content.update({
+        where: { id: createdContent.id },
+        data: { status: "APPROVED", moderationStatus: "APPROVED", publishedAt: new Date() },
+      });
 
-    await tx.auditLog.create({
-      data: {
-        actorId: user.id,
-        action: "content.upload",
-        targetType: "content",
-        targetId: createdContent.id,
-      },
-    });
+      await tx.auditLog.create({
+        data: {
+          actorId: user.id,
+          action: "content.upload",
+          targetType: "content",
+          targetId: createdContent.id,
+        },
+      });
 
-    return { content: updatedContent, mediaAsset: createdAsset };
-  });
-
-  return NextResponse.json(
-    {
-      contentId: content.id,
-      status: content.status,
-      mediaAssetId: mediaAsset.id,
+      return { content: updatedContent, itemCount: decoded.length };
     },
-    { status: 201 }
+    { timeout: 30_000 } // up to 10 items x up to 2 storage calls each exceeds the ~5s default
   );
+
+  return NextResponse.json({ contentId: content.id, status: content.status, itemCount }, { status: 201 });
 }

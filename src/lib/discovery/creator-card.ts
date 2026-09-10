@@ -2,6 +2,7 @@ import { resolveCreatorPricing } from "@/lib/creator/pricing";
 import { db } from "@/lib/db/client";
 import { getMediaStorageProvider } from "@/lib/providers/storage";
 import { resolveDisplayUrl } from "@/lib/media/persist-public-image";
+import { selectDisplayPerPosition } from "@/lib/media/carousel";
 
 /**
  * Matches build brief §11's creator card spec (updated for the Free/VIP/
@@ -91,13 +92,16 @@ async function getLatestFreeThumbnail(creatorProfileId: string): Promise<{ signe
   const content = await db.content.findFirst({
     where: { creatorProfileId, accessLevel: "FREE", status: "APPROVED", publishedAt: { not: null } },
     orderBy: { publishedAt: "desc" },
-    select: { mediaAssets: { select: { storageKey: true, mimeType: true, kind: true } } },
+    select: { mediaAssets: { select: { storageKey: true, mimeType: true, kind: true, position: true } } },
   });
-  // Prefer the generated DISPLAY derivative over the raw ORIGINAL for
-  // this thumbnail — same preference as GET /api/content/:id/media —
-  // falling back to ORIGINAL for video/audio/pre-pipeline content.
-  const assets = content?.mediaAssets ?? [];
-  const asset = assets.find((a: (typeof assets)[number]) => a.kind === "DISPLAY") ?? assets[0];
+  // Always the FIRST carousel slide specifically (position 0), preferring
+  // its generated DISPLAY derivative over the raw ORIGINAL — same
+  // preference GET /api/content/:id/media applies per-slide, falling
+  // back to ORIGINAL for video/audio/pre-pipeline content. Explicit
+  // position-based selection rather than array-order luck: a discovery
+  // card thumbnail should always be a post's cover slide, never whichever
+  // asset happened to be created/returned first.
+  const asset = selectDisplayPerPosition(content?.mediaAssets ?? [])[0];
   if (!asset) return null;
 
   const storage = getMediaStorageProvider();

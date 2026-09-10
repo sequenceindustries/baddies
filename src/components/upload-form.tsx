@@ -9,6 +9,7 @@ import { cardStyle, Field, inputStyle, errorBannerStyle, primaryButtonStyle } fr
 type AccessLevel = "FREE" | "VIP" | "VVIP";
 
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100MB per file — matches the API route's own ceiling
+const MAX_ITEMS = 10; // matches the API route's own carousel cap (Instagram's own convention)
 
 /**
  * A real drag-and-drop content uploader — Instagram/TikTok-style
@@ -39,7 +40,6 @@ export function UploadForm({
   const [files, setFiles] = useState<File[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -76,61 +76,52 @@ export function UploadForm({
     addFiles(e.dataTransfer.files);
   }
 
-  async function uploadOne(file: File): Promise<string | null> {
-    const mediaType = file.type.startsWith("video/")
-      ? "VIDEO"
-      : file.type.startsWith("audio/")
-        ? "AUDIO"
-        : "IMAGE";
-    const base64Data = await fileToBase64(file);
-    const res = await fetch("/api/creator/content", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mediaType,
-        mimeType: file.type,
-        base64Data,
-        accessLevel,
-        caption: caption || undefined,
-      }),
-    });
-    if (res.ok) return null;
-    const body = await res.json().catch(() => null);
-    return typeof body?.error === "string" ? body.error : "Upload failed.";
-  }
-
+  // One request for the whole batch — every selected file becomes one
+  // slide of a single carousel post (see POST /api/creator/content's own
+  // items[] schema), not N separate posts. This replaced an earlier
+  // sequential-per-file-request loop that silently created N separate
+  // Content rows; the picker UI already treated this as "one batch"
+  // (one shared caption/access level), the network layer just hadn't
+  // caught up until now.
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (files.length === 0) {
       setError("Choose at least one file to upload.");
       return;
     }
+    if (files.length > MAX_ITEMS) {
+      setError(`You can post up to ${MAX_ITEMS} files at a time — you have ${files.length} selected.`);
+      return;
+    }
     setSubmitting(true);
     setError(null);
 
-    // Sequential, not parallel — this is one creator's own upload queue,
-    // not a race; keeping it sequential also keeps "Uploading 2 of 5..."
-    // an honest, literal count rather than an approximation.
-    const failures: string[] = [];
-    for (const [i, currentFile] of files.entries()) {
-      setProgress({ done: i, total: files.length });
-      const err = await uploadOne(currentFile);
-      if (err) failures.push(`${currentFile.name}: ${err}`);
-    }
-    setProgress(null);
-    setSubmitting(false);
-
-    if (failures.length > 0) {
-      setError(
-        failures.length === files.length
-          ? `Upload failed for all ${files.length} file(s).\n${failures.join("\n")}`
-          : `${files.length - failures.length} of ${files.length} uploaded. ${failures.length} failed:\n${failures.join("\n")}`
+    try {
+      const items = await Promise.all(
+        files.map(async (file) => ({
+          mediaType: file.type.startsWith("video/") ? "VIDEO" : file.type.startsWith("audio/") ? "AUDIO" : "IMAGE",
+          mimeType: file.type,
+          base64Data: await fileToBase64(file),
+        }))
       );
-      return;
+
+      const res = await fetch("/api/creator/content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items, accessLevel, caption: caption || undefined }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setError(typeof body?.error === "string" ? body.error : "Upload failed.");
+        return;
+      }
+      setCaption("");
+      setFiles([]);
+      onUploaded();
+    } finally {
+      setSubmitting(false);
     }
-    setCaption("");
-    setFiles([]);
-    onUploaded();
   }
 
   const body = (
@@ -213,7 +204,7 @@ export function UploadForm({
       </Field>
 
       <button type="submit" style={primaryButtonStyle} disabled={submitting}>
-        {submitting && progress ? `Uploading ${progress.done + 1} of ${progress.total}...` : submitting ? "Uploading..." : "Upload"}
+        {submitting ? "Uploading..." : "Upload"}
       </button>
     </form>
   );
