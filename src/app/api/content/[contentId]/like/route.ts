@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
 import { canAccessContent } from "@/lib/entitlements/content";
+import { createNotification } from "@/lib/creator-notifications/create-notification";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -33,11 +35,37 @@ export async function POST(
     return NextResponse.json({ error: "You do not have access to this content." }, { status: 403 });
   }
 
-  await db.contentLike.upsert({
-    where: { fanId_contentId: { fanId: user.id, contentId: content.id } },
-    create: { fanId: user.id, contentId: content.id },
-    update: {},
-  });
+  // Swapped from an idempotent upsert to a plain create + P2002 catch
+  // (same precedent as src/app/api/creator/settings/route.ts's handle
+  // uniqueness check) so a repeat like/double-click can be told apart
+  // from a genuinely new one — the notification below must fire exactly
+  // once per real like, not once per POST.
+  let isNewLike = true;
+  try {
+    await db.contentLike.create({ data: { fanId: user.id, contentId: content.id } });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      isNewLike = false;
+    } else {
+      throw err;
+    }
+  }
+
+  if (isNewLike) {
+    // Best-effort notify — never lets a lookup/write failure here turn
+    // an already-successful like into an error response for the fan.
+    const creatorProfile = await db.creatorProfile.findUnique({
+      where: { id: content.creatorProfileId },
+      select: { userId: true },
+    });
+    if (creatorProfile && creatorProfile.userId !== user.id) {
+      await createNotification({
+        userId: creatorProfile.userId,
+        type: "content.liked",
+        payload: { actorUserId: user.id, contentId: content.id, creatorProfileId: content.creatorProfileId },
+      });
+    }
+  }
 
   const likeCount = await db.contentLike.count({ where: { contentId: content.id } });
   return NextResponse.json({ liked: true, likeCount });

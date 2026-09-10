@@ -1,0 +1,39 @@
+import { Prisma } from "@prisma/client";
+import { db } from "@/lib/db/client";
+
+/**
+ * Writes one row to the existing (previously unused) `Notification`
+ * model — the in-app "a fan liked/followed/subscribed to you" signal
+ * shown via the nav's NotificationBell (src/components/ui.tsx). Not to
+ * be confused with src/lib/notifications/*.ts, which is a completely
+ * separate concern (outbound transactional EMAIL via
+ * getNotificationProvider() — verification links, partner invites,
+ * etc.); this directory is deliberately separate so "send an email" and
+ * "write an in-app Notification row" never get conflated at the
+ * import-path level.
+ *
+ * `payload` carries only stable ids (e.g. actorUserId, contentId,
+ * creatorProfileId) — never a snapshotted displayName/avatarUrl, which
+ * would go stale the moment the actor renames or re-uploads their
+ * avatar. The notifications list route resolves those fresh at read
+ * time instead (see GET /api/creator/notifications).
+ *
+ * Best-effort, matching src/lib/notifications/*.ts's own "a failed send
+ * must never block the primary action" convention: by the time this
+ * runs, the like/follow/subscribe write it's reporting on has already
+ * succeeded, so a failure here must never turn that into an error for
+ * the fan who took the action.
+ */
+export async function createNotification(input: {
+  userId: string;
+  type: "content.liked" | "creator.followed" | "creator.subscribed";
+  payload: Record<string, unknown>;
+}): Promise<void> {
+  try {
+    await db.notification.create({
+      data: { userId: input.userId, type: input.type, payload: input.payload as Prisma.InputJsonValue },
+    });
+  } catch (err) {
+    console.error("createNotification failed", { type: input.type, userId: input.userId, err });
+  }
+}

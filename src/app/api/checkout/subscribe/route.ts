@@ -6,6 +6,7 @@ import { getPaymentProvider } from "@/lib/providers/payment";
 import { resolveCreatorPricing } from "@/lib/creator/pricing";
 import { postRevenueEvent, recomputeWalletBalances } from "@/lib/ledger/service";
 import { markTrialConvertedIfActive } from "@/lib/entitlements/trial";
+import { createNotification } from "@/lib/creator-notifications/create-notification";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -111,6 +112,18 @@ export async function POST(req: NextRequest) {
     description: "VVIP subscription (stub checkout)",
   });
   await recomputeWalletBalances(creatorWallet.id);
+
+  // No upsert/duplicate concern here (unlike like/follow) — an active-
+  // subscription check already 409'd above, so this create only ever
+  // runs for a genuinely new subscription. NOTE: once a real payment
+  // vendor is wired up, per this route's own doc comment, these writes
+  // (and this call) move into src/app/api/webhooks/payment/route.ts —
+  // must not stay duplicated in both places when that happens.
+  await createNotification({
+    userId: creator.userId,
+    type: "creator.subscribed",
+    payload: { actorUserId: user.id, creatorProfileId, subscriptionId: subscription.id },
+  });
 
   // MASTER REQUIREMENTS §11 — subscribing to a creator while on an
   // active trial is a genuine acquisition win too, not just buying the

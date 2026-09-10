@@ -245,18 +245,33 @@ export function Nav({ comingSoon = false }: { comingSoon?: boolean }) {
         )}
       </div>
 
-      {!loading && hasNavContent && (
-        <button
-          type="button"
-          className="nav-hamburger"
-          aria-label={mobileOpen ? "Close menu" : "Open menu"}
-          aria-expanded={mobileOpen}
-          onClick={() => setMobileOpen((v) => !v)}
-          style={hamburgerButtonStyle}
-        >
-          <MenuIcon open={mobileOpen} />
-        </button>
-      )}
+      {/* Grouped with the hamburger in their own flex row — navStyle
+          uses justify-content:space-between, so two separate top-level
+          flex children here would get spread apart by that rule instead
+          of sitting adjacent. Wrapping them keeps the bell immediately
+          before the burger, satisfying both halves of the request with
+          one insertion point: under the mobile breakpoint nav-links-
+          desktop disappears, so the row reads "brand — bell — hamburger"
+          (bell immediately before the burger, no gap); above it, the
+          hamburger itself is the one that's CSS-hidden (0 width), so
+          this group just reads as "brand — links — bell", a natural
+          desktop spot. */}
+      <div style={navTrailingGroupStyle}>
+        {!loading && user?.creatorProfile && <NotificationBell />}
+
+        {!loading && hasNavContent && (
+          <button
+            type="button"
+            className="nav-hamburger"
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileOpen}
+            onClick={() => setMobileOpen((v) => !v)}
+            style={hamburgerButtonStyle}
+          >
+            <MenuIcon open={mobileOpen} />
+          </button>
+        )}
+      </div>
     </nav>
     <div style={navAccentBarStyle} aria-hidden="true" />
     {mobileOpen && (
@@ -478,6 +493,183 @@ function WalletMenuLink({ onNavigate }: { onNavigate?: () => void }) {
     <Link href="/wallet" style={accountMenuLinkStyle} onClick={onNavigate}>
       Wallet{availableUsd !== null ? ` ($${availableUsd.toFixed(2)})` : ""}
     </Link>
+  );
+}
+
+interface NotificationActor {
+  displayName: string | null;
+  avatarUrl: string | null;
+}
+
+interface NotificationItem {
+  id: string;
+  type: string;
+  readAt: string | null;
+  createdAt: string;
+  actor: NotificationActor | null;
+}
+
+const NOTIFICATION_COPY: Record<string, (name: string) => string> = {
+  "content.liked": (name) => `${name} liked your post`,
+  "creator.followed": (name) => `${name} started following you`,
+  "creator.subscribed": (name) => `${name} subscribed to your Exclusive tier`,
+};
+
+// Small local duplicate of cards.tsx's own timeAgo — cards.tsx already
+// imports VerifiedBadge from this file, so importing timeAgo back from
+// cards.tsx here would create a circular ui.tsx <-> cards.tsx dependency
+// for one tiny pure function. Same "duplicate a small pure helper rather
+// than reach across files" call this codebase already made for
+// upload-form.tsx's own fileToBase64.
+function notificationTimeAgo(iso: string): string {
+  const diffSec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (diffSec < 60) return "just now";
+  const min = Math.floor(diffSec / 60);
+  if (min < 60) return `${min}m`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `${day}d`;
+  const mo = Math.floor(day / 30);
+  if (mo < 12) return `${mo}mo`;
+  return `${Math.floor(mo / 12)}y`;
+}
+
+/**
+ * Heart icon + unread-count badge, placed in Nav's row immediately
+ * before the hamburger button (see Nav's own JSX) — a fan-facing "you
+ * got a like/follow/subscription" signal for creators. Only rendered
+ * when `user.creatorProfile` is set (Nav's own call site), same gate
+ * WalletMenuLink already uses just below.
+ *
+ * No real-time push exists anywhere in this app (no WebSocket/SSE) —
+ * the unread count is a plain 45s poll, matching countdown.tsx's own
+ * minimal setInterval/clearInterval shape. 45s: a low-urgency social-
+ * proof signal, not a message needing near-real-time delivery.
+ *
+ * Opening the panel fires the list fetch and "mark all read" together,
+ * and zeroes the badge immediately client-side rather than waiting for
+ * the next poll tick.
+ */
+function NotificationBell() {
+  const [open, setOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [items, setItems] = useState<NotificationItem[] | null>(null);
+  const [loadingList, setLoadingList] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function poll() {
+      const res = await fetch("/api/creator/notifications/unread-count");
+      if (!cancelled && res.ok) {
+        const body = await res.json();
+        setUnreadCount(body.count);
+      }
+    }
+    poll();
+    const id = setInterval(poll, 45_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  // Same outside-click/Escape idiom AccountMenu (just below) already
+  // uses for exactly this "small panel hanging off a nav button" shape.
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  async function handleToggle() {
+    const opening = !open;
+    setOpen(opening);
+    if (!opening) return;
+    setLoadingList(true);
+    setUnreadCount(0);
+    const [listRes] = await Promise.all([
+      fetch("/api/creator/notifications"),
+      fetch("/api/creator/notifications/mark-read", { method: "POST" }),
+    ]);
+    setLoadingList(false);
+    if (listRes.ok) {
+      const body = await listRes.json();
+      setItems(body.notifications);
+    }
+  }
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={handleToggle}
+        style={notificationBellButtonStyle}
+        aria-label="Notifications"
+        aria-expanded={open}
+      >
+        <NotificationHeartIcon />
+        {unreadCount > 0 && <span style={notificationBadgeStyle}>{unreadCount > 9 ? "9+" : unreadCount}</span>}
+      </button>
+      {open && (
+        <div style={notificationPanelStyle}>
+          <div style={notificationPanelHeaderStyle}>Notifications</div>
+          {loadingList && items === null ? (
+            <div style={notificationEmptyStyle}>Loading...</div>
+          ) : !items || items.length === 0 ? (
+            <div style={notificationEmptyStyle}>Nothing yet.</div>
+          ) : (
+            items.map((n) => <NotificationRow key={n.id} item={n} />)
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NotificationRow({ item }: { item: NotificationItem }) {
+  const name = item.actor?.displayName ?? "Someone";
+  const copy = NOTIFICATION_COPY[item.type];
+  const initial = name.trim().charAt(0).toUpperCase() || "?";
+  return (
+    <div style={notificationRowStyle}>
+      <span style={notificationRowAvatarStyle}>
+        {item.actor?.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={item.actor.avatarUrl} alt="" style={notificationRowAvatarImgStyle} />
+        ) : (
+          initial
+        )}
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={notificationRowTextStyle}>{copy ? copy(name) : `${name} did something`}</div>
+        <div style={notificationRowTimeStyle}>{notificationTimeAgo(item.createdAt)}</div>
+      </div>
+    </div>
+  );
+}
+
+function NotificationHeartIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 20.2l-1.35-1.23C5.9 14.9 3 12.28 3 9.06 3 6.43 5.09 4.4 7.75 4.4c1.5 0 2.94.7 3.85 1.8h.8c.91-1.1 2.35-1.8 3.85-1.8 2.66 0 4.75 2.03 4.75 4.66 0 3.22-2.9 5.84-7.65 9.92L12 20.2z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
@@ -1160,6 +1352,16 @@ const navDesktopLinksStyle: React.CSSProperties = {
   alignItems: "center",
 };
 
+// Keeps NotificationBell and the hamburger adjacent regardless of
+// navStyle's space-between — see the comment at this div's JSX call
+// site in Nav for why a bare pair of top-level flex children wouldn't
+// stay next to each other.
+const navTrailingGroupStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.15rem",
+};
+
 // No `display` set here on purpose — visibility is owned entirely by the
 // .nav-hamburger CSS class (globals.css), which only shows it under the
 // mobile breakpoint. An inline `display` here would out-rank that
@@ -1310,6 +1512,104 @@ const accountMenuButtonStyle: React.CSSProperties = {
   fontSize: "0.88rem",
   padding: "0.55rem 0.2rem",
   cursor: "pointer",
+};
+
+const notificationBellButtonStyle: React.CSSProperties = {
+  position: "relative",
+  background: "transparent",
+  border: "none",
+  color: "var(--text)",
+  cursor: "pointer",
+  padding: "0.3rem",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const notificationBadgeStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "-2px",
+  right: "-4px",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minWidth: "16px",
+  height: "16px",
+  padding: "0 4px",
+  borderRadius: "999px",
+  background: "var(--danger)",
+  color: "#fff",
+  fontSize: "0.65rem",
+  fontWeight: 700,
+  lineHeight: 1,
+};
+
+const notificationPanelStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "calc(100% + 0.5rem)",
+  right: 0,
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: "12px",
+  boxShadow: "var(--glow)",
+  minWidth: "300px",
+  maxWidth: "340px",
+  maxHeight: "360px",
+  overflowY: "auto",
+  zIndex: 50,
+};
+
+const notificationPanelHeaderStyle: React.CSSProperties = {
+  fontWeight: 600,
+  fontSize: "0.88rem",
+  padding: "0.75rem 0.9rem 0.5rem",
+};
+
+const notificationEmptyStyle: React.CSSProperties = {
+  color: "var(--text-muted)",
+  fontSize: "0.82rem",
+  padding: "0.5rem 0.9rem 0.9rem",
+};
+
+const notificationRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: "0.6rem",
+  padding: "0.5rem 0.9rem",
+  borderTop: "1px solid var(--border)",
+};
+
+const notificationRowAvatarStyle: React.CSSProperties = {
+  width: "32px",
+  height: "32px",
+  borderRadius: "50%",
+  background: "var(--surface-raised)",
+  color: "var(--accent)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontWeight: 600,
+  fontSize: "0.8rem",
+  flexShrink: 0,
+  overflow: "hidden",
+};
+
+const notificationRowAvatarImgStyle: React.CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+};
+
+const notificationRowTextStyle: React.CSSProperties = {
+  fontSize: "0.84rem",
+  color: "var(--text)",
+  lineHeight: 1.35,
+};
+
+const notificationRowTimeStyle: React.CSSProperties = {
+  fontSize: "0.72rem",
+  color: "var(--text-muted)",
+  marginTop: "0.15rem",
 };
 
 // text-shadow is a no-op on the flat backgrounds this also renders
