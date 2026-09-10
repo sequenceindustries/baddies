@@ -23,7 +23,7 @@ const SUGGESTED_POOL_SIZE = 12;
  *     same as this route's original behavior — but with locked items
  *     filtered out entirely (Discovery is meant to be a browse-what-
  *     you-can-actually-open surface, not a subscribe-bait wall).
- *   - anything else, i.e. no param (src/app/(fan)/fan-home/page.tsx's
+ *   - anything else, i.e. no param (src/app/feed/page.tsx's
  *     Twitter/X-style feed): narrowed to creators this viewer actually
  *     has a relationship with — followed, actively subscribed to (incl.
  *     VIP-pass/trial-covered), or "suggested" (see below) — rendered
@@ -144,6 +144,7 @@ export async function GET(req: NextRequest) {
       return shapeContentItem(item, {
         lock,
         viewerHasLiked: user ? item.likes.length > 0 : false,
+        viewerIsFollowing: followedCreatorIds.has(item.creatorProfileId),
         context: followedCreatorIds.has(item.creatorProfileId)
           ? "following"
           : trendingIds.has(item.id)

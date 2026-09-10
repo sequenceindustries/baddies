@@ -76,6 +76,7 @@ export function shapeContentItem(
   opts: {
     lock: { locked: boolean; kind: LockKind; priceUsd: number | null; ctaLabel: string | null };
     viewerHasLiked: boolean;
+    viewerIsFollowing: boolean;
     context: "following" | "trending" | "suggested" | null;
   }
 ) {
@@ -94,6 +95,7 @@ export function shapeContentItem(
       coverImageUrl: item.creatorProfile.coverImageUrl,
       isFoundingPartner: item.creatorProfile.user.foundingPartner !== null,
       isFoundingBaddie: item.creatorProfile.isFoundingBaddie,
+      viewerIsFollowing: opts.viewerIsFollowing,
     },
     lock: opts.lock,
     context: opts.context,

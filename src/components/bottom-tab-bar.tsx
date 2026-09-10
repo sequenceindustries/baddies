@@ -9,7 +9,7 @@ import { useSession } from "./ui";
 // future marketing/pre-login page is safe by default without remembering
 // to add it to an exclusion list. /creators/* is a prefix match (every
 // creator profile); everything else here is an exact path.
-const ALLOWED_EXACT_PATHS = new Set(["/fan-home", "/discovery", "/messages", "/profile"]);
+const ALLOWED_EXACT_PATHS = new Set(["/feed", "/discovery", "/messages", "/profile"]);
 const ALLOWED_PREFIXES = ["/creators/"];
 
 function isAllowedPath(pathname: string): boolean {
@@ -18,7 +18,7 @@ function isAllowedPath(pathname: string): boolean {
 }
 
 const TABS = [
-  { href: "/fan-home", label: "Home", icon: HomeIcon },
+  { href: "/feed", label: "Home", icon: HomeIcon },
   { href: "/discovery", label: "Discover", icon: DiscoverIcon },
   { href: "/messages", label: "Messages", icon: MessagesIcon },
   { href: "/profile", label: "Profile", icon: ProfileIcon },

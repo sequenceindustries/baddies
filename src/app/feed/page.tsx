@@ -5,14 +5,15 @@ import { PostCard, type PostCardItem } from "@/components/post-card";
 import { StoryAvatarRow } from "@/components/story-avatar-row";
 
 /**
- * Home feed — Twitter/X-style single-column, infinite-scroll vertical
- * stream (social-feed redesign). Fed by the revived GET /api/feed
- * (cursor-paginated, blended Following/VIP/Trending/New into one
- * reverse-chronological list — no section headers; see that route's
- * own comment for why). Replaces the previous six flat, non-paginated
- * sections entirely.
+ * The feed — Twitter/X-style single-column, infinite-scroll vertical
+ * stream (social-feed redesign; moved here from /fan-home in a later
+ * follow-up once FAN, CREATOR, and ADMIN alike started landing on this
+ * page by default — "fan-home" stopped being an accurate name once it
+ * wasn't fan-only). Fed by GET /api/feed (cursor-paginated, narrowed to
+ * creators the viewer follows/subscribes to/is suggested — see that
+ * route's own comment for the full scope rules).
  */
-export default function FanHomePage() {
+export default function FeedPage() {
   const [items, setItems] = useState<PostCardItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);

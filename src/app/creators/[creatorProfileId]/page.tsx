@@ -269,7 +269,7 @@ export default function CreatorProfilePage() {
  * stub path completes synchronously instead of waiting on a payment
  * webhook). No real money moves; this is the flow real vendor
  * integration would slot into once one is selected. The platform-wide
- * VIP Pass has its own entry point (the banner on /fan-home) — this
+ * VIP Pass has its own entry point (the banner on /feed) — this
  * button is Exclusive-only, per the profile page's own scope.
  */
 function SubscribeButton({

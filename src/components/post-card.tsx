@@ -21,6 +21,7 @@ export interface PostCardItem {
     coverImageUrl: string | null;
     isFoundingPartner: boolean;
     isFoundingBaddie: boolean;
+    viewerIsFollowing: boolean;
   };
   lock: {
     locked: boolean;
@@ -33,24 +34,26 @@ export interface PostCardItem {
 
 const CONTEXT_LABEL: Record<NonNullable<PostCardItem["context"]>, string> = {
   following: "Following",
-  trending: "🔥 Trending",
-  suggested: "✨ Suggested",
+  trending: "Trending",
+  suggested: "Suggested for you",
 };
 
 /**
  * Twitter/X-style post card — the social-feed redesign's replacement
- * for ContentCard on fan-home/discovery/profile. Header row (avatar,
- * name, VerifiedBadge, timestamp, context chip) → caption → media as a
- * normal in-flow block (not ContentCard's full-bleed cropped
- * background-scrim treatment) → the engagement row BELOW the media
- * (like/message/share, icon+count) — the explicit Twitter-vs-Instagram
- * distinction from the redesign brief. Report sits as a top-right
- * overlay on the media itself instead (social-feed follow-up), not in
- * the engagement row — same convention as reporting a tweet/post via a
- * corner affordance rather than a bottom-row action. Tipping was
- * removed entirely in the same follow-up (see ComposeMessageModal's
- * neighbor — there is no TipModal here anymore); the Tip Prisma model
- * itself is untouched, only this UI and its dedicated route are gone.
+ * for ContentCard on /feed, Discovery, and creator profiles. Restyled (social-feed
+ * follow-up, matching a direct Instagram-post reference) to drop the
+ * card's own frame entirely — no background/border, just the header,
+ * media, engagement row, and caption stacked in a plain column, relying
+ * on the page's own spacing between posts rather than a bordered box
+ * per post. Header is now Instagram's own two-line byline (name row,
+ * then a muted "why this is here" line underneath — Following/
+ * Trending/Suggested for you) plus a real Follow button and a "•••"
+ * options menu (Report lives there now, not as a media overlay) on the
+ * right. Caption moved to the bottom, under the engagement row,
+ * "username caption text" style — also matching the reference exactly
+ * rather than just relocating the old caption-under-header line.
+ * Tipping was removed entirely in an earlier follow-up; the Tip Prisma
+ * model itself is untouched, only that UI and its route are gone.
  * ContentCard itself is untouched; this is a new, separate component.
  */
 export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockChange?: (unlocked: boolean) => void }) {
@@ -190,29 +193,30 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
   return (
     <article style={postCardStyle}>
       <header style={postHeaderStyle}>
-        <Link href={`/creators/${item.creator.creatorProfileId}`} style={postHeaderLinkStyle}>
+        <Link href={`/creators/${item.creator.creatorProfileId}`} style={postAvatarLinkStyle}>
           <CardAvatar
             url={item.creator.avatarUrl}
             initial={(item.creator.displayName ?? "?").trim().charAt(0).toUpperCase() || "?"}
           />
-          <span style={postCreatorNameStyle}>{item.creator.displayName ?? "Unnamed creator"}</span>
         </Link>
-        <VerifiedBadge isFoundingPartner={item.creator.isFoundingPartner} isFoundingBaddie={item.creator.isFoundingBaddie} />
-        {item.publishedAt && <span style={postTimeStyle}>· {timeAgo(item.publishedAt)}</span>}
-        {item.context && <span style={postContextChipStyle}>· {CONTEXT_LABEL[item.context]}</span>}
+        <div style={postHeaderTextColStyle}>
+          <div style={postHeaderTopLineStyle}>
+            <Link href={`/creators/${item.creator.creatorProfileId}`} style={postCreatorNameStyle}>
+              {item.creator.displayName ?? "Unnamed creator"}
+            </Link>
+            <VerifiedBadge isFoundingPartner={item.creator.isFoundingPartner} isFoundingBaddie={item.creator.isFoundingBaddie} />
+            {item.publishedAt && <span style={postTimeStyle}>· {timeAgo(item.publishedAt)}</span>}
+          </div>
+          {item.context && <div style={postContextLineStyle}>{CONTEXT_LABEL[item.context]}</div>}
+        </div>
+        <FollowButton
+          creatorProfileId={item.creator.creatorProfileId}
+          initialFollowing={item.creator.viewerIsFollowing}
+        />
+        <PostOptionsMenu contentId={item.contentId} />
       </header>
 
-      {item.caption && <p style={postCaptionStyle}>{item.caption}</p>}
-
       <div style={postMediaWrapStyle} onClick={handleMediaTap} role="button" aria-label="Post media">
-        {/* Top-right overlay, regardless of locked state — reporting a
-            post shouldn't require unlocking it first. Its own
-            stopPropagation keeps a tap here from also triggering the
-            media-tap/lightbox handler underneath. */}
-        <div style={reportOverlayStyle} onClick={(e) => e.stopPropagation()}>
-          <ReportButton contentId={item.contentId} />
-        </div>
-
         {locked ? (
           <LockedMediaBlock item={item} unlocking={unlocking} onUnlock={handleUnlock} error={error} />
         ) : media ? (
@@ -263,11 +267,105 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
         </button>
       </div>
 
+      {/* Instagram's own "username caption" convention — bold name
+          prefix inline with the caption text, at the bottom of the
+          card rather than under the header. */}
+      {item.caption && (
+        <p style={postCaptionStyle}>
+          <Link href={`/creators/${item.creator.creatorProfileId}`} style={postCaptionNameStyle}>
+            {item.creator.displayName ?? "Unnamed creator"}
+          </Link>{" "}
+          {item.caption}
+        </p>
+      )}
+
       {expanded && media && <MediaLightbox mimeType={media.mimeType} url={media.signedUrl} onClose={() => setExpanded(false)} />}
       {messageOpen && (
         <ComposeMessageModal creatorProfileId={item.creator.creatorProfileId} onClose={() => setMessageOpen(false)} />
       )}
     </article>
+  );
+}
+
+/**
+ * Real Follow/Unfollow toggle, top-right of the header — reuses the
+ * exact POST/DELETE /api/creators/:id/follow endpoints the creator
+ * profile page's own Follow button already calls. Self-follow (a
+ * creator viewing their own post, if it ever surfaces in their own
+ * feed) is guarded server-side (400) — handled here as a plain inline
+ * error rather than a pre-emptive client-side check, matching this
+ * file's existing convention (Message/unlock etc. don't pre-check
+ * "is this your own content" either).
+ */
+function FollowButton({ creatorProfileId, initialFollowing }: { creatorProfileId: string; initialFollowing: boolean }) {
+  const [following, setFollowing] = useState(initialFollowing);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (following) {
+    // Matches Instagram's own "already following" treatment inside a
+    // post card: nothing to click, no button at all — the profile page
+    // itself (not this card) is where an existing follow gets managed.
+    return null;
+  }
+
+  async function toggleFollow(e: React.MouseEvent) {
+    e.stopPropagation();
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/creators/${creatorProfileId}/follow`, { method: "POST" });
+    setBusy(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(typeof body?.error === "string" ? body.error : "Couldn't follow.");
+      return;
+    }
+    setFollowing(true);
+  }
+
+  return (
+    <div style={followWrapStyle}>
+      <button onClick={toggleFollow} disabled={busy} style={followButtonStyle}>
+        {busy ? "..." : "Follow"}
+      </button>
+      {error && <span style={followErrorStyle}>{error}</span>}
+    </div>
+  );
+}
+
+/**
+ * The "•••" options menu — Report lives here now (social-feed
+ * follow-up), not as a media overlay. ReportButton itself is reused
+ * completely unmodified: it already renders as a compact link that
+ * expands into its own reason/details form, which reads perfectly
+ * naturally as the one item in this dropdown. A full-screen transparent
+ * backdrop closes the menu on an outside click/tap — simpler than a
+ * document-level click listener for a menu this small.
+ */
+function PostOptionsMenu({ contentId }: { contentId: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div style={optionsMenuWrapStyle}>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+        style={optionsMenuButtonStyle}
+        aria-label="More options"
+      >
+        <DotsIcon />
+      </button>
+      {open && (
+        <>
+          <div style={optionsMenuBackdropStyle} onClick={() => setOpen(false)} />
+          <div style={optionsMenuPanelStyle} onClick={(e) => e.stopPropagation()}>
+            <ReportButton contentId={contentId} />
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -426,36 +524,60 @@ function ShareIcon() {
   );
 }
 
+function DotsIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <circle cx="5" cy="12" r="1.8" />
+      <circle cx="12" cy="12" r="1.8" />
+      <circle cx="19" cy="12" r="1.8" />
+    </svg>
+  );
+}
+
 const mutedSmallStyle: React.CSSProperties = { fontSize: "0.78rem", color: "var(--text-muted)" };
 
+// No frame at all — social-feed follow-up, matching a direct Instagram-
+// post reference: no background, no border, no radius, no padding.
+// Posts are separated by the feed list's own gap (see /app/feed/
+// discovery's own list styles) rather than a bordered box per post.
 const postCardStyle: React.CSSProperties = {
-  background: "var(--surface)",
-  border: "1px solid var(--border)",
-  borderRadius: "var(--radius)",
-  padding: "1rem",
   display: "flex",
   flexDirection: "column",
-  gap: "0.7rem",
+  gap: "0.6rem",
 };
 
 const postHeaderStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: "0.5rem",
+  gap: "0.6rem",
+};
+
+const postAvatarLinkStyle: React.CSSProperties = { display: "flex", flexShrink: 0 };
+
+// The two-line byline column (name row, then the muted "why this is
+// here" line) — flex: 1 + minWidth: 0 so the name can truncate rather
+// than pushing the Follow/••• controls off the edge.
+const postHeaderTextColStyle: React.CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.05rem",
+  textAlign: "left",
+};
+
+const postHeaderTopLineStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.4rem",
   flexWrap: "wrap",
 };
 
-const postHeaderLinkStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "0.5rem",
+const postCreatorNameStyle: React.CSSProperties = {
   color: "var(--text)",
   textDecoration: "none",
   fontWeight: 600,
   fontSize: "0.9rem",
-};
-
-const postCreatorNameStyle: React.CSSProperties = {
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
@@ -463,14 +585,71 @@ const postCreatorNameStyle: React.CSSProperties = {
 };
 
 const postTimeStyle: React.CSSProperties = { fontSize: "0.8rem", color: "var(--text-muted)" };
-const postContextChipStyle: React.CSSProperties = { fontSize: "0.8rem", color: "var(--accent)" };
 
-const postCaptionStyle: React.CSSProperties = { fontSize: "0.92rem", color: "var(--text)", margin: 0, whiteSpace: "pre-wrap" };
+// Muted, plain — matches the reference's "Suggested for you" treatment
+// exactly (a subtitle line, not a colored accent chip like the
+// original redesign's inline "· Suggested" version).
+const postContextLineStyle: React.CSSProperties = { fontSize: "0.8rem", color: "var(--text-muted)" };
 
-// Square corners — this is the content itself (media/locked-block),
-// not card chrome; social-feed follow-up ("no rounded corners when
-// content is open"). postCardStyle's own outer card radius is
-// untouched — that's the surrounding panel, not the content.
+const followWrapStyle: React.CSSProperties = { display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0 };
+
+const followButtonStyle: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  color: "var(--accent)",
+  fontWeight: 700,
+  fontSize: "0.85rem",
+  cursor: "pointer",
+  padding: 0,
+};
+
+const followErrorStyle: React.CSSProperties = { fontSize: "0.7rem", color: "var(--danger)", marginTop: "0.2rem" };
+
+const optionsMenuWrapStyle: React.CSSProperties = { position: "relative", flexShrink: 0 };
+
+const optionsMenuButtonStyle: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  color: "var(--text)",
+  cursor: "pointer",
+  padding: "0.2rem",
+  display: "flex",
+  alignItems: "center",
+};
+
+// Covers the viewport so a tap anywhere outside the panel closes it —
+// simpler than a document-level click listener for a menu this small.
+const optionsMenuBackdropStyle: React.CSSProperties = { position: "fixed", inset: 0, zIndex: 9 };
+
+const optionsMenuPanelStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "100%",
+  right: 0,
+  zIndex: 10,
+  marginTop: "0.3rem",
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  borderRadius: "10px",
+  padding: "0.75rem",
+  minWidth: "180px",
+  boxShadow: "var(--glow)",
+  textAlign: "left",
+};
+
+const postCaptionStyle: React.CSSProperties = {
+  fontSize: "0.92rem",
+  color: "var(--text)",
+  margin: 0,
+  whiteSpace: "pre-wrap",
+  textAlign: "left",
+};
+
+const postCaptionNameStyle: React.CSSProperties = {
+  color: "var(--text)",
+  textDecoration: "none",
+  fontWeight: 600,
+};
+
 const postMediaWrapStyle: React.CSSProperties = {
   position: "relative",
   overflow: "hidden",
@@ -504,18 +683,6 @@ const heartPopWrapStyle: React.CSSProperties = {
   justifyContent: "center",
   color: "#fff",
   pointerEvents: "none",
-};
-
-// Top-right corner of the media block (postMediaWrapStyle is already
-// position: relative) — same convention as reporting a tweet/post via
-// a corner affordance rather than a bottom-row action. z-index above
-// the locked block's own backdrop/scrim (lockedContentStyle is 1) so
-// Report stays reachable even on a locked post.
-const reportOverlayStyle: React.CSSProperties = {
-  position: "absolute",
-  top: "8px",
-  right: "8px",
-  zIndex: 2,
 };
 
 const postEngagementRowStyle: React.CSSProperties = {

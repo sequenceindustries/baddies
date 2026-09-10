@@ -62,10 +62,18 @@ export async function GET(req: NextRequest, { params }: { params: { creatorProfi
   const hasMore = items.length > PAGE_SIZE;
   const page = hasMore ? items.slice(0, PAGE_SIZE) : items;
 
-  const [viewerCtx, businessConfig, { vvipPriceUsd }] = await Promise.all([
+  const [viewerCtx, businessConfig, { vvipPriceUsd }, isFollowing] = await Promise.all([
     buildViewerLockContext(viewer),
     getBusinessConfig(),
     resolveCreatorPricing(creator),
+    viewer
+      ? db.follow
+          .findUnique({
+            where: { fanId_creatorProfileId: { fanId: viewer.id, creatorProfileId: params.creatorProfileId } },
+            select: { fanId: true },
+          })
+          .then(Boolean)
+      : Promise.resolve(false),
   ]);
 
   const shaped = page.map((item) => {
@@ -86,7 +94,7 @@ export async function GET(req: NextRequest, { params }: { params: { creatorProfi
 
     return shapeContentItem(
       { ...item, creatorProfile: creator },
-      { lock, viewerHasLiked: viewer ? item.likes.length > 0 : false, context: null }
+      { lock, viewerHasLiked: viewer ? item.likes.length > 0 : false, viewerIsFollowing: isFollowing, context: null }
     );
   });
 

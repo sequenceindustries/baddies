@@ -90,7 +90,7 @@ export function useLocationDetector() {
  * change. The route-change refetch matters for Nav specifically: Nav
  * lives in the root layout, so it mounts once for the whole session
  * rather than per-page — without this, logging in (a client-side
- * router.push to /fan-home or /creator-dashboard, not a full page load)
+ * router.push to /feed or /creator-dashboard, not a full page load)
  * left Nav's
  * own useSession() instance holding onto its original signed-out `user:
  * null` from before login, showing "Sign in"/"Join" to someone who very
@@ -128,7 +128,9 @@ export function useSession() {
  * register, and by the landing page's already-signed-in redirect.
  *
  * Per direct follow-up request ("for all, landing page should be
- * feed"), the feed (/fan-home) is now the default landing page for
+ * feed"), the feed (/feed — renamed from /fan-home once it stopped
+ * being fan-only, see /app/feed/page.tsx's own comment) is now the
+ * default landing page for
  * FAN, CREATOR, and ADMIN alike — their own dashboard/admin panel is
  * still reachable (Dashboard/Admin nav links, both unchanged), just no
  * longer where they land automatically. PARTNER keeps its own
@@ -139,7 +141,7 @@ export function useSession() {
  */
 export function roleHomePath(role: SessionUser["role"]): string {
   if (role === "PARTNER") return "/partner-dashboard";
-  return "/fan-home";
+  return "/feed";
 }
 
 const NO_AUTH_LINKS_PATHS = new Set(["/", "/founding-baddies"]);
@@ -291,7 +293,7 @@ function NavLinks({
           </Link>
         )}
         {(user.role === "FAN" || user.role === "CREATOR" || user.role === "ADMIN") && (
-          <Link href="/fan-home" style={linkStyle}>
+          <Link href="/feed" style={linkStyle}>
             Home
           </Link>
         )}

@@ -20,7 +20,7 @@ const LAUNCH_DATE = new Date("2026-10-08T00:00:00Z");
 /**
  * The real landing page (Sprint 0's placeholder replaced) — an anonymous
  * visitor's actual entry point. Logged-in visitors skip straight to their
- * role's home (roleHomePath — the feed, /fan-home, for everyone except
+ * role's home (roleHomePath — the feed, /feed, for everyone except
  * PARTNER, which keeps its own dashboard as the default; see
  * roleHomePath's own comment). Per product decision, the only CTA on
  * this page (and in Nav when it's showing) is the Founding Baddies

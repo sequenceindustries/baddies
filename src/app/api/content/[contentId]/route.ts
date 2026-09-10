@@ -79,6 +79,7 @@ export async function GET(req: NextRequest, { params }: { params: { contentId: s
   const shaped = shapeContentItem(item, {
     lock,
     viewerHasLiked: user ? item.likes.length > 0 : false,
+    viewerIsFollowing: isFollowing,
     context: isFollowing ? "following" : trending.some((t) => t.contentId === item.id) ? "trending" : null,
   });
 

@@ -54,7 +54,7 @@ export default function RegisterPage() {
     // Agreement, which only /apply collects. Choosing "Creator" here just
     // sends them straight into that next step instead of leaving them to
     // discover "Become a creator" in the nav on their own.
-    router.push(intent === "CREATOR" ? "/apply" : "/fan-home");
+    router.push(intent === "CREATOR" ? "/apply" : "/feed");
     router.refresh();
   }
 

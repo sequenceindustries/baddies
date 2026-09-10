@@ -382,7 +382,7 @@ const priceRowStyle: React.CSSProperties = {
   textShadow: "0 1px 4px rgba(0, 0, 0, 0.7)",
 };
 
-// Matches src/app/(fan)/fan-home/page.tsx's sectionWrapStyle — clearly-
+// Matches src/app/feed/page.tsx's sectionWrapStyle — clearly-
 // separated categories rather than sections running into each other.
 const sectionStyle: React.CSSProperties = { marginBottom: "4rem" };
 

@@ -16,9 +16,9 @@ interface CreatorsResponse {
  * dense Instagram-style grid of posts (social-feed redesign, Phase 2;
  * restyled in a later follow-up pass — see below): replaces the old
  * "Top Baddies"/"Baddies near you" creator-row browse default. Fed by
- * the same GET /api/feed the fan-home Twitter/X-style feed uses,
+ * the same GET /api/feed the /feed page's Twitter/X-style feed uses,
  * called here with `scope=discovery` — broad and platform-wide (unlike
- * fan-home's own narrowed-to-following/subscribed/suggested scope) but
+ * /feed's own narrowed-to-following/subscribed/suggested scope) but
  * pre-filtered server-side to unlocked content only, so this grid is
  * purely a browse-what-you-can-open surface, never a subscribe-bait
  * wall. Cursor-paginated infinite scroll, same sentinel pattern as
@@ -62,7 +62,7 @@ export default function DiscoveryPage() {
     setGridError(null);
     try {
       // scope=discovery: broad, platform-wide (not narrowed to
-      // following/subscribed/suggested the way fan-home's feed is) but
+      // following/subscribed/suggested the way /feed's own scope is) but
       // pre-filtered server-side to unlocked content only — see
       // GET /api/feed's own doc comment for why both live in one route.
       const params = new URLSearchParams({ scope: "discovery" });
