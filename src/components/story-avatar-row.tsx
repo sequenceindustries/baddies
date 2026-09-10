@@ -1,7 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+
+// How long an IMAGE story stays on screen before auto-advancing — a
+// video story has no fixed duration of its own, it advances on its own
+// "ended" event instead (real playback progress, not a guessed number).
+const IMAGE_DURATION_MS = 5000;
 
 interface StoryCreator {
   creatorProfileId: string;
@@ -95,25 +100,55 @@ export function StoryAvatarRow({ refreshKey }: { refreshKey?: number }) {
 
 /**
  * Full-bleed story viewer, built from MediaLightbox's template
- * (cards.tsx) plus minimal multi-story navigation: tap the right/left
- * half to advance/go back, a static (non-animated, non-timed) segment
- * bar shows progress through the set. Deliberately not a real
- * auto-advancing timed progress bar — that's real added complexity
- * nothing in the request asked for.
+ * (cards.tsx), Instagram-convention auto-advance: an IMAGE stays up for
+ * IMAGE_DURATION_MS with its segment bar filling in real time, then
+ * advances on its own; a VIDEO tracks its own real playback position
+ * (onTimeUpdate) and advances on its own "ended" event rather than a
+ * guessed duration. Tapping the right/left half still advances/goes
+ * back manually at any time, and auto-closes once the last story in the
+ * set finishes (playing or timing out) — same as running out via a
+ * manual tap past the end.
  */
 function StoryViewerOverlay({ items, onClose }: { items: StoryItem[]; onClose: () => void }) {
   const [index, setIndex] = useState(0);
+  const [progress, setProgress] = useState(0); // 0-100, current item only
+  const current = items[index];
+
+  // Drives the IMAGE auto-advance timer; a no-op for VIDEO, which is
+  // driven by the <video> element's own onTimeUpdate/onEnded instead.
+  // setInterval rather than requestAnimationFrame deliberately — rAF is
+  // fully paused by the browser whenever the tab/page isn't visible
+  // (e.g. the viewer switches tabs mid-story), which would silently
+  // freeze the countdown instead of just ticking along in the
+  // background like a real timer should.
+  useEffect(() => {
+    setProgress(0);
+    if (!current || current.mediaType === "VIDEO") return;
+    const start = Date.now();
+    const interval = setInterval(() => {
+      const pct = Math.min(100, ((Date.now() - start) / IMAGE_DURATION_MS) * 100);
+      setProgress(pct);
+      if (pct >= 100) {
+        clearInterval(interval);
+        goNext();
+      }
+    }, 50);
+    return () => clearInterval(interval);
+    // Deliberately only re-runs on index change — goNext/onClose are
+    // stable enough per-render for a one-shot-per-story timer, matching
+    // the same pattern this file's own data-fetch effects already use.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index]);
 
   if (typeof document === "undefined") return null;
-  const current = items[index];
   if (!current) return null;
 
   function handleClose(e: React.MouseEvent) {
     e.stopPropagation();
     onClose();
   }
-  function goNext(e: React.MouseEvent) {
-    e.stopPropagation();
+  function goNext(e?: React.MouseEvent) {
+    e?.stopPropagation();
     if (index >= items.length - 1) onClose();
     else setIndex((i) => i + 1);
   }
@@ -126,7 +161,14 @@ function StoryViewerOverlay({ items, onClose }: { items: StoryItem[]; onClose: (
     <div style={viewerBackdropStyle} onClick={handleClose} role="dialog" aria-modal="true">
       <div style={viewerSegmentsStyle} onClick={(e) => e.stopPropagation()}>
         {items.map((it, i) => (
-          <span key={it.storyId} style={{ ...viewerSegmentStyle, opacity: i <= index ? 1 : 0.35 }} />
+          <span key={it.storyId} style={viewerSegmentTrackStyle}>
+            <span
+              style={{
+                ...viewerSegmentFillStyle,
+                width: `${i < index ? 100 : i === index ? progress : 0}%`,
+              }}
+            />
+          </span>
         ))}
       </div>
       <button onClick={handleClose} style={viewerCloseStyle} aria-label="Close">
@@ -134,10 +176,22 @@ function StoryViewerOverlay({ items, onClose }: { items: StoryItem[]; onClose: (
       </button>
       <div style={viewerContentStyle} onClick={(e) => e.stopPropagation()}>
         {current.mediaType === "VIDEO" ? (
-          <video src={current.signedUrl} style={viewerMediaStyle} autoPlay playsInline controls={false} />
+          <video
+            key={current.storyId}
+            src={current.signedUrl}
+            style={viewerMediaStyle}
+            autoPlay
+            playsInline
+            controls={false}
+            onTimeUpdate={(e) => {
+              const v = e.currentTarget;
+              if (v.duration) setProgress((v.currentTime / v.duration) * 100);
+            }}
+            onEnded={() => goNext()}
+          />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={current.signedUrl} alt="" style={viewerMediaStyle} />
+          <img key={current.storyId} src={current.signedUrl} alt="" style={viewerMediaStyle} />
         )}
         <button onClick={goPrev} style={{ ...viewerTapZoneStyle, left: 0 }} aria-label="Previous story" />
         <button onClick={goNext} style={{ ...viewerTapZoneStyle, right: 0 }} aria-label="Next story" />
@@ -256,10 +310,17 @@ const viewerSegmentsStyle: React.CSSProperties = {
   gap: "0.3rem",
 };
 
-const viewerSegmentStyle: React.CSSProperties = {
+const viewerSegmentTrackStyle: React.CSSProperties = {
   flex: 1,
   height: "2.5px",
   borderRadius: "2px",
+  background: "rgba(255,255,255,0.35)",
+  overflow: "hidden",
+};
+
+const viewerSegmentFillStyle: React.CSSProperties = {
+  display: "block",
+  height: "100%",
   background: "#fff",
 };
 
