@@ -630,16 +630,31 @@ model ContentParticipant {
 
 // Private storage reference only — never a public permanent URL.
 // Access is always mediated by signed URLs at request time.
+// ORIGINAL = the exact bytes the creator uploaded, kept for provenance
+// and future reprocessing. DISPLAY = a generated, capped-dimension WebP
+// derivative (see src/lib/media/image-pipeline.ts) used for actual
+// viewer rendering when present — see GET /api/content/[contentId]/media,
+// which prefers DISPLAY and falls back to ORIGINAL. Every row created
+// before this enum existed defaults to ORIGINAL, which is correct: none
+// of them are generated derivatives.
+enum MediaAssetKind {
+  ORIGINAL
+  DISPLAY
+}
+
 model MediaAsset {
-  id              String   @id @default(cuid())
+  id              String         @id @default(cuid())
   contentId       String
-  content         Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  content         Content        @relation(fields: [contentId], references: [id], onDelete: Cascade)
   storageProvider String
   storageKey      String // private bucket key, never a public URL
   mimeType        String
   byteSize        Int?
   durationSeconds Int?
-  createdAt       DateTime @default(now())
+  kind            MediaAssetKind @default(ORIGINAL)
+  width           Int?
+  height          Int?
+  createdAt       DateTime       @default(now())
 
   @@index([contentId])
   @@map("media_assets")

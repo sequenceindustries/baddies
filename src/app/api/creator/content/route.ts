@@ -5,6 +5,7 @@ import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
 import { assertContentTransition } from "@/lib/content/status";
 import { getMediaStorageProvider } from "@/lib/providers/storage";
+import { generateDisplayVariant, getImageDimensions } from "@/lib/media/image-pipeline";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -152,6 +153,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "File exceeds maximum allowed size." }, { status: 413 });
   }
 
+  // Real image validation (there was none before): decode dimensions up
+  // front, outside the DB transaction, so a garbage/corrupt upload never
+  // creates a Content row at all. Also doubles as the source of the
+  // ORIGINAL asset's own width/height below. Video/audio are untouched —
+  // sharp only ever runs for IMAGE uploads.
+  let imageDims: { width: number; height: number } | null = null;
+  if (mediaType === "IMAGE") {
+    imageDims = await getImageDimensions(buffer);
+    if (!imageDims) {
+      return NextResponse.json({ error: "Uploaded file is not a valid image." }, { status: 400 });
+    }
+  }
+
   const { content, mediaAsset } = await db.$transaction(async (tx: import("@prisma/client").Prisma.TransactionClient) => {
     const createdContent = await tx.content.create({
       data: {
@@ -181,8 +195,40 @@ export async function POST(req: NextRequest) {
         storageKey: upload.storageKey,
         mimeType,
         byteSize: buffer.byteLength,
+        kind: "ORIGINAL",
+        width: imageDims?.width,
+        height: imageDims?.height,
       },
     });
+
+    // Generated, capped-dimension WebP derivative for actual viewer
+    // rendering — see image-pipeline.ts's own doc comment for why this
+    // is a single format rather than a real AVIF/WebP negotiation. A
+    // failure here (sharp choking despite the earlier decode check
+    // passing — rare) is not fatal: the ORIGINAL asset still serves
+    // fine, just uncompressed.
+    if (mediaType === "IMAGE") {
+      const display = await generateDisplayVariant(buffer);
+      if (display) {
+        const displayUpload = await storage.putObject({
+          key: `${upload.storageKey}-display`,
+          contentType: display.mimeType,
+          body: display.buffer,
+        });
+        await tx.mediaAsset.create({
+          data: {
+            contentId: createdContent.id,
+            storageProvider: storage.name,
+            storageKey: displayUpload.storageKey,
+            mimeType: display.mimeType,
+            byteSize: display.buffer.byteLength,
+            kind: "DISPLAY",
+            width: display.width,
+            height: display.height,
+          },
+        });
+      }
+    }
 
     // Product decision: uploads do not sit in an admin moderation queue —
     // a verified creator's content goes live the moment they publish it,

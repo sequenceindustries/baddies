@@ -1,6 +1,7 @@
 import { resolveCreatorPricing } from "@/lib/creator/pricing";
 import { db } from "@/lib/db/client";
 import { getMediaStorageProvider } from "@/lib/providers/storage";
+import { resolveDisplayUrl } from "@/lib/media/persist-public-image";
 
 /**
  * Matches build brief §11's creator card spec (updated for the Free/VIP/
@@ -46,21 +47,23 @@ export interface CreatorCard {
 export async function toCreatorCard(creator: CreatorCardSource): Promise<CreatorCard> {
   // Skip the latest-Free-post lookup entirely once a featured image is
   // set — it'll never be used, no reason to pay for the query.
-  const [pricing, thumbnail] = await Promise.all([
+  const [pricing, thumbnail, avatarUrl, coverImageUrl] = await Promise.all([
     resolveCreatorPricing(creator),
     creator.coverImageUrl ? Promise.resolve(null) : getLatestFreeThumbnail(creator.id),
+    resolveDisplayUrl(creator.user.profile?.avatarUrl),
+    resolveDisplayUrl(creator.coverImageUrl),
   ]);
   return {
     creatorProfileId: creator.id,
     displayName: creator.user.profile?.displayName ?? null,
-    avatarUrl: creator.user.profile?.avatarUrl ?? null,
+    avatarUrl: avatarUrl ?? null,
     country: creator.locationVisible ? (creator.user.profile?.country ?? null) : null,
     city: creator.locationVisible ? (creator.user.profile?.city ?? null) : null,
     verifiedBadge: true,
     vvipPriceUsd: pricing.vvipPriceUsd,
     isFoundingPartner: creator.user.foundingPartner !== null,
     isFoundingBaddie: creator.isFoundingBaddie,
-    thumbnailUrl: creator.coverImageUrl ?? thumbnail?.signedUrl ?? null,
+    thumbnailUrl: coverImageUrl ?? thumbnail?.signedUrl ?? null,
     thumbnailMimeType: creator.coverImageUrl ? guessMimeType(creator.coverImageUrl) : (thumbnail?.mimeType ?? null),
   };
 }
@@ -88,9 +91,13 @@ async function getLatestFreeThumbnail(creatorProfileId: string): Promise<{ signe
   const content = await db.content.findFirst({
     where: { creatorProfileId, accessLevel: "FREE", status: "APPROVED", publishedAt: { not: null } },
     orderBy: { publishedAt: "desc" },
-    select: { mediaAssets: { take: 1, select: { storageKey: true, mimeType: true } } },
+    select: { mediaAssets: { select: { storageKey: true, mimeType: true, kind: true } } },
   });
-  const asset = content?.mediaAssets[0];
+  // Prefer the generated DISPLAY derivative over the raw ORIGINAL for
+  // this thumbnail — same preference as GET /api/content/:id/media —
+  // falling back to ORIGINAL for video/audio/pre-pipeline content.
+  const assets = content?.mediaAssets ?? [];
+  const asset = assets.find((a: (typeof assets)[number]) => a.kind === "DISPLAY") ?? assets[0];
   if (!asset) return null;
 
   const storage = getMediaStorageProvider();

@@ -1,4 +1,5 @@
 import type { LockKind } from "@/lib/entitlements/list-lock";
+import { resolveDisplayUrl } from "@/lib/media/persist-public-image";
 
 /**
  * Shared shape/select for a single feed-style post item — extracted out
@@ -73,7 +74,7 @@ export function buildLockCta(
   return { locked: true, kind: null, priceUsd: null, ctaLabel: "Locked" };
 }
 
-export function shapeContentItem(
+export async function shapeContentItem(
   item: PostItemRow,
   opts: {
     lock: { locked: boolean; kind: LockKind; priceUsd: number | null; ctaLabel: string | null };
@@ -82,6 +83,13 @@ export function shapeContentItem(
     context: "following" | "trending" | "suggested" | null;
   }
 ) {
+  // Re-derive fresh signed URLs just-in-time — see resolveDisplayUrl's
+  // own comment (persist-public-image.ts) for why a stored value can't
+  // just be returned verbatim under a SigV4-backed provider (R2/S3).
+  const [avatarUrl, coverImageUrl] = await Promise.all([
+    resolveDisplayUrl(item.creatorProfile.user.profile?.avatarUrl),
+    resolveDisplayUrl(item.creatorProfile.coverImageUrl),
+  ]);
   return {
     contentId: item.id,
     mediaType: item.mediaType,
@@ -94,8 +102,8 @@ export function shapeContentItem(
       creatorProfileId: item.creatorProfile.id,
       displayName: item.creatorProfile.user.profile?.displayName ?? null,
       handle: item.creatorProfile.handle,
-      avatarUrl: item.creatorProfile.user.profile?.avatarUrl ?? null,
-      coverImageUrl: item.creatorProfile.coverImageUrl,
+      avatarUrl: avatarUrl ?? null,
+      coverImageUrl: coverImageUrl ?? null,
       isFoundingPartner: item.creatorProfile.user.foundingPartner !== null,
       isFoundingBaddie: item.creatorProfile.isFoundingBaddie,
       viewerIsFollowing: opts.viewerIsFollowing,

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
-import { persistPublicImage, publicImageUrlSchema } from "@/lib/media/persist-public-image";
+import { persistPublicImage, publicImageUrlSchema, resolveDisplayUrl } from "@/lib/media/persist-public-image";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -38,7 +38,7 @@ export async function GET() {
   return NextResponse.json({
     displayName: profile?.displayName ?? null,
     bio: profile?.bio ?? null,
-    avatarUrl: profile?.avatarUrl ?? null,
+    avatarUrl: (await resolveDisplayUrl(profile?.avatarUrl)) ?? null,
     country: profile?.country ?? null,
     city: profile?.city ?? null,
   });

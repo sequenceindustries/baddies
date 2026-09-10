@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { computeTrendingContent } from "@/lib/discovery/trending";
+import { resolveDisplayUrl } from "@/lib/media/persist-public-image";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -42,8 +43,8 @@ export async function GET() {
     .map((r) => byId.get(r.contentId))
     .filter((c): c is (typeof content)[number] => Boolean(c));
 
-  return NextResponse.json({
-    items: ordered.map((item) => ({
+  const items = await Promise.all(
+    ordered.map(async (item) => ({
       contentId: item.id,
       mediaType: item.mediaType,
       accessLevel: item.accessLevel,
@@ -52,8 +53,10 @@ export async function GET() {
       creator: {
         creatorProfileId: item.creatorProfile.id,
         displayName: item.creatorProfile.user.profile?.displayName,
-        avatarUrl: item.creatorProfile.user.profile?.avatarUrl,
+        avatarUrl: await resolveDisplayUrl(item.creatorProfile.user.profile?.avatarUrl),
       },
-    })),
-  });
+    }))
+  );
+
+  return NextResponse.json({ items });
 }

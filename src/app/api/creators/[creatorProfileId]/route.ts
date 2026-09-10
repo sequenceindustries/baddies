@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { resolveCreatorPricing } from "@/lib/creator/pricing";
+import { resolveDisplayUrl } from "@/lib/media/persist-public-image";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -29,11 +30,13 @@ export async function GET(
 
   const pricing = await resolveCreatorPricing(creator);
 
-  const [followerCount, subscriberCount] = await Promise.all([
+  const [followerCount, subscriberCount, avatarUrl, coverImageUrl] = await Promise.all([
     db.follow.count({ where: { creatorProfileId: creator.id } }),
     creator.subscriberCountVisible
       ? db.subscription.count({ where: { creatorProfileId: creator.id, status: "ACTIVE" } })
       : Promise.resolve(undefined),
+    resolveDisplayUrl(creator.user.profile?.avatarUrl),
+    resolveDisplayUrl(creator.coverImageUrl),
   ]);
 
   return NextResponse.json({
@@ -42,8 +45,8 @@ export async function GET(
     displayName: creator.user.profile?.displayName,
     handle: creator.handle,
     bio: creator.user.profile?.bio,
-    avatarUrl: creator.user.profile?.avatarUrl,
-    coverImageUrl: creator.coverImageUrl,
+    avatarUrl,
+    coverImageUrl,
     country: creator.locationVisible ? creator.user.profile?.country : undefined,
     city: creator.locationVisible ? creator.user.profile?.city : undefined,
     verifiedBadge: true, // this route only ever returns VERIFIED creators

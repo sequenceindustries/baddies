@@ -2,6 +2,17 @@ import crypto from "crypto";
 import { z } from "zod";
 import { getMediaStorageProvider } from "@/lib/providers/storage";
 
+// The stub provider's own HMAC-signed URLs have no real ceiling (they're
+// self-verified, not issued by a third party), so a 1-year TTL was safe
+// there. A real object-storage provider signed via SigV4 (R2, S3, ...)
+// caps presigned URLs at 604,800 seconds (7 days) — enforced by the
+// signing protocol itself, not a preference (see r2.ts's own
+// MAX_TTL_SECONDS clamp). PUBLIC_IMAGE_TTL_SECONDS below and
+// resolveDisplayUrl (bottom of this file) together keep this correct
+// under either provider: a value this long is stored, but every READ
+// re-derives a fresh URL just-in-time via resolveDisplayUrl rather than
+// ever handing out a URL that might already be stale.
+
 // Real, confirmed perf fix: avatarUrl/coverImageUrl were being saved as
 // whatever the client sent — and ImageUploadField (components/ui.tsx)
 // sends a raw `data:image/...;base64,...` string straight from
@@ -25,12 +36,8 @@ import { getMediaStorageProvider } from "@/lib/providers/storage";
 // via the inline base64 this replaces), so a long TTL here isn't a new
 // exposure — it's what makes the resulting URL something a browser can
 // actually cache across requests instead of needing to be reissued
-// every read like gated content's short-lived signed URLs are. Known,
-// accepted tradeoff: the persisted URL does still expire (~1 year) and
-// the image would need re-saving past that point — storing the
-// storageKey and re-signing per read (like gated content) is the real
-// long-term fix, flagged rather than built here.
-const PUBLIC_IMAGE_TTL_SECONDS = 60 * 60 * 24 * 365; // 1 year
+// every read like gated content's short-lived signed URLs are.
+const PUBLIC_IMAGE_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days — the real ceiling, see comment above
 
 const DATA_URL_PATTERN = /^data:([^;,]+);base64,(.+)$/s;
 
@@ -72,4 +79,49 @@ export async function persistPublicImage(
   const key = `${keyPrefix}/${Date.now()}-${crypto.randomUUID()}`;
   const { storageKey } = await storage.putObject({ key, contentType: contentType as string, body });
   return storage.getSignedReadUrl(storageKey, PUBLIC_IMAGE_TTL_SECONDS);
+}
+
+/**
+ * Re-derives a fresh signed URL for an already-stored avatarUrl/
+ * coverImageUrl value, just-in-time, on every read. Necessary because
+ * PUBLIC_IMAGE_TTL_SECONDS is a real ceiling under a SigV4-backed
+ * provider (R2/S3) — a URL persisted 7 days ago is stale, but the DB
+ * column still holds it (these forms round-trip the current value back
+ * on every unrelated save, and there's no job queue in this codebase to
+ * proactively re-sign it — see r2.ts). Every call site that returns
+ * avatarUrl/coverImageUrl to a client should wrap it through this rather
+ * than returning the stored column value directly.
+ *
+ * A no-op for anything that isn't a recognized R2 URL: the stub
+ * provider's relative /api/dev-stub-media path, a fresh data: URL still
+ * awaiting persistPublicImage's own conversion, null/undefined, or a
+ * URL from a different host entirely all pass through unchanged.
+ */
+export async function resolveDisplayUrl(stored: string | null | undefined): Promise<string | null | undefined> {
+  if (!stored) return stored;
+  const endpoint = process.env.R2_ENDPOINT;
+  const bucket = process.env.R2_BUCKET_NAME;
+  if (!endpoint || !bucket) return stored;
+
+  let url: URL;
+  try {
+    url = new URL(stored);
+  } catch {
+    return stored;
+  }
+
+  const endpointHost = new URL(endpoint).host;
+  let key: string | null = null;
+  if (url.host === endpointHost) {
+    // Path-style: https://<account>.r2.cloudflarestorage.com/<bucket>/<key>
+    const prefix = `/${bucket}/`;
+    if (url.pathname.startsWith(prefix)) key = decodeURIComponent(url.pathname.slice(prefix.length));
+  } else if (url.host === `${bucket}.${endpointHost}`) {
+    // Virtual-hosted-style: https://<bucket>.<account>.r2.cloudflarestorage.com/<key>
+    key = decodeURIComponent(url.pathname.slice(1));
+  }
+  if (!key) return stored;
+
+  const storage = getMediaStorageProvider();
+  return storage.getSignedReadUrl(key, PUBLIC_IMAGE_TTL_SECONDS);
 }

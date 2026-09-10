@@ -41,8 +41,15 @@ export async function GET(
   }
 
   const storage = getMediaStorageProvider();
+  // Prefer the generated DISPLAY derivative (capped-dimension WebP, see
+  // image-pipeline.ts) over the ORIGINAL when one exists — video/audio
+  // and every piece of content uploaded before this pipeline shipped has
+  // no DISPLAY asset, so they fall through to ORIGINAL automatically.
+  // Response shape is unchanged either way: one entry per content.
+  const displayAssets = content.mediaAssets.filter((a: (typeof content.mediaAssets)[number]) => a.kind === "DISPLAY");
+  const chosenAssets = displayAssets.length > 0 ? displayAssets : content.mediaAssets;
   const urls = await Promise.all(
-    content.mediaAssets.map(async (asset: (typeof content.mediaAssets)[number]) => ({
+    chosenAssets.map(async (asset: (typeof content.mediaAssets)[number]) => ({
       mediaAssetId: asset.id,
       mimeType: asset.mimeType,
       signedUrl: await storage.getSignedReadUrl(asset.storageKey),

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { resolveDisplayUrl } from "@/lib/media/persist-public-image";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -56,13 +57,15 @@ export async function GET() {
     },
   });
 
-  return NextResponse.json({
-    creators: creators.map((c: (typeof creators)[number]) => ({
+  const shaped = await Promise.all(
+    creators.map(async (c: (typeof creators)[number]) => ({
       creatorProfileId: c.id,
       displayName: c.user.profile?.displayName ?? null,
-      avatarUrl: c.user.profile?.avatarUrl ?? null,
+      avatarUrl: (await resolveDisplayUrl(c.user.profile?.avatarUrl)) ?? null,
       isFoundingPartner: c.user.foundingPartner !== null,
       isFoundingBaddie: c.isFoundingBaddie,
-    })),
-  });
+    }))
+  );
+
+  return NextResponse.json({ creators: shaped });
 }

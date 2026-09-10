@@ -76,7 +76,7 @@ export async function GET(req: NextRequest, { params }: { params: { contentId: s
       )
     : { locked: false as const, kind: null, priceUsd: null, ctaLabel: null };
 
-  const shaped = shapeContentItem(item, {
+  const shaped = await shapeContentItem(item, {
     lock,
     viewerHasLiked: user ? item.likes.length > 0 : false,
     viewerIsFollowing: isFollowing,

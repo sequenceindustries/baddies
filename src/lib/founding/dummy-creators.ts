@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { hashPassword } from "@/lib/auth/session";
 import { encryptField } from "@/lib/security/field-encryption";
+import { getMediaStorageProvider } from "@/lib/providers/storage";
 
 /**
  * The seeded 5-creator demo roster + the logic that writes it to the DB.
@@ -353,27 +354,29 @@ export async function seedDummyCreators(db: PrismaClient): Promise<void> {
         update: { caption: post.caption, accessLevel: post.tier, publishedAt },
       });
 
+      // Routed through the real storage abstraction (not a direct
+      // db.mediaBlob write) so seeding stays correct under whichever
+      // provider is actually configured — previously this assumed the
+      // stub provider's backing table specifically, which would have
+      // silently produced missing dummy-creator media once
+      // MEDIA_STORAGE_PROVIDER=r2 (writes going nowhere the real
+      // provider reads, no error). putObject itself upserts by key
+      // under the stub provider already; a real provider like R2
+      // overwrites-by-key too, so re-running the seed stays idempotent.
+      const storage = getMediaStorageProvider();
+      await storage.putObject({ key: storageKey, contentType: mimeType, body: bytes });
+
       await db.mediaAsset.upsert({
         where: { id: `${contentId}-asset` },
         create: {
           id: `${contentId}-asset`,
           contentId,
-          storageProvider: "stub",
+          storageProvider: storage.name,
           storageKey,
           mimeType,
           byteSize: bytes.byteLength,
         },
-        update: { mimeType, byteSize: bytes.byteLength },
-      });
-
-      // Mirrors what StubMediaStorageProvider.putObject does — writing
-      // directly here (rather than going through the provider) keeps this
-      // module decoupled from which provider is configured, and seeding
-      // only ever targets the stub provider's backing table anyway.
-      await db.mediaBlob.upsert({
-        where: { storageKey },
-        create: { storageKey, mimeType, bytes },
-        update: { mimeType, bytes },
+        update: { mimeType, byteSize: bytes.byteLength, storageProvider: storage.name },
       });
     }
   }

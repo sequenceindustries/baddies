@@ -76,27 +76,29 @@ export async function GET(req: NextRequest, { params }: { params: { creatorProfi
       : Promise.resolve(false),
   ]);
 
-  const shaped = page.map((item) => {
-    const lockState = computeLockState(
-      {
-        creatorProfileId: item.creatorProfileId,
-        accessLevel: item.accessLevel,
-        status: item.status,
-        publishedAt: item.publishedAt,
-        creatorUnlimitedOptedIn: creator.unlimitedOptedIn,
-      },
-      viewerCtx
-    );
+  const shaped = await Promise.all(
+    page.map(async (item) => {
+      const lockState = computeLockState(
+        {
+          creatorProfileId: item.creatorProfileId,
+          accessLevel: item.accessLevel,
+          status: item.status,
+          publishedAt: item.publishedAt,
+          creatorUnlimitedOptedIn: creator.unlimitedOptedIn,
+        },
+        viewerCtx
+      );
 
-    const lock = lockState.locked
-      ? buildLockCta(lockState.kind, businessConfig.vipPassPriceUsd, vvipPriceUsd)
-      : { locked: false as const, kind: null, priceUsd: null, ctaLabel: null };
+      const lock = lockState.locked
+        ? buildLockCta(lockState.kind, businessConfig.vipPassPriceUsd, vvipPriceUsd)
+        : { locked: false as const, kind: null, priceUsd: null, ctaLabel: null };
 
-    return shapeContentItem(
-      { ...item, creatorProfile: creator },
-      { lock, viewerHasLiked: viewer ? item.likes.length > 0 : false, viewerIsFollowing: isFollowing, context: null }
-    );
-  });
+      return shapeContentItem(
+        { ...item, creatorProfile: creator },
+        { lock, viewerHasLiked: viewer ? item.likes.length > 0 : false, viewerIsFollowing: isFollowing, context: null }
+      );
+    })
+  );
 
   return NextResponse.json({
     items: shaped,
