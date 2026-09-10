@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession, displayHeadingStyle } from "@/components/ui";
+import { SegmentedTabs } from "@/components/segmented-tabs";
+
+type SubsTab = "vip" | "subscriptions" | "history";
 
 interface VipPass {
   subscriptionId: string;
@@ -39,6 +42,11 @@ export default function SubscriptionsPage() {
   const [purchases, setPurchases] = useState<PurchaseItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Initialized to the literal "vip" rather than derived from the tabs
+  // array below — that array depends on `purchases`, which isn't
+  // populated until after the initial fetch resolves, so deriving the
+  // default from it would flash/mismatch on first render.
+  const [tab, setTab] = useState<SubsTab>("vip");
 
   function reload() {
     setLoading(true);
@@ -81,6 +89,16 @@ export default function SubscriptionsPage() {
     );
   }
 
+  const tabs: { value: SubsTab; label: string }[] = [
+    { value: "vip", label: "VIP Pass" },
+    { value: "subscriptions", label: "Subscriptions" },
+  ];
+  if (purchases.length > 0) tabs.push({ value: "history", label: "History" });
+  // A tab that only exists once purchases load shouldn't leave the
+  // viewer stranded on it if it later turns out to have zero rows
+  // (e.g. a stale selection from a prior visit) — falls back to "vip".
+  const activeTab = tab === "history" && purchases.length === 0 ? "vip" : tab;
+
   return (
     <main style={mainStyle}>
       <h1 style={displayHeadingStyle}>My subscriptions</h1>
@@ -89,59 +107,69 @@ export default function SubscriptionsPage() {
         <p style={{ color: "var(--text-muted)" }}>Loading...</p>
       ) : (
         <>
-          <h2 style={sectionHeadingStyle}>Platform VIP Pass</h2>
-          {vipPass && vipPass.status === "ACTIVE" ? (
-            <div style={{ ...rowCardStyle, marginBottom: "2rem" }}>
-              <div>
-                <div style={{ fontWeight: 600 }}>Active</div>
-                <div style={mutedSmallStyle}>
-                  ${vipPass.priceUsdAtPurchase.toFixed(2)}/mo · renews{" "}
-                  {new Date(vipPass.currentPeriodEnd).toLocaleDateString()}
-                </div>
-              </div>
-              <button onClick={cancelVipPass} disabled={busyId === "vip-pass"} style={cancelButtonStyle}>
-                {busyId === "vip-pass" ? "..." : "Cancel"}
-              </button>
-            </div>
-          ) : (
-            <p style={{ color: "var(--text-muted)", marginBottom: "2rem" }}>
-              No active VIP Pass — get one from any creator&apos;s profile to unlock VIP-tier content across every
-              participating creator.
-            </p>
-          )}
+          <SegmentedTabs tabs={tabs} active={activeTab} onChange={setTab} />
 
-          <h2 style={sectionHeadingStyle}>Exclusive subscriptions</h2>
-          {subscriptions.length === 0 ? (
-            <p style={{ color: "var(--text-muted)" }}>No creator subscriptions yet.</p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "2rem" }}>
-              {subscriptions.map((s) => (
-                <div key={s.subscriptionId} style={rowCardStyle}>
+          {activeTab === "vip" && (
+            <>
+              <h2 style={sectionHeadingStyle}>Platform VIP Pass</h2>
+              {vipPass && vipPass.status === "ACTIVE" ? (
+                <div style={rowCardStyle}>
                   <div>
-                    <Link href={`/creators/${s.creatorProfileId}`} style={{ color: "var(--text)", fontWeight: 600 }}>
-                      {s.creatorDisplayName ?? "Unnamed creator"}
-                    </Link>
+                    <div style={{ fontWeight: 600 }}>Active</div>
                     <div style={mutedSmallStyle}>
-                      ${s.priceUsdAtPurchase.toFixed(2)}/mo · {s.status}
-                      {s.status === "ACTIVE" &&
-                        ` · renews ${new Date(s.currentPeriodEnd).toLocaleDateString()}`}
+                      ${vipPass.priceUsdAtPurchase.toFixed(2)}/mo · renews{" "}
+                      {new Date(vipPass.currentPeriodEnd).toLocaleDateString()}
                     </div>
                   </div>
-                  {s.status === "ACTIVE" && (
-                    <button
-                      onClick={() => cancelSubscription(s.subscriptionId)}
-                      disabled={busyId === s.subscriptionId}
-                      style={cancelButtonStyle}
-                    >
-                      {busyId === s.subscriptionId ? "..." : "Cancel"}
-                    </button>
-                  )}
+                  <button onClick={cancelVipPass} disabled={busyId === "vip-pass"} style={cancelButtonStyle}>
+                    {busyId === "vip-pass" ? "..." : "Cancel"}
+                  </button>
                 </div>
-              ))}
-            </div>
+              ) : (
+                <p style={{ color: "var(--text-muted)" }}>
+                  No active VIP Pass — get one from any creator&apos;s profile to unlock VIP-tier content across
+                  every participating creator.
+                </p>
+              )}
+            </>
           )}
 
-          {purchases.length > 0 && (
+          {activeTab === "subscriptions" && (
+            <>
+              <h2 style={sectionHeadingStyle}>Exclusive subscriptions</h2>
+              {subscriptions.length === 0 ? (
+                <p style={{ color: "var(--text-muted)" }}>No creator subscriptions yet.</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                  {subscriptions.map((s) => (
+                    <div key={s.subscriptionId} style={rowCardStyle}>
+                      <div>
+                        <Link href={`/creators/${s.creatorProfileId}`} style={{ color: "var(--text)", fontWeight: 600 }}>
+                          {s.creatorDisplayName ?? "Unnamed creator"}
+                        </Link>
+                        <div style={mutedSmallStyle}>
+                          ${s.priceUsdAtPurchase.toFixed(2)}/mo · {s.status}
+                          {s.status === "ACTIVE" &&
+                            ` · renews ${new Date(s.currentPeriodEnd).toLocaleDateString()}`}
+                        </div>
+                      </div>
+                      {s.status === "ACTIVE" && (
+                        <button
+                          onClick={() => cancelSubscription(s.subscriptionId)}
+                          disabled={busyId === s.subscriptionId}
+                          style={cancelButtonStyle}
+                        >
+                          {busyId === s.subscriptionId ? "..." : "Cancel"}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {activeTab === "history" && purchases.length > 0 && (
             <>
               <h2 style={sectionHeadingStyle}>Pay-per-view purchases (legacy)</h2>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>

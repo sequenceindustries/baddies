@@ -13,6 +13,7 @@ import {
   ImageUploadField,
 } from "@/components/ui";
 import { VerificationFlow } from "@/components/verification-capture";
+import { SegmentedTabs } from "@/components/segmented-tabs";
 import { ACCESS_LABEL } from "@/components/cards";
 import { EXCLUSIVE_MIN_PRICE_USD } from "@/lib/creator/pricing";
 
@@ -85,13 +86,11 @@ export default function CreatorDashboardPage() {
 
       {active && (
         <>
-          <div style={tabBarStyle}>
-            {tabs.map((t) => (
-              <button key={t.id} onClick={() => setTab(t.id)} style={tabButtonStyle(tab === t.id)}>
-                {t.label}
-              </button>
-            ))}
-          </div>
+          <SegmentedTabs
+            tabs={tabs.map((t) => ({ value: t.id, label: t.label }))}
+            active={tab}
+            onChange={setTab}
+          />
 
           {/* Repeats regardless of which tab is open — StatusPanel's own
               message is easy to lose sight of once you've scrolled down
@@ -121,14 +120,6 @@ export default function CreatorDashboardPage() {
 // its own Resend action) — removed from here to avoid showing the same
 // thing in two places once Settings became the real, canonical account
 // page for it.
-
-const tabBarStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "center",
-  gap: "0.5rem",
-  marginBottom: "1.75rem",
-  flexWrap: "wrap",
-};
 
 /**
  * A short, persistent reminder that stays visible under the tab bar no
@@ -179,19 +170,6 @@ const overviewGridStyle: React.CSSProperties = {
   gap: "1.5rem",
   alignItems: "start",
 };
-
-function tabButtonStyle(active: boolean): React.CSSProperties {
-  return {
-    padding: "0.5rem 1.1rem",
-    borderRadius: "999px",
-    fontSize: "0.85rem",
-    fontWeight: 600,
-    cursor: "pointer",
-    background: active ? "var(--accent)" : "transparent",
-    color: active ? "var(--bg)" : "var(--text-muted)",
-    border: active ? "none" : "1px solid var(--border)",
-  };
-}
 
 /**
  * Phase 4's onboarding checklist — reuses three endpoints the rest of

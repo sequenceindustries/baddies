@@ -2,16 +2,30 @@
 
 import { useEffect, useState } from "react";
 import { useSession, displayHeadingStyle, cardStyle, Field, inputStyle, primaryButtonStyle, errorBannerStyle } from "@/components/ui";
+import { SegmentedTabs } from "@/components/segmented-tabs";
+
+type SettingsTab = "account" | "password" | "sessions";
+
+const SETTINGS_TABS: { value: SettingsTab; label: string }[] = [
+  { value: "account", label: "Account" },
+  { value: "password", label: "Password" },
+  { value: "sessions", label: "Sessions" },
+];
 
 /**
  * Real account-level settings — password, sessions, email verification.
  * Split from /profile (display name/bio/avatar/location — what shows on
  * your profile) per explicit product decision: this page used to be one
  * thing called "Settings" holding both; now each has its own page and
- * its own real functions, not just a renamed heading.
+ * its own real functions, not just a renamed heading. That split stays
+ * exactly as it was — tabs (social-feed follow-up) go *within* this
+ * page, not back across the two. All three tabs are always shown
+ * (unlike /profile's conditional second tab) since every signed-in
+ * account has a password and sessions to manage.
  */
 export default function SettingsPage() {
   const { user, loading, refresh } = useSession();
+  const [tab, setTab] = useState<SettingsTab>("account");
 
   if (loading) return <main style={mainStyle} />;
   if (!user) {
@@ -25,10 +39,17 @@ export default function SettingsPage() {
   return (
     <main style={mainStyle}>
       <h1 style={{ ...displayHeadingStyle, textAlign: "center" }}>Settings</h1>
-      <AccountOverviewPanel role={user.role} createdAt={user.createdAt} onSignOut={refresh} />
-      <AccountEmailPanel email={user.email} emailVerified={user.emailVerified} isCreator={Boolean(user.creatorProfile)} />
-      <ChangePasswordPanel />
-      <SessionsPanel />
+
+      <SegmentedTabs tabs={SETTINGS_TABS} active={tab} onChange={setTab} />
+
+      {tab === "account" && (
+        <>
+          <AccountOverviewPanel role={user.role} createdAt={user.createdAt} onSignOut={refresh} />
+          <AccountEmailPanel email={user.email} emailVerified={user.emailVerified} isCreator={Boolean(user.creatorProfile)} />
+        </>
+      )}
+      {tab === "password" && <ChangePasswordPanel />}
+      {tab === "sessions" && <SessionsPanel />}
     </main>
   );
 }

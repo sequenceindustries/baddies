@@ -12,6 +12,9 @@ import {
   errorBannerStyle,
   LocationField,
 } from "@/components/ui";
+import { SegmentedTabs } from "@/components/segmented-tabs";
+
+type ProfileTab = "profile" | "application";
 
 /**
  * Public identity — display name, bio, avatar, location, and what kind
@@ -19,10 +22,19 @@ import {
  * sessions, email verification — see /settings) per explicit product
  * decision: this page used to be called "Settings" and hold both; now
  * "Settings" is its own page with real account functions and this one
- * is just what shows on your profile.
+ * is just what shows on your profile. That split stays exactly as it
+ * was — the social-feed follow-up's tab/segment navigation goes
+ * *within* this page, not back across the two.
+ *
+ * A fan sees a single "Profile" tab (no second tab to switch to — the
+ * bar isn't rendered at all in that case, matching creator-dashboard's
+ * own "don't show tabs with nothing to switch between" convention); a
+ * creator additionally gets "Application details" (their own
+ * read-only submitted identity/verification info).
  */
 export default function ProfilePage() {
   const { user, loading } = useSession();
+  const [tab, setTab] = useState<ProfileTab>("profile");
 
   if (loading) return <main style={mainStyle} />;
   if (!user) {
@@ -33,17 +45,28 @@ export default function ProfilePage() {
     );
   }
 
+  const showApplicationTab = Boolean(user.creatorProfile);
+  const tabs: { value: ProfileTab; label: string }[] = [{ value: "profile", label: "Profile" }];
+  if (showApplicationTab) tabs.push({ value: "application", label: "Application details" });
+
   return (
     <main style={mainStyle}>
       <h1 style={{ ...displayHeadingStyle, textAlign: "center" }}>Profile</h1>
-      <AccountTypePanel
-        role={user.role}
-        creatorProfile={user.creatorProfile}
-        foundingPartner={user.foundingPartner}
-        createdAt={user.createdAt}
-      />
-      <ProfileSettings />
-      {user.creatorProfile && <ApplicationDetailsPanel />}
+
+      {tabs.length > 1 && <SegmentedTabs tabs={tabs} active={tab} onChange={setTab} />}
+
+      {tab === "profile" && (
+        <>
+          <AccountTypePanel
+            role={user.role}
+            creatorProfile={user.creatorProfile}
+            foundingPartner={user.foundingPartner}
+            createdAt={user.createdAt}
+          />
+          <ProfileSettings />
+        </>
+      )}
+      {tab === "application" && showApplicationTab && <ApplicationDetailsPanel />}
     </main>
   );
 }
