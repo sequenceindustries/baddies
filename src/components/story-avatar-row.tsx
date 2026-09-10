@@ -379,9 +379,19 @@ function StoryViewerOverlay({
 // creators comfortably fits the row's own width). overflowX:auto is
 // kept for whenever the row genuinely doesn't fit (more creators than
 // the viewport can hold), same horizontal-scroll behavior as before.
+//
+// Real, confirmed bug: plain `justify-content: center` on an
+// overflow-x:auto flex row clips the first/last items whenever content
+// is wider than the container — centering the flex line pushes the
+// overflow equally past both edges of the scrollport, so even
+// scrolling all the way to the start still cuts the first avatar in
+// half (and the last one too at the other end). `safe center` is the
+// CSS fix purpose-built for this: center when everything fits, but
+// fall back to flex-start (normal, nothing-clipped scrolling) the
+// instant it would overflow.
 const rowStyle: React.CSSProperties = {
   display: "flex",
-  justifyContent: "center",
+  justifyContent: "safe center",
   gap: "1.3rem",
   overflowX: "auto",
   padding: "0.25rem 0.1rem 0.35rem",
