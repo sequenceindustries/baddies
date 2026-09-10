@@ -17,7 +17,7 @@ export const POST_ITEM_SELECT = {
   publishedAt: true,
   status: true,
   creatorProfileId: true,
-  _count: { select: { likes: true, tips: true } },
+  _count: { select: { likes: true } },
   creatorProfile: {
     select: {
       id: true,
@@ -43,7 +43,7 @@ export interface PostItemRow {
   publishedAt: Date | string | null;
   status: string;
   creatorProfileId: string;
-  _count: { likes: number; tips: number };
+  _count: { likes: number };
   creatorProfile: {
     id: string;
     unlimitedOptedIn: boolean;
@@ -86,7 +86,6 @@ export function shapeContentItem(
     caption: item.caption,
     publishedAt: item.publishedAt,
     likeCount: item._count.likes,
-    tipCount: item._count.tips,
     viewerHasLiked: opts.viewerHasLiked,
     creator: {
       creatorProfileId: item.creatorProfile.id,

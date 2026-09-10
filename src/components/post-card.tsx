@@ -13,7 +13,6 @@ export interface PostCardItem {
   caption: string | null;
   publishedAt: string | null;
   likeCount: number;
-  tipCount: number;
   viewerHasLiked: boolean;
   creator: {
     creatorProfileId: string;
@@ -44,9 +43,15 @@ const CONTEXT_LABEL: Record<NonNullable<PostCardItem["context"]>, string> = {
  * name, VerifiedBadge, timestamp, context chip) → caption → media as a
  * normal in-flow block (not ContentCard's full-bleed cropped
  * background-scrim treatment) → the engagement row BELOW the media
- * (like/message/tip/share, icon+count) — the explicit Twitter-vs-
- * Instagram distinction from the redesign brief. ContentCard itself
- * is untouched; this is a new, separate component.
+ * (like/message/share, icon+count) — the explicit Twitter-vs-Instagram
+ * distinction from the redesign brief. Report sits as a top-right
+ * overlay on the media itself instead (social-feed follow-up), not in
+ * the engagement row — same convention as reporting a tweet/post via a
+ * corner affordance rather than a bottom-row action. Tipping was
+ * removed entirely in the same follow-up (see ComposeMessageModal's
+ * neighbor — there is no TipModal here anymore); the Tip Prisma model
+ * itself is untouched, only this UI and its dedicated route are gone.
+ * ContentCard itself is untouched; this is a new, separate component.
  */
 export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockChange?: (unlocked: boolean) => void }) {
   const [media, setMedia] = useState<{ mimeType: string; signedUrl: string } | null>(null);
@@ -59,9 +64,7 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
   const [likeBusy, setLikeBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [heartPopKey, setHeartPopKey] = useState<number | null>(null);
-  const [tipOpen, setTipOpen] = useState(false);
   const [messageOpen, setMessageOpen] = useState(false);
-  const [tipCount, setTipCount] = useState(item.tipCount);
   const [shareCopied, setShareCopied] = useState(false);
   const lastTapRef = useRef(0);
   const pendingTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -202,6 +205,14 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
       {item.caption && <p style={postCaptionStyle}>{item.caption}</p>}
 
       <div style={postMediaWrapStyle} onClick={handleMediaTap} role="button" aria-label="Post media">
+        {/* Top-right overlay, regardless of locked state — reporting a
+            post shouldn't require unlocking it first. Its own
+            stopPropagation keeps a tap here from also triggering the
+            media-tap/lightbox handler underneath. */}
+        <div style={reportOverlayStyle} onClick={(e) => e.stopPropagation()}>
+          <ReportButton contentId={item.contentId} />
+        </div>
+
         {locked ? (
           <LockedMediaBlock item={item} unlocking={unlocking} onUnlock={handleUnlock} error={error} />
         ) : media ? (
@@ -246,28 +257,13 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
         <button onClick={() => setMessageOpen(true)} style={engagementButtonStyle(false)} aria-label="Message">
           <MessageIcon />
         </button>
-        <button onClick={() => setTipOpen(true)} style={engagementButtonStyle(false)} aria-label="Tip">
-          <TipIcon />
-          {tipCount > 0 && <span>{tipCount}</span>}
-        </button>
         <button onClick={handleShare} style={engagementButtonStyle(false)} aria-label="Share">
           <ShareIcon />
           {shareCopied && <span style={{ fontSize: "0.72rem" }}>Copied</span>}
         </button>
-        <ReportButton contentId={item.contentId} />
       </div>
 
       {expanded && media && <MediaLightbox mimeType={media.mimeType} url={media.signedUrl} onClose={() => setExpanded(false)} />}
-      {tipOpen && (
-        <TipModal
-          contentId={item.contentId}
-          onClose={() => setTipOpen(false)}
-          onSent={(newCount) => {
-            setTipCount(newCount);
-            setTipOpen(false);
-          }}
-        />
-      )}
       {messageOpen && (
         <ComposeMessageModal creatorProfileId={item.creator.creatorProfileId} onClose={() => setMessageOpen(false)} />
       )}
@@ -372,93 +368,6 @@ export function ComposeMessageModal({ creatorProfileId, onClose }: { creatorProf
   );
 }
 
-const TIP_PRESETS_USD = [5, 10, 25];
-
-function TipModal({
-  contentId,
-  onClose,
-  onSent,
-}: {
-  contentId: string;
-  onClose: () => void;
-  onSent: (newTipCount: number) => void;
-}) {
-  const [amount, setAmount] = useState<number>(TIP_PRESETS_USD[0]!);
-  const [customAmount, setCustomAmount] = useState("");
-  const [message, setMessage] = useState("");
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const effectiveAmount = customAmount ? Number(customAmount) : amount;
-
-  async function send() {
-    setSending(true);
-    setError(null);
-    const res = await fetch(`/api/content/${contentId}/tip`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amountUsd: effectiveAmount, message: message || undefined }),
-    });
-    setSending(false);
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      setError(typeof body?.error === "string" ? body.error : "Couldn't send your tip.");
-      return;
-    }
-    const body = await res.json();
-    onSent(body.tipCount);
-  }
-
-  return (
-    <ModalPortal onClose={onClose} title="Send a tip">
-      <div style={tipPresetRowStyle}>
-        {TIP_PRESETS_USD.map((preset) => (
-          <button
-            key={preset}
-            onClick={() => {
-              setAmount(preset);
-              setCustomAmount("");
-            }}
-            style={tipPresetButtonStyle(!customAmount && amount === preset)}
-          >
-            ${preset}
-          </button>
-        ))}
-      </div>
-      <input
-        type="number"
-        min={1}
-        max={500}
-        placeholder="Custom amount ($)"
-        value={customAmount}
-        onChange={(e) => setCustomAmount(e.target.value)}
-        style={modalInputStyle}
-      />
-      <input
-        type="text"
-        placeholder="Add a message (optional)"
-        value={message}
-        onChange={(e) => setMessage(e.target.value)}
-        maxLength={500}
-        style={modalInputStyle}
-      />
-      {error && <p style={{ ...mutedSmallStyle, color: "var(--danger)" }}>{error}</p>}
-      <div style={modalActionsStyle}>
-        <button onClick={onClose} style={modalGhostButtonStyle}>
-          Cancel
-        </button>
-        <button
-          onClick={send}
-          disabled={sending || !effectiveAmount || effectiveAmount < 1}
-          style={modalPrimaryButtonStyle}
-        >
-          {sending ? "Sending..." : `Tip $${effectiveAmount || 0}`}
-        </button>
-      </div>
-    </ModalPortal>
-  );
-}
-
 function ModalPortal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   if (typeof document === "undefined") return null;
   function handleBackdropClick(e: React.MouseEvent) {
@@ -499,15 +408,6 @@ function MessageIcon() {
         strokeWidth="1.6"
         strokeLinejoin="round"
       />
-    </svg>
-  );
-}
-
-function TipIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M12 7v10M9.5 9.5c0-1.1 1.12-2 2.5-2s2.5.9 2.5 2-1.12 2-2.5 2-2.5.9-2.5 2 1.12 2 2.5 2 2.5-.9 2.5-2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
   );
 }
@@ -601,6 +501,18 @@ const heartPopWrapStyle: React.CSSProperties = {
   justifyContent: "center",
   color: "#fff",
   pointerEvents: "none",
+};
+
+// Top-right corner of the media block (postMediaWrapStyle is already
+// position: relative) — same convention as reporting a tweet/post via
+// a corner affordance rather than a bottom-row action. z-index above
+// the locked block's own backdrop/scrim (lockedContentStyle is 1) so
+// Report stays reachable even on a locked post.
+const reportOverlayStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "8px",
+  right: "8px",
+  zIndex: 2,
 };
 
 const postEngagementRowStyle: React.CSSProperties = {
@@ -726,16 +638,6 @@ const modalTextareaStyle: React.CSSProperties = {
   resize: "vertical",
 };
 
-const modalInputStyle: React.CSSProperties = {
-  width: "100%",
-  background: "var(--surface-raised)",
-  border: "1px solid var(--border)",
-  borderRadius: "8px",
-  color: "var(--text)",
-  padding: "0.6rem",
-  fontSize: "0.88rem",
-};
-
 const modalActionsStyle: React.CSSProperties = {
   display: "flex",
   justifyContent: "flex-end",
@@ -762,19 +664,3 @@ const modalPrimaryButtonStyle: React.CSSProperties = {
   fontWeight: 600,
   cursor: "pointer",
 };
-
-const tipPresetRowStyle: React.CSSProperties = { display: "flex", gap: "0.5rem" };
-
-function tipPresetButtonStyle(active: boolean): React.CSSProperties {
-  return {
-    flex: 1,
-    padding: "0.5rem",
-    borderRadius: "8px",
-    fontSize: "0.85rem",
-    fontWeight: 600,
-    cursor: "pointer",
-    background: active ? "var(--accent)" : "var(--surface-raised)",
-    color: active ? "var(--bg)" : "var(--text)",
-    border: active ? "none" : "1px solid var(--border)",
-  };
-}

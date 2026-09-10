@@ -92,7 +92,7 @@ export function LoginForm({ comingSoon }: { comingSoon: boolean }) {
         <div style={intentRowStyle}>
           <IntentOption
             label="Fan"
-            hint="Browse, subscribe, tip."
+            hint="Browse, subscribe."
             active={intent === "FAN"}
             onClick={() => setIntent("FAN")}
           />

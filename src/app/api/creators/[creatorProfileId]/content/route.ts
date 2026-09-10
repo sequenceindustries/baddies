@@ -54,7 +54,7 @@ export async function GET(req: NextRequest, { params }: { params: { creatorProfi
       publishedAt: true,
       status: true,
       creatorProfileId: true,
-      _count: { select: { likes: true, tips: true } },
+      _count: { select: { likes: true } },
       likes: viewer ? { where: { fanId: viewer.id }, select: { id: true } } : false,
     },
   });

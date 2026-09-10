@@ -70,7 +70,7 @@ function AccountTypePanel({
   // this a partner" once that happens), so this panel describes whatever
   // combination is actually true rather than picking just one.
   let heading = "Fan account";
-  let body = "You can browse, subscribe, and tip creators.";
+  let body = "You can browse and subscribe to creators.";
   if (role === "ADMIN") {
     heading = "Admin account";
     body = "You have platform administration access.";

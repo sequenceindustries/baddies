@@ -26,7 +26,7 @@ const CREATOR_STEPS = [
   },
   {
     name: "Get paid",
-    desc: "Fans subscribe and tip directly. Payouts go straight to you, on your terms.",
+    desc: "Fans subscribe directly. Payouts go straight to you, on your terms.",
   },
 ];
 
