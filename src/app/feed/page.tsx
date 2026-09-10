@@ -241,15 +241,19 @@ function FeedComposer() {
 // later, "search icon pops out discovery... to the right of the plus
 // sign"). All three render as fixed-size icon-only circles when
 // collapsed — the "+" (post) trigger is the visually dominant one
-// (44px), story and discovery are equal and smaller (28px each) on
-// either side of it. FeedComposer alone grows into a full-width card
-// when expanded (composerCardStyle, flex:1) — the row's marginBottom
-// lives here rather than on the individual collapsed/expanded styles,
-// so spacing before StoryAvatarRow stays consistent either way.
+// (60px), story and discovery are equal and smaller (38px each) on
+// either side of it. Centered per direct follow-up request, same
+// reasoning as StoryAvatarRow's own centering just below it — left-
+// alignment stranded the row against the edge once it no longer needed
+// to scroll. FeedComposer alone grows into a full-width card when
+// expanded (composerCardStyle, flex:1) — the row's marginBottom lives
+// here rather than on the individual collapsed/expanded styles, so
+// spacing before StoryAvatarRow stays consistent either way.
 const composerRowStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: "0.6rem",
+  justifyContent: "center",
+  gap: "0.8rem",
   marginBottom: "1.5rem",
 };
 
@@ -257,12 +261,12 @@ const composerPromptStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  width: "44px",
-  height: "44px",
+  width: "60px",
+  height: "60px",
   borderRadius: "50%",
   background: "var(--accent-soft)",
   color: "var(--accent)",
-  fontSize: "1.5rem",
+  fontSize: "2rem",
   fontWeight: 600,
   border: "none",
   cursor: "pointer",
@@ -280,7 +284,7 @@ const composerCardStyle: React.CSSProperties = {
 /**
  * Icon-only, opens /discovery — per direct request ("search icon pops
  * out discovery content/page"), placed to the right of the "+" post
- * trigger. Same 28px sizing as StoryComposerButton so both flank the
+ * trigger. Same 38px sizing as StoryComposerButton so both flank the
  * larger "+" equally, matching this row's own established icon-only
  * convention rather than a new visual language.
  */
@@ -304,7 +308,7 @@ function DiscoverySearchButton() {
 
 function SearchIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.8" />
       <path d="M15.5 15.5 20 20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
@@ -315,8 +319,8 @@ const discoverySearchButtonStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  width: "28px",
-  height: "28px",
+  width: "38px",
+  height: "38px",
   borderRadius: "50%",
   background: "var(--surface)",
   border: "1px solid var(--border)",
