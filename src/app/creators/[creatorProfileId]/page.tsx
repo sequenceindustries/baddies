@@ -238,7 +238,7 @@ export default function CreatorProfilePage() {
         <div style={tabRowStyle}>
           {tiersPresent.map((t) => (
             <button key={t} onClick={() => setTab((cur) => (cur === t ? undefined : t))} style={tabButtonStyle(tab === t)}>
-              {t === "FREE" ? "Free" : t === "VIP" ? "VIP" : "Exclusive"}
+              {t === "FREE" ? "Teasers" : t === "VIP" ? "VIP" : "Exclusive"}
             </button>
           ))}
         </div>

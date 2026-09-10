@@ -144,7 +144,7 @@ function NavGroups({ tab, onSelect, badges }: { tab: Tab; onSelect: (t: Tab) => 
     <nav style={navGroupsWrapStyle}>
       {NAV_GROUPS.map((group) => (
         <div key={group.label} style={navGroupSectionStyle}>
-          <span style={navGroupLabelStyle}>
+          <span style={{ ...navGroupLabelStyle, color: group.color, borderBottom: `2px solid ${group.color}33` }}>
             <span style={{ ...navGroupDotStyle, background: group.color }} aria-hidden="true" />
             {group.label}
           </span>
@@ -4156,6 +4156,8 @@ function ContentDetailView({ contentId, onBack }: { contentId: string; onBack: (
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [mediaItems, setMediaItems] = useState<{ mimeType: string; signedUrl: string }[] | null>(null);
+  const [mediaError, setMediaError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -4176,6 +4178,34 @@ function ContentDetailView({ contentId, onBack }: { contentId: string; onBack: (
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [contentId]);
+
+  // Real preview, per direct request — ADMIN already has unconditional
+  // access to /api/content/:id/media (canAccessContent's admin_override
+  // branch), regardless of this item's status, so no new backend route
+  // is needed. Fetched here (the single-item detail view) rather than
+  // per-row in the list views above, which could be hundreds of rows —
+  // same "don't pay for what isn't open" reasoning ContentThumbnail
+  // (src/app/profile/page.tsx) already applies via its own
+  // IntersectionObserver gate; a detail view has exactly one item, so a
+  // plain mount-effect fetch is enough, no observer needed.
+  useEffect(() => {
+    let cancelled = false;
+    setMediaItems(null);
+    setMediaError(false);
+    fetch(`/api/content/${contentId}/media`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (cancelled) return;
+        if (body?.media?.length > 0) setMediaItems(body.media);
+        else setMediaError(true);
+      })
+      .catch(() => {
+        if (!cancelled) setMediaError(true);
       });
     return () => {
       cancelled = true;
@@ -4212,6 +4242,25 @@ function ContentDetailView({ contentId, onBack }: { contentId: string; onBack: (
 
       {data && (
         <>
+          <div style={contentPreviewWrapStyle}>
+            {mediaItems ? (
+              mediaItems.map((m, i) =>
+                m.mimeType.startsWith("video/") ? (
+                  <video key={i} src={m.signedUrl} controls style={contentPreviewMediaStyle} />
+                ) : m.mimeType.startsWith("audio/") ? (
+                  <div key={i} style={contentPreviewAudioStyle}>♪ Audio</div>
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={i} src={m.signedUrl} alt="" style={contentPreviewMediaStyle} />
+                )
+              )
+            ) : mediaError ? (
+              <div style={contentPreviewFallbackStyle}>Preview unavailable.</div>
+            ) : (
+              <div style={contentPreviewFallbackStyle}>Loading preview...</div>
+            )}
+          </div>
+
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem" }}>
             <div>
               <h2 style={{ ...sectionHeadingStyle, margin: "0 0 0.3rem" }}>{data.caption || "(no caption)"}</h2>
@@ -4276,6 +4325,45 @@ function ContentDetailView({ contentId, onBack }: { contentId: string; onBack: (
     </section>
   );
 }
+
+const contentPreviewWrapStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "0.6rem",
+  marginBottom: "1.25rem",
+};
+
+const contentPreviewMediaStyle: React.CSSProperties = {
+  maxWidth: "320px",
+  maxHeight: "320px",
+  borderRadius: "10px",
+  border: "1px solid var(--border)",
+  objectFit: "contain",
+  background: "var(--surface-raised)",
+};
+
+const contentPreviewAudioStyle: React.CSSProperties = {
+  ...contentPreviewMediaStyle,
+  width: "320px",
+  height: "80px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: "1.4rem",
+  color: "var(--accent)",
+};
+
+const contentPreviewFallbackStyle: React.CSSProperties = {
+  width: "320px",
+  height: "80px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: "10px",
+  border: "1px dashed var(--border)",
+  color: "var(--text-muted)",
+  fontSize: "0.85rem",
+};
 
 // mainStyle stays in use for the pre-dashboard states (loading/sign-in-
 // required/wrong-role) above — only the real dashboard below switches to
@@ -4375,6 +4463,14 @@ const navGroupItemsStyle: React.CSSProperties = {
   gap: "0.1rem",
 };
 
+// Base shape only — color and borderBottom are applied per-group at the
+// NavGroups call site (group.color), not hardcoded here. Previously
+// every group's label sat in flat var(--text-muted), so the only real
+// differentiation between "People" and "Business" was the tiny 6px dot;
+// tinting the label itself + a low-alpha underline (same `33` alpha
+// convention the active-row background already uses at `1a`) makes each
+// category read distinctly without a background wash, which would
+// compete with the active-item's own tint using the same hue.
 const navGroupLabelStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",

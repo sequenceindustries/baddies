@@ -22,7 +22,7 @@ const CREATOR_STEPS = [
   },
   {
     name: "Publish & set your price",
-    desc: "Post Free previews so fans discover you, opt into the platform-wide VIP tier, and set your own price for Exclusive subscribers.",
+    desc: "Post Teaser previews so fans discover you, opt into the platform-wide VIP tier, and set your own price for Exclusive subscribers.",
   },
   {
     name: "Get paid",

@@ -364,14 +364,14 @@ function NavLinks({
             Discover, the creator-application CTA) now read first, with
             a partner's own business-specific tool last rather than
             pushed in front of them. */}
+        <Link href="/feed" style={navLinkStyle("/feed", linkStyle)}>
+          Home
+        </Link>
         {user.role === "ADMIN" && (
           <Link href="/admin" style={navLinkStyle("/admin", linkStyle)}>
             Admin
           </Link>
         )}
-        <Link href="/feed" style={navLinkStyle("/feed", linkStyle)}>
-          Home
-        </Link>
         {user.role === "FAN" && (
           <Link href="/fan-subscriptions" style={navLinkStyle("/fan-subscriptions", linkStyle)}>
             My subscriptions
