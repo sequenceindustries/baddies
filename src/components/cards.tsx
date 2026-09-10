@@ -570,11 +570,12 @@ const lightboxContentStyle: React.CSSProperties = {
   maxHeight: "90vh",
 };
 
+// Square corners — this is content being opened full-size to actually
+// view it, not a card/chrome element; social-feed follow-up.
 const lightboxMediaStyle: React.CSSProperties = {
   display: "block",
   maxWidth: "100%",
   maxHeight: "90vh",
-  borderRadius: "10px",
   objectFit: "contain",
 };
 

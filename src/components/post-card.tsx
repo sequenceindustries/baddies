@@ -467,9 +467,12 @@ const postContextChipStyle: React.CSSProperties = { fontSize: "0.8rem", color: "
 
 const postCaptionStyle: React.CSSProperties = { fontSize: "0.92rem", color: "var(--text)", margin: 0, whiteSpace: "pre-wrap" };
 
+// Square corners — this is the content itself (media/locked-block),
+// not card chrome; social-feed follow-up ("no rounded corners when
+// content is open"). postCardStyle's own outer card radius is
+// untouched — that's the surrounding panel, not the content.
 const postMediaWrapStyle: React.CSSProperties = {
   position: "relative",
-  borderRadius: "14px",
   overflow: "hidden",
   background: "var(--surface-raised)",
   minHeight: "220px",
