@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 export interface SessionUser {
   id: string;
@@ -85,21 +85,37 @@ export function useLocationDetector() {
   return { status, error, detect };
 }
 
+interface SessionContextValue {
+  user: SessionUser | null | undefined; // undefined = loading
+  loading: boolean;
+  refresh: () => void;
+}
+
+const SessionContext = createContext<SessionContextValue | null>(null);
+
 /**
+ * Performance audit finding: every single component that called
+ * useSession() used to run its own independent fetch("/api/auth/me") —
+ * confirmed live via a network trace showing 4-6 duplicate identical
+ * calls on one page load (Nav, the page itself, AccountMenu, etc. each
+ * fetching separately). SessionProvider (mounted once in layout.tsx,
+ * wrapping the same Nav/{children}/BottomTabBar tree that already
+ * consumed session state) now does the one real fetch; useSession()
+ * below just reads from it. Same fetch timing, same refetch triggers,
+ * same `refresh()` semantics as before — this changes how many network
+ * calls happen, not what any consumer sees or when.
+ *
  * Fetches /api/auth/me on mount and again on every client-side route
  * change. The route-change refetch matters for Nav specifically: Nav
  * lives in the root layout, so it mounts once for the whole session
  * rather than per-page — without this, logging in (a client-side
  * router.push to /feed or /profile, not a full page load) left Nav's
- * own useSession() instance holding onto its original signed-out `user:
- * null` from before login, showing "Sign in"/"Join" to someone who very
- * much was signed in, until a hard refresh remounted it. Every other
- * page's own useSession() call was unaffected (those components remount
- * per navigation anyway), but there was no signal telling Nav's
- * long-lived instance to look again.
+ * own session state holding onto its original signed-out `user: null`
+ * from before login, showing "Sign in"/"Join" to someone who very much
+ * was signed in, until a hard refresh remounted it.
  */
-export function useSession() {
-  const [user, setUser] = useState<SessionUser | null | undefined>(undefined); // undefined = loading
+export function SessionProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<SessionUser | null | undefined>(undefined);
   const [reloadKey, setReloadKey] = useState(0);
   const pathname = usePathname();
 
@@ -119,7 +135,23 @@ export function useSession() {
   }, [reloadKey, pathname]);
 
   const refresh = () => setReloadKey((k) => k + 1);
-  return { user, loading: user === undefined, refresh };
+
+  return (
+    <SessionContext.Provider value={{ user, loading: user === undefined, refresh }}>
+      {children}
+    </SessionContext.Provider>
+  );
+}
+
+/** Reads the shared session state SessionProvider (above) fetches once
+ * per navigation — see its own comment for why this used to be N
+ * independent fetches per page. */
+export function useSession(): SessionContextValue {
+  const ctx = useContext(SessionContext);
+  if (!ctx) {
+    throw new Error("useSession() must be called within <SessionProvider> — see src/app/layout.tsx.");
+  }
+  return ctx;
 }
 
 /**

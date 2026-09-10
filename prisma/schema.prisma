@@ -412,6 +412,11 @@ model CreatorProfile {
   identityDocument CreatorIdentityDocument?
 
   @@index([status])
+  // Performance audit: GET /api/discovery/new-creators and the feed's
+  // own "suggested" pool both filter status = VERIFIED and order by
+  // approvedAt DESC — same missing-composite-index situation as
+  // Content's own status/publishedAt index just above.
+  @@index([status, approvedAt])
   @@map("creator_profiles")
 }
 
@@ -598,6 +603,15 @@ model Content {
 
   @@index([creatorProfileId, status])
   @@index([accessLevel])
+  // Performance audit: GET /api/feed's main query (both the home and
+  // discovery scopes) filters on status = APPROVED and always orders by
+  // publishedAt DESC, for cursor pagination — without an index covering
+  // both, Postgres can use creatorProfileId/status/accessLevel to
+  // narrow rows but still has to sort the matches from scratch on every
+  // single page of every feed load. Real cost only shows up at real
+  // content volume (seed data is too small to measure), but the fix is
+  // free and additive.
+  @@index([status, publishedAt])
   @@map("content")
 }
 

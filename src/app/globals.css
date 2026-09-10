@@ -2,8 +2,12 @@
    Google Fonts license, so it can't be embedded here — Montserrat is the
    standard free geometric-sans stand-in for it (very similar proportions,
    the usual web substitute). Used as the single family for both display
-   and body, same as real Gotham usage (it has no serif counterpart). */
-@import url("https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;0,800;1,600&display=swap");
+   and body, same as real Gotham usage (it has no serif counterpart).
+   Loaded via next/font/google in layout.tsx now (performance audit,
+   P0) — self-hosted at build time instead of a render-blocking @import
+   of Google's own CSS, so --font-montserrat below resolves to a local,
+   already-inlined @font-face rather than a family name requiring three
+   extra cross-origin requests before it's available. */
 
 :root {
     --bg: #000000;
@@ -33,8 +37,8 @@
     --danger: #f0685c;
     --success: #4fd8a0;
     --radius: 12px;
-    --font-display: "Montserrat", system-ui, sans-serif;
-    --font-body: "Montserrat", system-ui, sans-serif;
+    --font-display: var(--font-montserrat), system-ui, sans-serif;
+    --font-body: var(--font-montserrat), system-ui, sans-serif;
 
     --glow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 12px 40px -12px rgba(0, 0, 0, 0.6);
 }

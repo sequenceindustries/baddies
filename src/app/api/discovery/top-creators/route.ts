@@ -24,5 +24,16 @@ export async function GET() {
   });
 
   const cards = await Promise.all(creators.map(toCreatorCard));
-  return NextResponse.json({ creators: cards });
+  // Performance audit: identical for every viewer (no auth read at
+  // all — deliberately, per this route's own comment) and hit by every
+  // single signed-out landing-page view, likely this app's highest-
+  // traffic public endpoint. Follower-count ranking doesn't need to be
+  // second-fresh, so a short cache window meaningfully cuts real DB
+  // load with no visible staleness. force-dynamic above only disables
+  // build-time static generation — it doesn't affect this runtime
+  // Cache-Control header.
+  return NextResponse.json(
+    { creators: cards },
+    { headers: { "Cache-Control": "public, max-age=30, stale-while-revalidate=120" } }
+  );
 }
