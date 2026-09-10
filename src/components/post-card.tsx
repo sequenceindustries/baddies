@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { VerifiedBadge } from "./ui";
+import { useSession, VerifiedBadge } from "./ui";
 import { CardAvatar, HeartIcon, MediaLightbox, ReportButton, timeAgo } from "./cards";
 
 export interface PostCardItem {
@@ -322,18 +322,21 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
  * Real Follow/Unfollow toggle, top-right of the header — reuses the
  * exact POST/DELETE /api/creators/:id/follow endpoints the creator
  * profile page's own Follow button already calls. Self-follow (a
- * creator viewing their own post, if it ever surfaces in their own
- * feed) is guarded server-side (400) — handled here as a plain inline
- * error rather than a pre-emptive client-side check, matching this
- * file's existing convention (Message/unlock etc. don't pre-check
- * "is this your own content" either).
+ * creator viewing their own post — the suggested pool and a creator's
+ * own feed both surface this) is still guarded server-side (400) as
+ * defense in depth, but is now also pre-checked here against the
+ * viewer's own creatorProfile.id so the button never renders at all —
+ * matching the dedicated creator-profile page's own Follow button,
+ * which already suppressed this case; PostCard was the one place that
+ * hadn't been given the same treatment (found in a full-site bug sweep).
  */
 function FollowButton({ creatorProfileId, initialFollowing }: { creatorProfileId: string; initialFollowing: boolean }) {
+  const { user } = useSession();
   const [following, setFollowing] = useState(initialFollowing);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (following) {
+  if (following || (user && user.creatorProfile?.id === creatorProfileId)) {
     // Matches Instagram's own "already following" treatment inside a
     // post card: nothing to click, no button at all — the profile page
     // itself (not this card) is where an existing follow gets managed.
