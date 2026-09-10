@@ -80,6 +80,18 @@ export async function shapeContentItem(
     lock: { locked: boolean; kind: LockKind; priceUsd: number | null; ctaLabel: string | null };
     viewerHasLiked: boolean;
     viewerIsFollowing: boolean;
+    // Whether the viewer already has an active Exclusive (VVIP)
+    // subscription to THIS item's creator — independent of `lock`,
+    // which only describes this one post. Powers the post's own "•••"
+    // options-menu Subscribe entry (post-card.tsx), which needs to
+    // offer/hide Subscribe regardless of whether this particular post
+    // happens to be locked.
+    viewerIsSubscribed: boolean;
+    // This creator's real Exclusive price — same resolveCreatorPricing
+    // value `lock.priceUsd` already uses when a post is VVIP-locked,
+    // but surfaced unconditionally here so the options-menu Subscribe
+    // entry can show a real price on an unlocked (FREE/VIP) post too.
+    vvipPriceUsd: number;
     context: "following" | "trending" | "suggested" | null;
   }
 ) {
@@ -107,6 +119,8 @@ export async function shapeContentItem(
       isFoundingPartner: item.creatorProfile.user.foundingPartner !== null,
       isFoundingBaddie: item.creatorProfile.isFoundingBaddie,
       viewerIsFollowing: opts.viewerIsFollowing,
+      viewerIsSubscribed: opts.viewerIsSubscribed,
+      vvipPriceUsd: opts.vvipPriceUsd,
     },
     lock: opts.lock,
     context: opts.context,

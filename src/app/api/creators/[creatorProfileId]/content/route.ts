@@ -95,7 +95,14 @@ export async function GET(req: NextRequest, { params }: { params: { creatorProfi
 
       return shapeContentItem(
         { ...item, creatorProfile: creator },
-        { lock, viewerHasLiked: viewer ? item.likes.length > 0 : false, viewerIsFollowing: isFollowing, context: null }
+        {
+          lock,
+          viewerHasLiked: viewer ? item.likes.length > 0 : false,
+          viewerIsFollowing: isFollowing,
+          viewerIsSubscribed: viewerCtx.subscribedCreatorProfileIds.has(creator.id),
+          vvipPriceUsd,
+          context: null,
+        }
       );
     })
   );

@@ -68,18 +68,18 @@ export async function GET(req: NextRequest, { params }: { params: { contentId: s
     viewerCtx
   );
 
+  const { vvipPriceUsd } = await resolveCreatorPricing(item.creatorProfile);
+
   const lock = lockState.locked
-    ? buildLockCta(
-        lockState.kind,
-        businessConfig.vipPassPriceUsd,
-        lockState.kind === "VVIP_SUBSCRIBE" ? (await resolveCreatorPricing(item.creatorProfile)).vvipPriceUsd : 0
-      )
+    ? buildLockCta(lockState.kind, businessConfig.vipPassPriceUsd, lockState.kind === "VVIP_SUBSCRIBE" ? vvipPriceUsd : 0)
     : { locked: false as const, kind: null, priceUsd: null, ctaLabel: null };
 
   const shaped = await shapeContentItem(item, {
     lock,
     viewerHasLiked: user ? item.likes.length > 0 : false,
     viewerIsFollowing: isFollowing,
+    viewerIsSubscribed: viewerCtx.subscribedCreatorProfileIds.has(item.creatorProfileId),
+    vvipPriceUsd,
     context: isFollowing ? "following" : trending.some((t) => t.contentId === item.id) ? "trending" : null,
   });
 

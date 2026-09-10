@@ -145,6 +145,8 @@ export async function GET(req: NextRequest) {
         lock,
         viewerHasLiked: user ? item.likes.length > 0 : false,
         viewerIsFollowing: followedCreatorIds.has(item.creatorProfileId),
+        viewerIsSubscribed: viewerCtx.subscribedCreatorProfileIds.has(item.creatorProfileId),
+        vvipPriceUsd: await vvipPriceFor(item.creatorProfile),
         context: followedCreatorIds.has(item.creatorProfileId)
           ? "following"
           : trendingIds.has(item.id)

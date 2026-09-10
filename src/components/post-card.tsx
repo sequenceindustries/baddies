@@ -23,6 +23,8 @@ export interface PostCardItem {
     isFoundingPartner: boolean;
     isFoundingBaddie: boolean;
     viewerIsFollowing: boolean;
+    viewerIsSubscribed: boolean;
+    vvipPriceUsd: number;
   };
   lock: {
     locked: boolean;
@@ -288,7 +290,12 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
           creatorProfileId={item.creator.creatorProfileId}
           initialFollowing={item.creator.viewerIsFollowing}
         />
-        <PostOptionsMenu contentId={item.contentId} />
+        <PostOptionsMenu
+          contentId={item.contentId}
+          creatorProfileId={item.creator.creatorProfileId}
+          vvipPriceUsd={item.creator.vvipPriceUsd}
+          initialSubscribed={item.creator.viewerIsSubscribed}
+        />
       </header>
 
       <div
@@ -442,8 +449,27 @@ function FollowButton({ creatorProfileId, initialFollowing }: { creatorProfileId
  * naturally as the one item in this dropdown. A full-screen transparent
  * backdrop closes the menu on an outside click/tap — simpler than a
  * document-level click listener for a menu this small.
+ *
+ * Subscribe sits above Report (direct request: "add subscribe on top of
+ * report") — a quick way to subscribe to this creator's Exclusive tier
+ * from any post, not just a locked one, since today the only Subscribe
+ * entry point was the creator profile page's own button or a locked
+ * post's unlock CTA. Reuses the same POST /api/checkout/subscribe route
+ * and stub-checkout contract the profile page's SubscribeButton already
+ * calls — no new backend, just a second, more-reachable entry point to
+ * the existing flow.
  */
-function PostOptionsMenu({ contentId }: { contentId: string }) {
+function PostOptionsMenu({
+  contentId,
+  creatorProfileId,
+  vvipPriceUsd,
+  initialSubscribed,
+}: {
+  contentId: string;
+  creatorProfileId: string;
+  vvipPriceUsd: number;
+  initialSubscribed: boolean;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -462,10 +488,73 @@ function PostOptionsMenu({ contentId }: { contentId: string }) {
         <>
           <div style={optionsMenuBackdropStyle} onClick={() => setOpen(false)} />
           <div style={optionsMenuPanelStyle} onClick={(e) => e.stopPropagation()}>
+            <SubscribeMenuItem
+              creatorProfileId={creatorProfileId}
+              vvipPriceUsd={vvipPriceUsd}
+              initialSubscribed={initialSubscribed}
+              onDone={() => setOpen(false)}
+            />
             <ReportButton contentId={contentId} />
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Same stub-checkout call the creator profile page's SubscribeButton
+ * makes (POST /api/checkout/subscribe, { creatorProfileId }) — see that
+ * component's own doc comment for why the stub path completes
+ * synchronously. Hidden entirely for a creator viewing their own post
+ * (mirrors FollowButton's own self-check just above) and once already
+ * subscribed, matching this menu's "only show actions you can take"
+ * convention.
+ */
+function SubscribeMenuItem({
+  creatorProfileId,
+  vvipPriceUsd,
+  initialSubscribed,
+  onDone,
+}: {
+  creatorProfileId: string;
+  vvipPriceUsd: number;
+  initialSubscribed: boolean;
+  onDone: () => void;
+}) {
+  const { user } = useSession();
+  const [subscribed, setSubscribed] = useState(initialSubscribed);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (subscribed || (user && user.creatorProfile?.id === creatorProfileId)) {
+    return null;
+  }
+
+  async function subscribe() {
+    setBusy(true);
+    setError(null);
+    const res = await fetch("/api/checkout/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ creatorProfileId }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(typeof body?.error === "string" ? body.error : "Subscription failed.");
+      return;
+    }
+    setSubscribed(true);
+    setTimeout(onDone, 600);
+  }
+
+  return (
+    <div style={subscribeMenuItemWrapStyle}>
+      <button onClick={subscribe} disabled={busy} style={subscribeMenuItemButtonStyle}>
+        {busy ? "Subscribing..." : `Subscribe — $${vvipPriceUsd.toFixed(2)}/mo`}
+      </button>
+      {error && <span style={followErrorStyle}>{error}</span>}
     </div>
   );
 }
@@ -736,6 +825,27 @@ const optionsMenuPanelStyle: React.CSSProperties = {
   minWidth: "180px",
   boxShadow: "var(--glow)",
   textAlign: "left",
+};
+
+const subscribeMenuItemWrapStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.3rem",
+  paddingBottom: "0.6rem",
+  marginBottom: "0.6rem",
+  borderBottom: "1px solid var(--border)",
+};
+
+const subscribeMenuItemButtonStyle: React.CSSProperties = {
+  background: "var(--accent)",
+  color: "var(--bg)",
+  border: "none",
+  borderRadius: "999px",
+  padding: "0.45rem 0.9rem",
+  fontWeight: 600,
+  fontSize: "0.78rem",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
 };
 
 const postCaptionStyle: React.CSSProperties = {

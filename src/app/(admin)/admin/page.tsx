@@ -28,7 +28,7 @@ interface ContentQueueItem {
   participantCount: number;
 }
 
-const TABS = ["Overview", "Members", "Creators", "Applications", "Founding Partners", "Content", "Revenue", "Payouts", "Trust & Safety", "Audit Log", "System Health", "Reset Roster"] as const;
+const TABS = ["Overview", "Members", "Creators", "Applications", "Founding Partners", "Content", "Revenue", "Payouts", "Trust & Safety", "Activity", "Audit Log", "System Health", "Reset Roster"] as const;
 type Tab = (typeof TABS)[number];
 
 type RangeKey = "today" | "7d" | "30d" | "90d" | "all";
@@ -119,7 +119,11 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Insights",
     color: "#22b8cf",
-    items: [{ label: "Trust & Safety", tab: "Trust & Safety", badgeKey: "trustSafety" }, { label: "Audit Log", tab: "Audit Log" }],
+    items: [
+      { label: "Trust & Safety", tab: "Trust & Safety", badgeKey: "trustSafety" },
+      { label: "Activity", tab: "Activity" },
+      { label: "Audit Log", tab: "Audit Log" },
+    ],
   },
   {
     label: "System",
@@ -331,6 +335,7 @@ export default function AdminDashboardPage() {
           </>
         )}
         {tab === "Trust & Safety" && <TrustAndSafetyPanel />}
+        {tab === "Activity" && <ActivityPanel data={ccData} loading={ccLoading} error={ccError} />}
         {tab === "Audit Log" && <AuditLogPanel />}
         {tab === "System Health" && <SystemHealthPanel />}
         {tab === "Reset Roster" && <ResetRosterPanel />}
@@ -463,8 +468,6 @@ function OverviewPanel({
                 real ledger activity to plot. */}
             <p style={mutedSmallStyle}>Revenue: {money(data.kpis.revenue.allTimeUsd)} all-time.</p>
           </section>
-
-          <RecentActivitySection items={data.recentActivity} />
         </>
       )}
     </section>
@@ -630,24 +633,47 @@ function GrowthChart({ title, data }: { title: string; data: DayCount[] }) {
   );
 }
 
-function RecentActivitySection({ items }: { items: CommandCentreData["recentActivity"] }) {
+/**
+ * Its own page now (moved out of the Overview tab, per direct request) —
+ * a live feed of admin actions, signups, applications, uploads, and
+ * approvals blended together, same 20-item/5-source query the Overview
+ * tab used to embed (GET /api/admin/command-centre's `recentActivity`,
+ * already fetched once by the parent regardless of which tab is active,
+ * so this reads the same in-flight data rather than firing a second
+ * request). Not range-filtered — the underlying query always returns
+ * the 20 most recent events regardless of the KPI date range picker.
+ */
+function ActivityPanel({
+  data,
+  loading,
+  error,
+}: {
+  data: CommandCentreData | null;
+  loading: boolean;
+  error: string | null;
+}) {
   return (
     <section>
-      <h2 style={sectionHeadingStyle}>Recent activity</h2>
-      {items.length === 0 ? (
-        <p style={{ color: "var(--text-muted)" }}>Nothing yet.</p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          {items.map((item) => (
-            <div key={item.id} style={auditRowStyle}>
-              <span style={{ fontWeight: 600, textTransform: "capitalize" }}>{item.label}</span>
-              <span style={mutedSmallStyle}>
-                {item.actor ?? "system"} · {new Date(item.timestamp).toLocaleString()}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+      <p style={mutedSmallStyle}>Admin actions, signups, applications, uploads, and approvals, most recent first.</p>
+
+      {loading && <p style={{ color: "var(--text-muted)" }}>Loading...</p>}
+      {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
+
+      {data &&
+        (data.recentActivity.length === 0 ? (
+          <p style={{ color: "var(--text-muted)" }}>Nothing yet.</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            {data.recentActivity.map((item) => (
+              <div key={item.id} style={auditRowStyle}>
+                <span style={{ fontWeight: 600, textTransform: "capitalize" }}>{item.label}</span>
+                <span style={mutedSmallStyle}>
+                  {item.actor ?? "system"} · {new Date(item.timestamp).toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        ))}
     </section>
   );
 }
