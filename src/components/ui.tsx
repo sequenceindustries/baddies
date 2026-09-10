@@ -284,15 +284,17 @@ function NavLinks({
             a partner had no nav link to the feed at all despite
             Home/Discover already being everyone else's default; their
             own dashboard stays the actual landing page (roleHomePath
-            below is untouched), this just makes the feed reachable. */}
+            below is untouched), this just makes the feed reachable.
+            Partner Dashboard itself moved from leading the list to
+            trailing it, after "Become a creator", per direct follow-up
+            ("rearrange this: Home / Discover / Become a creator /
+            Partner Dashboard") — everyone's shared links (Home,
+            Discover, the creator-application CTA) now read first, with
+            a partner's own business-specific tool last rather than
+            pushed in front of them. */}
         {user.role === "ADMIN" && (
           <Link href="/admin" style={linkStyle}>
             Admin
-          </Link>
-        )}
-        {user.foundingPartner && (
-          <Link href="/partner-dashboard" style={linkStyle}>
-            Partner Dashboard
           </Link>
         )}
         <Link href="/feed" style={linkStyle}>
@@ -309,6 +311,11 @@ function NavLinks({
         {(user.role === "FAN" || user.role === "PARTNER") && !user.creatorProfile && (
           <Link href="/apply" style={primaryLinkStyle}>
             Become a creator
+          </Link>
+        )}
+        {user.foundingPartner && (
+          <Link href="/partner-dashboard" style={linkStyle}>
+            Partner Dashboard
           </Link>
         )}
         {user.creatorProfile?.status === "VERIFIED" && (

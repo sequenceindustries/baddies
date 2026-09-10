@@ -73,6 +73,8 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
   const lastTapRef = useRef(0);
   const pendingTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchedRef = useRef(false);
+  const rootRef = useRef<HTMLElement | null>(null);
+  const [inView, setInView] = useState(false);
 
   async function fetchMedia() {
     if (fetchedRef.current) return;
@@ -94,15 +96,39 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
     }
   }
 
+  // Real, confirmed perf fix ("the content loads slow"): the feed
+  // mounts every item on its current page at once (no virtualization),
+  // so fetching every card's media unconditionally on mount meant N
+  // simultaneous /media round trips firing the instant the list JSON
+  // arrived — cards near the bottom of the page competed for the
+  // browser's small per-origin connection pool against ones the viewer
+  // hadn't scrolled to yet, slowing down the ones actually on screen.
+  // Same IntersectionObserver-gated fetch GridThumbnail already uses
+  // for the Discovery/profile grid (see its own comment) — media only
+  // loads once a card is actually near the viewport.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "600px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   // Locked cards never call /media at all — the list route already
   // told us it's locked, so there's no point paying for a guaranteed
-  // 403 round trip. Unlocked cards fetch on first render.
+  // 403 round trip.
   useEffect(() => {
-    if (!locked) fetchMedia();
-    // Only ever auto-fires once per mounted card, same as ContentCard's
-    // own handleView effect.
+    if (!locked && inView) fetchMedia();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [locked, inView]);
 
   async function toggleLike() {
     setLikeBusy(true);
@@ -192,7 +218,7 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
   }
 
   return (
-    <article style={postCardStyle}>
+    <article ref={rootRef} style={postCardStyle}>
       <header style={postHeaderStyle}>
         <Link href={`/creators/${item.creator.creatorProfileId}`} style={postAvatarLinkStyle}>
           <CardAvatar

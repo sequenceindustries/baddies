@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   useSession,
@@ -893,18 +893,44 @@ function UploadForm({ onUploaded }: { onUploaded: () => void }) {
   const [caption, setCaption] = useState("");
   const [accessLevel, setAccessLevel] = useState<AccessLevel>("FREE");
   const [files, setFiles] = useState<File[]>([]);
+  const [dragActive, setDragActive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  function handleFilesChosen(fileList: FileList | null) {
+  // Live thumbnail/video previews — "here's what you're about to post"
+  // feedback instead of a bare filename list, per direct request ("make
+  // the content upload more social media like too"). Object URLs are
+  // regenerated whenever `files` changes and every URL this effect
+  // created is revoked on the way out (both the next run and unmount),
+  // so adding/removing files repeatedly never leaks memory.
+  const [previews, setPreviews] = useState<string[]>([]);
+  useEffect(() => {
+    const urls = files.map((f) => URL.createObjectURL(f));
+    setPreviews(urls);
+    return () => urls.forEach((u) => URL.revokeObjectURL(u));
+  }, [files]);
+
+  function addFiles(fileList: FileList | File[] | null) {
     setError(null);
     const chosen = Array.from(fileList ?? []);
     const tooLarge = chosen.filter((f) => f.size > MAX_UPLOAD_BYTES);
     if (tooLarge.length > 0) {
       setError(`${tooLarge.length === 1 ? "One file exceeds" : `${tooLarge.length} files exceed`} the 100MB limit and won't be included: ${tooLarge.map((f) => f.name).join(", ")}`);
     }
-    setFiles(chosen.filter((f) => f.size <= MAX_UPLOAD_BYTES));
+    const ok = chosen.filter((f) => f.size <= MAX_UPLOAD_BYTES);
+    if (ok.length > 0) setFiles((prev) => [...prev, ...ok]);
+  }
+
+  function removeFile(index: number) {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragActive(false);
+    addFiles(e.dataTransfer.files);
   }
 
   async function uploadOne(file: File): Promise<string | null> {
@@ -972,26 +998,64 @@ function UploadForm({ onUploaded }: { onUploaded: () => void }) {
       <form onSubmit={handleSubmit}>
         {error && <div style={{ ...errorBannerStyle, whiteSpace: "pre-line" }}>{error}</div>}
 
-        <Field label="Files" hint="Up to 100MB per file. Select more than one to upload them all at once.">
-          <div style={fileFieldRowStyle}>
-            <label style={fileUploadButtonStyle}>
-              {files.length > 0 ? "Change files" : "Choose files"}
-              <input
-                type="file"
-                accept="image/*,video/*,audio/*"
-                multiple
-                onChange={(e) => handleFilesChosen(e.target.files)}
-                style={hiddenFileInputStyle}
-              />
-            </label>
-            <span style={mutedSmallStyle}>
-              {files.length === 0
-                ? "No files chosen"
-                : files.length === 1
-                  ? files[0]?.name
-                  : `${files.length} files chosen`}
-            </span>
-          </div>
+        <Field label="Photos & videos" hint="Up to 100MB per file — drop several at once to post them all together.">
+          {files.length === 0 ? (
+            <div
+              style={dragActive ? { ...dropzoneStyle, ...dropzoneActiveStyle } : dropzoneStyle}
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragActive(true);
+              }}
+              onDragLeave={() => setDragActive(false)}
+              onDrop={handleDrop}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click();
+              }}
+            >
+              <UploadCloudIcon />
+              <span style={dropzoneTextStyle}>Drag photos or videos here, or click to browse</span>
+            </div>
+          ) : (
+            <div style={previewGridStyle}>
+              {files.map((file, i) => (
+                <div key={`${file.name}-${file.lastModified}-${i}`} style={previewTileStyle}>
+                  {file.type.startsWith("video/") ? (
+                    <video src={previews[i]} style={previewMediaStyle} muted playsInline />
+                  ) : file.type.startsWith("image/") ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={previews[i]} alt="" style={previewMediaStyle} />
+                  ) : (
+                    <span style={previewAudioIconStyle}>♪</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeFile(i)}
+                    style={previewRemoveButtonStyle}
+                    aria-label={`Remove ${file.name}`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              <button type="button" onClick={() => fileInputRef.current?.click()} style={previewAddTileStyle} aria-label="Add more files">
+                +
+              </button>
+            </div>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*,audio/*"
+            multiple
+            onChange={(e) => {
+              addFiles(e.target.files);
+              e.target.value = "";
+            }}
+            style={hiddenFileInputStyle}
+          />
         </Field>
 
         <Field label="Caption" hint="Optional. Applied to every file in this batch.">
@@ -1211,29 +1275,115 @@ const deleteButtonStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
-const fileFieldRowStyle: React.CSSProperties = {
+// Dropzone — replaces the old plain "Choose files" button + filename
+// text with a real drag-and-drop target, per direct request ("make the
+// content upload more social media like too"). Dashed border reads as
+// "drop things here" without borrowing any other component's solid-
+// border card language.
+const dropzoneStyle: React.CSSProperties = {
   display: "flex",
+  flexDirection: "column",
   alignItems: "center",
-  gap: "0.7rem",
+  justifyContent: "center",
+  gap: "0.6rem",
+  padding: "2.25rem 1.5rem",
+  borderRadius: "16px",
+  border: "1.5px dashed var(--border)",
+  background: "var(--surface-raised)",
+  color: "var(--text-muted)",
+  cursor: "pointer",
+  marginTop: "0.4rem",
+  transition: "border-color 0.15s ease, background 0.15s ease",
+};
+
+const dropzoneActiveStyle: React.CSSProperties = {
+  borderColor: "var(--accent)",
+  background: "var(--accent-soft)",
+};
+
+const dropzoneTextStyle: React.CSSProperties = {
+  fontSize: "0.85rem",
+  textAlign: "center",
+};
+
+// Instagram/TikTok-style "here's what you're about to post" thumbnail
+// grid, once at least one file is chosen — replaces the dropzone in
+// place rather than sitting below it.
+const previewGridStyle: React.CSSProperties = {
+  display: "flex",
   flexWrap: "wrap",
+  gap: "0.6rem",
   marginTop: "0.4rem",
 };
 
-// Same ghost-accent-button treatment used for the ID upload on
-// /founding-baddies (src/app/founding-baddies/ApplicationNextSteps.tsx)
-// and LocationField's "Detect my location" in components/ui.tsx — a real
-// button, not the browser's own unstyled file-input chrome.
-const fileUploadButtonStyle: React.CSSProperties = {
-  display: "inline-block",
-  padding: "0.5rem 1rem",
-  borderRadius: "var(--radius)",
-  border: "1px solid var(--accent)",
+const previewTileStyle: React.CSSProperties = {
+  position: "relative",
+  width: "84px",
+  height: "84px",
+  borderRadius: "12px",
+  overflow: "hidden",
+  background: "var(--surface-raised)",
+  flexShrink: 0,
+};
+
+const previewMediaStyle: React.CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+};
+
+const previewAudioIconStyle: React.CSSProperties = {
+  display: "flex",
+  width: "100%",
+  height: "100%",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: "1.6rem",
   color: "var(--accent)",
+};
+
+const previewRemoveButtonStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "4px",
+  right: "4px",
+  width: "20px",
+  height: "20px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: "50%",
+  border: "none",
+  background: "rgba(0, 0, 0, 0.65)",
+  color: "#fff",
+  fontSize: "0.9rem",
+  lineHeight: 1,
+  cursor: "pointer",
+};
+
+const previewAddTileStyle: React.CSSProperties = {
+  width: "84px",
+  height: "84px",
+  borderRadius: "12px",
+  border: "1.5px dashed var(--border)",
   background: "transparent",
-  fontWeight: 600,
-  fontSize: "0.85rem",
+  color: "var(--text-muted)",
+  fontSize: "1.5rem",
   cursor: "pointer",
   flexShrink: 0,
 };
 
 const hiddenFileInputStyle: React.CSSProperties = { display: "none" };
+
+function UploadCloudIcon() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M7.5 17.5h8.75a3.25 3.25 0 0 0 .5-6.46 4.5 4.5 0 0 0-8.66-1.59A3.75 3.75 0 0 0 7.5 17.5Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path d="M12 10.5v6.5M9.5 13l2.5-2.5 2.5 2.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}

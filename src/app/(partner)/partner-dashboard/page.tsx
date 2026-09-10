@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession, pageWrapStyle, cardStyle, displayHeadingStyle } from "@/components/ui";
+import { useSession, pageWrapStyle, displayHeadingStyle } from "@/components/ui";
 
 interface ReferredCreator {
   foundingApplicationId: string;
@@ -295,10 +295,8 @@ export default function PartnerDashboardPage() {
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ ...cardStyle, marginBottom: "1.5rem" }}>
-      <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.05rem", fontWeight: 500, margin: "0 0 0.75rem" }}>
-        {title}
-      </h2>
+    <div style={sectionCardStyle}>
+      <h2 style={sectionCardHeadingStyle}>{title}</h2>
       {children}
     </div>
   );
@@ -306,8 +304,8 @@ function SectionCard({ title, children }: { title: string; children: React.React
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div>
-      <div style={{ fontSize: "1.15rem", fontWeight: 600 }}>{value}</div>
+    <div style={statTileStyle}>
+      <div style={{ fontSize: "1.25rem", fontWeight: 700, fontFamily: "var(--font-display)" }}>{value}</div>
       <div style={mutedSmallStyle}>
         {label}
         {hint ? ` (${hint})` : ""}
@@ -336,10 +334,39 @@ const dashboardWrapStyle: React.CSSProperties = {
 
 const mutedSmallStyle: React.CSSProperties = { fontSize: "0.85rem", color: "var(--text-muted)", margin: 0 };
 
+// Modernized per direct feedback ("the partner dashboard is not nice,
+// try a more modern layout, no borders on boxes") — every box below
+// drops its `border` in favor of depth from `boxShadow: var(--glow)`
+// (the same shadow-only card treatment the landing page's countdown
+// tiles already use) plus a larger radius, rather than a hard outline.
+// Real data/behavior is completely untouched — this is styling only.
+const sectionCardStyle: React.CSSProperties = {
+  background: "var(--surface)",
+  borderRadius: "20px",
+  padding: "1.75rem",
+  boxShadow: "var(--glow)",
+  marginBottom: "1.5rem",
+};
+
+const sectionCardHeadingStyle: React.CSSProperties = {
+  fontFamily: "var(--font-display)",
+  fontSize: "1.05rem",
+  fontWeight: 600,
+  margin: "0 0 1rem",
+};
+
 const statGridStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-  gap: "1rem",
+  gap: "0.85rem",
+};
+
+// Each stat gets its own soft tile now (was bare stacked text) — reads
+// more like a real dashboard metric, still border-free.
+const statTileStyle: React.CSSProperties = {
+  background: "var(--bg-elevated)",
+  borderRadius: "14px",
+  padding: "0.9rem 1rem",
 };
 
 const rowStyle: React.CSSProperties = {
@@ -347,10 +374,9 @@ const rowStyle: React.CSSProperties = {
   justifyContent: "space-between",
   alignItems: "center",
   gap: "1rem",
-  background: "var(--surface-raised)",
-  border: "1px solid var(--border)",
-  borderRadius: "10px",
-  padding: "0.7rem 0.9rem",
+  background: "var(--bg-elevated)",
+  borderRadius: "14px",
+  padding: "0.8rem 1rem",
 };
 
 const statusPillStyle: React.CSSProperties = {
@@ -358,19 +384,18 @@ const statusPillStyle: React.CSSProperties = {
   fontWeight: 700,
   letterSpacing: "0.03em",
   color: "var(--accent)",
-  border: "1px solid var(--border)",
+  background: "var(--accent-soft)",
   borderRadius: "999px",
-  padding: "0.2rem 0.6rem",
+  padding: "0.25rem 0.65rem",
   flexShrink: 0,
 };
 
 const codeBoxStyle: React.CSSProperties = {
   flex: 1,
   minWidth: "220px",
-  background: "var(--surface-raised)",
-  border: "1px solid var(--border)",
-  borderRadius: "8px",
-  padding: "0.6rem 0.8rem",
+  background: "var(--bg-elevated)",
+  borderRadius: "10px",
+  padding: "0.65rem 0.9rem",
   fontSize: "0.82rem",
   overflowX: "auto",
   whiteSpace: "nowrap",
@@ -380,8 +405,8 @@ const copyButtonStyle: React.CSSProperties = {
   background: "var(--accent)",
   color: "var(--bg)",
   border: "none",
-  borderRadius: "8px",
-  padding: "0.6rem 1rem",
+  borderRadius: "10px",
+  padding: "0.6rem 1.1rem",
   fontWeight: 600,
   fontSize: "0.85rem",
   cursor: "pointer",

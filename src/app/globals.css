@@ -212,6 +212,24 @@ a[href]:hover {
     border-radius: 999px;
 }
 
+/* Stories carousel (components/story-avatar-row.tsx) — real product
+   feedback: the row's horizontal overflow-x:auto was rendering the
+   global scrollbar styling above as a solid gray bar sitting right
+   underneath the avatars, reading as a stray divider rather than a
+   scroll affordance ("remove the horizontal bar below the stories").
+   The row itself is still genuinely scrollable by touch/trackpad —
+   only the always-visible track/thumb chrome is hidden, matching the
+   native-app convention this carousel is already modeled on
+   (Instagram's own story tray has no visible scrollbar either). */
+.story-row-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.story-row-scroll::-webkit-scrollbar {
+    display: none;
+}
+
 :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;

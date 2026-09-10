@@ -64,7 +64,7 @@ export function StoryAvatarRow() {
 
   return (
     <>
-      <div style={rowStyle}>
+      <div className="story-row-scroll" style={rowStyle}>
         {creators.map((c) => (
           <button
             key={c.creatorProfileId}
@@ -96,7 +96,7 @@ const rowStyle: React.CSSProperties = {
   display: "flex",
   gap: "1.1rem",
   overflowX: "auto",
-  padding: "0.25rem 0.1rem 0.75rem",
+  padding: "0.25rem 0.1rem 0.35rem",
   marginBottom: "1rem",
 };
 

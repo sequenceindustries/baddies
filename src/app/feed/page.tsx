@@ -182,4 +182,8 @@ const bannerButtonStyle: React.CSSProperties = {
 // full 1100px width.
 const mainStyle: React.CSSProperties = { padding: "2rem 1.25rem 4rem", maxWidth: "620px", margin: "0 auto" };
 
-const feedListStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: "1rem" };
+// Widened from 1rem per direct feedback ("create more space between
+// posts") — with the card frame already removed (no border/background
+// per the Instagram-reference redesign), this gap is the only thing
+// separating one post from the next, so it needs to read clearly.
+const feedListStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: "2.5rem" };
