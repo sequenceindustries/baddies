@@ -1131,7 +1131,7 @@ const sortToggleStyle: React.CSSProperties = {
 const sortToggleActiveStyle: React.CSSProperties = {
   ...sortToggleStyle,
   background: "var(--accent)",
-  borderColor: "var(--accent)",
+  border: "1px solid var(--accent)",
   color: "var(--bg)",
 };
 

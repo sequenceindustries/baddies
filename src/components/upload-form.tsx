@@ -269,7 +269,7 @@ const dropzoneStyle: React.CSSProperties = {
 };
 
 const dropzoneActiveStyle: React.CSSProperties = {
-  borderColor: "var(--accent)",
+  border: "1.5px dashed var(--accent)",
   background: "var(--accent-soft)",
 };
 
