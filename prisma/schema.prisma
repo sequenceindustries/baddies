@@ -405,6 +405,7 @@ model CreatorProfile {
 
   verifications    VerificationSession[]
   content          Content[]
+  stories          Story[]
   ledgerEntries    LedgerEntry[]
   followers        Follow[]
   categories       CreatorCategory[]
@@ -674,6 +675,59 @@ model MediaBlob {
   createdAt  DateTime @default(now())
 
   @@map("media_blobs")
+}
+
+// Real, creator-uploaded ephemeral stories ("create a stories option to
+// upload... disappear after 24 hours, not to be put on any tier").
+// Deliberately a flat, dedicated model rather than a child MediaAsset
+// row: a story is always exactly one piece of media with none of
+// Content's DRAFT->...->APPROVED status machine, no ContentAccessLevel
+// tier, no ContentEntitlement/Purchase/Report/moderation relation of
+// any kind — reusing MediaAsset would mean giving its required,
+// non-nullable contentId FK a nullable sibling purely to carry fields
+// this feature never uses. Same "small parallel model over forcing two
+// flows through one table" reasoning as CreatorIdentity vs. Identity.
+//
+// Lazily expired — expiresAt is computed once (createdAt + 24h) and
+// stored at insert time by POST /api/creator/stories, never by a DB
+// trigger/default. No cron/job-queue system exists in this codebase
+// (see FanTrial's own comment) — nothing ever deletes an expired row;
+// every "active stories" read just filters expiresAt > now() via
+// src/lib/stories/active.ts's isStoryActive(), same lazy-expiry
+// pattern FanTrial already established.
+//
+// display* fields mirror MediaAssetKind.DISPLAY (image-only, generated
+// WebP derivative — see image-pipeline.ts) but flattened onto this row
+// instead of a second child record, since a story has at most one of
+// each.
+model Story {
+  id               String         @id @default(cuid())
+  creatorProfileId String
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+
+  mediaType       MediaType
+  storageProvider String
+  storageKey      String // private bucket key, never a public URL — see MediaAsset's own comment
+  mimeType        String
+  width           Int?
+  height          Int?
+
+  displayStorageKey String?
+  displayMimeType   String?
+  displayWidth      Int?
+  displayHeight     Int?
+
+  createdAt DateTime @default(now())
+  expiresAt DateTime // createdAt + 24h, computed and stored at insert time — see this model's own comment
+
+  // "Does this creator have an active story right now" — GET
+  // /api/stories/:creatorProfileId's exact filter shape.
+  @@index([creatorProfileId, expiresAt])
+  // "Creators with any active story, most recent first" — GET
+  // /api/stories's exact filter+sort shape. Same composite-index
+  // pattern as Content's own [status, publishedAt].
+  @@index([expiresAt, createdAt])
+  @@map("stories")
 }
 
 // =========================================================================

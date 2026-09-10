@@ -1,36 +1,43 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { CreatorCardData } from "./cards";
-import { PostDetailOverlay } from "./grid-thumbnail";
+import { createPortal } from "react-dom";
+
+interface StoryCreator {
+  creatorProfileId: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  latestStoryAt: string;
+}
+
+interface StoryItem {
+  storyId: string;
+  mediaType: "IMAGE" | "VIDEO" | "AUDIO";
+  mimeType: string;
+  signedUrl: string;
+}
 
 /**
- * "Stories" carousel (social-feed redesign, Phase 5 — the optional,
- * lowest-priority item per the brief, built last and kept deliberately
- * small). No ephemeral/expiring-content concept exists anywhere in this
- * app and none is invented here — "story" means recently-approved
- * creators, reusing the exact GET /api/discovery/new-creators query the
- * landing page's own "New Baddies" section already runs. A tap opens a
- * "quick preview": that creator's latest real teaser (their most recent
- * unlocked/FREE post specifically, not just their most recent post
- * overall — a locked VIP/Exclusive post would make a poor "preview" of
- * someone you don't follow yet, per direct follow-up feedback: "make
- * the stories functional and show teasers"), fetched from the already-
- * paginated GET /api/creators/:id/content (Phase 3) and handed to the
- * same PostDetailOverlay/PostCard Phase 2 built — zero new API routes,
- * `lock.locked` was already computed per item. Renders nothing at all
- * once there are no recently-approved creators, and degrades to doing
- * nothing on tap if a creator has no unlocked post on their first page
- * of content, rather than opening an overlay with nothing free to show.
+ * Real "Stories" carousel — creators with at least one currently-active
+ * (unexpired) story, backed by GET /api/stories. Previously this row
+ * showed the 20 most-recently-approved creators as a decorative
+ * discovery browsing list (see git history) with no real ephemeral-
+ * content backing at all; that discovery function isn't lost, the same
+ * underlying query still independently powers the landing page's own
+ * "New Baddies" section. Renders nothing once there are no active
+ * stories anywhere, matching this row's own long-established "empty ->
+ * null" convention. `refreshKey` lets the feed page force an immediate
+ * re-fetch right after the viewer posts their own story, without a full
+ * page reload.
  */
-export function StoryAvatarRow() {
-  const [creators, setCreators] = useState<CreatorCardData[] | null>(null);
-  const [openContentId, setOpenContentId] = useState<string | null>(null);
+export function StoryAvatarRow({ refreshKey }: { refreshKey?: number }) {
+  const [creators, setCreators] = useState<StoryCreator[] | null>(null);
+  const [viewerItems, setViewerItems] = useState<StoryItem[] | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/discovery/new-creators")
+    fetch("/api/stories")
       .then((r) => (r.ok ? r.json() : { creators: [] }))
       .then((body) => {
         if (!cancelled) setCreators(body.creators ?? []);
@@ -41,20 +48,14 @@ export function StoryAvatarRow() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshKey]);
 
-  async function openPreview(creatorProfileId: string) {
+  async function openStory(creatorProfileId: string) {
     setLoadingId(creatorProfileId);
     try {
-      const res = await fetch(`/api/creators/${creatorProfileId}/content`);
+      const res = await fetch(`/api/stories/${creatorProfileId}`);
       const body = res.ok ? await res.json() : { items: [] };
-      // The latest TEASER specifically — not just the latest post,
-      // which is as likely to be a locked VIP/Exclusive item as not.
-      const teaser = body.items?.find((i: { lock: { locked: boolean } }) => !i.lock.locked);
-      if (teaser) setOpenContentId(teaser.contentId);
-      // No unlocked post on this creator's first page — degrades to
-      // doing nothing rather than opening an overlay with nothing free
-      // to show.
+      if (body.items?.length > 0) setViewerItems(body.items);
     } finally {
       setLoadingId(null);
     }
@@ -68,7 +69,7 @@ export function StoryAvatarRow() {
         {creators.map((c) => (
           <button
             key={c.creatorProfileId}
-            onClick={() => openPreview(c.creatorProfileId)}
+            onClick={() => openStory(c.creatorProfileId)}
             disabled={loadingId === c.creatorProfileId}
             style={itemStyle}
           >
@@ -87,8 +88,62 @@ export function StoryAvatarRow() {
         ))}
       </div>
 
-      {openContentId && <PostDetailOverlay contentId={openContentId} onClose={() => setOpenContentId(null)} />}
+      {viewerItems && <StoryViewerOverlay items={viewerItems} onClose={() => setViewerItems(null)} />}
     </>
+  );
+}
+
+/**
+ * Full-bleed story viewer, built from MediaLightbox's template
+ * (cards.tsx) plus minimal multi-story navigation: tap the right/left
+ * half to advance/go back, a static (non-animated, non-timed) segment
+ * bar shows progress through the set. Deliberately not a real
+ * auto-advancing timed progress bar — that's real added complexity
+ * nothing in the request asked for.
+ */
+function StoryViewerOverlay({ items, onClose }: { items: StoryItem[]; onClose: () => void }) {
+  const [index, setIndex] = useState(0);
+
+  if (typeof document === "undefined") return null;
+  const current = items[index];
+  if (!current) return null;
+
+  function handleClose(e: React.MouseEvent) {
+    e.stopPropagation();
+    onClose();
+  }
+  function goNext(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (index >= items.length - 1) onClose();
+    else setIndex((i) => i + 1);
+  }
+  function goPrev(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (index > 0) setIndex((i) => i - 1);
+  }
+
+  return createPortal(
+    <div style={viewerBackdropStyle} onClick={handleClose} role="dialog" aria-modal="true">
+      <div style={viewerSegmentsStyle} onClick={(e) => e.stopPropagation()}>
+        {items.map((it, i) => (
+          <span key={it.storyId} style={{ ...viewerSegmentStyle, opacity: i <= index ? 1 : 0.35 }} />
+        ))}
+      </div>
+      <button onClick={handleClose} style={viewerCloseStyle} aria-label="Close">
+        ✕
+      </button>
+      <div style={viewerContentStyle} onClick={(e) => e.stopPropagation()}>
+        {current.mediaType === "VIDEO" ? (
+          <video src={current.signedUrl} style={viewerMediaStyle} autoPlay playsInline controls={false} />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={current.signedUrl} alt="" style={viewerMediaStyle} />
+        )}
+        <button onClick={goPrev} style={{ ...viewerTapZoneStyle, left: 0 }} aria-label="Previous story" />
+        <button onClick={goNext} style={{ ...viewerTapZoneStyle, right: 0 }} aria-label="Next story" />
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -154,4 +209,66 @@ const nameStyle: React.CSSProperties = {
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
   maxWidth: "68px",
+};
+
+const viewerBackdropStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.88)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 1000,
+};
+
+const viewerContentStyle: React.CSSProperties = {
+  position: "relative",
+  maxWidth: "min(92vw, 500px)",
+  maxHeight: "90vh",
+  display: "flex",
+};
+
+const viewerMediaStyle: React.CSSProperties = {
+  display: "block",
+  maxWidth: "100%",
+  maxHeight: "90vh",
+  objectFit: "contain",
+};
+
+const viewerCloseStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "1.25rem",
+  right: "1.25rem",
+  background: "transparent",
+  border: "none",
+  color: "#fff",
+  fontSize: "1.3rem",
+  cursor: "pointer",
+  zIndex: 1,
+};
+
+const viewerSegmentsStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "0.9rem",
+  left: "1.25rem",
+  right: "1.25rem",
+  display: "flex",
+  gap: "0.3rem",
+};
+
+const viewerSegmentStyle: React.CSSProperties = {
+  flex: 1,
+  height: "2.5px",
+  borderRadius: "2px",
+  background: "#fff",
+};
+
+const viewerTapZoneStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 0,
+  bottom: 0,
+  width: "50%",
+  background: "transparent",
+  border: "none",
+  cursor: "pointer",
 };

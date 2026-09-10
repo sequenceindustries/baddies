@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PostCard, type PostCardItem } from "@/components/post-card";
 import { StoryAvatarRow } from "@/components/story-avatar-row";
+import { StoryComposerButton } from "@/components/story-composer-button";
 import { UploadForm } from "@/components/upload-form";
 import { useSession } from "@/components/ui";
 
@@ -24,6 +25,7 @@ export default function FeedPage() {
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [vipPassActive, setVipPassActive] = useState<boolean | null>(null);
+  const [storyRefreshKey, setStoryRefreshKey] = useState(0);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const loadingRef = useRef(false);
 
@@ -86,9 +88,12 @@ export default function FeedPage() {
 
       {vipPassActive === false && <VipPassBanner />}
 
-      <FeedComposer />
+      <div style={composerRowStyle}>
+        <StoryComposerButton onPosted={() => setStoryRefreshKey((k) => k + 1)} />
+        <FeedComposer />
+      </div>
 
-      <StoryAvatarRow />
+      <StoryAvatarRow refreshKey={storyRefreshKey} />
 
       {initialLoading ? (
         <p style={{ color: "var(--text-muted)" }}>Loading...</p>
@@ -233,10 +238,21 @@ function FeedComposer() {
   );
 }
 
+// Sibling wrapper for StoryComposerButton + FeedComposer, per direct
+// request ("put the button next to share something new") — the icon
+// button is a fixed-size circle, the composer fills the rest of the
+// row whether collapsed (prompt) or expanded (full card).
+const composerRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: "0.6rem",
+};
+
 const composerPromptStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: "0.6rem",
+  flex: 1,
   width: "100%",
   background: "var(--surface)",
   border: "1px solid var(--border)",
@@ -269,6 +285,7 @@ const composerCardStyle: React.CSSProperties = {
   borderRadius: "16px",
   padding: "1.25rem",
   marginBottom: "1.5rem",
+  flex: 1,
 };
 
 const composerHeaderStyle: React.CSSProperties = {
