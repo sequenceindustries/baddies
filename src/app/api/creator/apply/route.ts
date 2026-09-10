@@ -5,6 +5,7 @@ import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
 import { encryptField } from "@/lib/security/field-encryption";
 import { getRequestCountry, isSouthAfrica, NOT_SOUTH_AFRICA_MESSAGE } from "@/lib/security/geo";
+import { persistPublicImage, publicImageUrlSchema } from "@/lib/media/persist-public-image";
 import type { Prisma } from "@prisma/client";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
@@ -18,8 +19,8 @@ const ApplySchema = z.object({
     // Both optional here — a creator can also set/change these later
     // from /settings (avatarUrl) or the Dashboard's Content tab
     // (featuredImageUrl, CreatorProfile.coverImageUrl).
-    avatarUrl: z.string().url().optional(),
-    featuredImageUrl: z.string().url().optional(),
+    avatarUrl: publicImageUrlSchema.optional(),
+    featuredImageUrl: publicImageUrlSchema.optional(),
     confirmsAdult: z.literal(true, {
           errorMap: () => ({ message: "You must confirm you are 18 or older to apply as a creator." }),
     }),
@@ -68,6 +69,17 @@ export async function POST(req: NextRequest) {
 
   const legalNameEncrypted = encryptField(legalName);
 
+  // Both fields arrive as raw data: URLs from their respective
+  // ImageUploadFields — see persist-public-image.ts's own comment for
+  // why those must never be persisted (or served back) as-is. Done
+  // outside the transaction below (each is its own DB write already,
+  // via the storage provider) rather than holding that transaction open
+  // across it.
+  const [persistedAvatarUrl, persistedCoverImageUrl] = await Promise.all([
+    persistPublicImage(avatarUrl, `public/avatars/${user.id}`),
+    persistPublicImage(featuredImageUrl, `public/covers/${user.id}`),
+  ]);
+
   const creatorProfile = await db.$transaction(async (tx: Prisma.TransactionClient) => {
         const created = await tx.creatorProfile.create({
                 data: {
@@ -75,13 +87,13 @@ export async function POST(req: NextRequest) {
                           status: "VERIFICATION_REQUIRED",
                           legalNameEncrypted,
                           appliedAt: new Date(),
-                          coverImageUrl: featuredImageUrl,
+                          coverImageUrl: persistedCoverImageUrl,
                 },
         });
 
                                                    await tx.profile.update({
                                                            where: { userId: user.id },
-                                                           data: { displayName, bio, avatarUrl },
+                                                           data: { displayName, bio, avatarUrl: persistedAvatarUrl },
                                                    });
 
                                                    // RBAC's content:create/content:publish permissions are gated on

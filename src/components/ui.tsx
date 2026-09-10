@@ -153,6 +153,13 @@ export function Nav({ comingSoon = false }: { comingSoon?: boolean }) {
   // here either, or a signed-out visitor would have a second way in
   // past that one deliberate button.
   const hideAuthLinks = NO_AUTH_LINKS_PATHS.has(pathname);
+  // The landing page specifically (not /founding-baddies, which keeps
+  // its single "Apply now" CTA untouched) gets a "Log in" link back,
+  // per direct request ("add login on home page, top right") — a
+  // narrow, deliberate exception to hideAuthLinks' "one CTA only" rule
+  // above: still no "Join" here, just the one way back in for a
+  // returning visitor.
+  const showLoginLink = pathname === "/";
   const [mobileOpen, setMobileOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
@@ -179,9 +186,10 @@ export function Nav({ comingSoon = false }: { comingSoon?: boolean }) {
     window.location.href = "/";
   }
 
-  // Nothing to show at all (signed out, on a hideAuthLinks page) — no
-  // point rendering a hamburger for an empty dropdown.
-  const hasNavContent = !(hideAuthLinks && !user);
+  // Nothing to show at all (signed out, on a hideAuthLinks page with no
+  // login-link exception) — no point rendering a hamburger for an empty
+  // dropdown.
+  const hasNavContent = !(hideAuthLinks && !user) || showLoginLink;
 
   return (
     <div style={navWrapStyle}>
@@ -196,6 +204,7 @@ export function Nav({ comingSoon = false }: { comingSoon?: boolean }) {
           <NavLinks
             user={user ?? null}
             hideAuthLinks={hideAuthLinks}
+            showLoginLink={showLoginLink}
             comingSoon={comingSoon}
             onLogout={handleLogout}
             layout="row"
@@ -222,6 +231,7 @@ export function Nav({ comingSoon = false }: { comingSoon?: boolean }) {
         <NavLinks
           user={user ?? null}
           hideAuthLinks={hideAuthLinks}
+          showLoginLink={showLoginLink}
           comingSoon={comingSoon}
           onLogout={handleLogout}
           layout="column"
@@ -243,12 +253,14 @@ export function Nav({ comingSoon = false }: { comingSoon?: boolean }) {
 function NavLinks({
   user,
   hideAuthLinks,
+  showLoginLink,
   comingSoon,
   onLogout,
   layout,
 }: {
   user: SessionUser | null;
   hideAuthLinks: boolean;
+  showLoginLink: boolean;
   comingSoon: boolean;
   onLogout: () => void;
   layout: "row" | "column";
@@ -334,7 +346,16 @@ function NavLinks({
   // all gated behind sign-in (see SignInGate's comment), so linking to
   // them for a signed-out visitor would just be a dead end. The landing
   // page's own Top Baddies row is the one thing they get to browse first.
-  if (hideAuthLinks) return null;
+  // The landing page itself is the one deliberate exception (see Nav's
+  // own showLoginLink comment) — a returning visitor still gets a way
+  // back in, just "Log in" alone, not the Join/Founding-Baddie CTA.
+  if (hideAuthLinks) {
+    return showLoginLink ? (
+      <Link href="/login" style={linkStyle}>
+        Log in
+      </Link>
+    ) : null;
+  }
 
   return (
     <>
@@ -770,15 +791,59 @@ export const inputStyle: React.CSSProperties = {
   fontSize: "0.95rem",
 };
 
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2MB — these fields are all plain data: URI strings (Profile.avatarUrl, CreatorProfile.coverImageUrl), no upload endpoint needed, so this keeps the row reasonable.
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2MB — the cap on the ORIGINAL file picked; downscaleImage below shrinks it further before it ever leaves the browser.
+
+// Real, confirmed perf fix: a phone photo picked here for an avatar/
+// cover image was previously sent (and stored) at its full original
+// resolution — one production avatar decoded to ~191KB for something
+// rendered as a ~60px circle. Drawn down to this longest-edge cap via
+// canvas before it's ever turned into a data: URL, which is what
+// actually leaves the browser — full detail is wasted on a profile
+// photo at any real display size, retina included.
+const AVATAR_MAX_DIMENSION = 800;
 
 /**
- * A file picker that reads the chosen image straight to a data: URI
- * client-side, no upload endpoint needed — the target fields
- * (Profile.avatarUrl, CreatorProfile.coverImageUrl) are already just
- * plain strings. Shared by every place a creator sets a profile picture
- * or featured image: /settings, /apply (at signup), and the Dashboard's
- * Content tab (see ImageUploadField's callers).
+ * Reads a file to a data: URL, downscaling it through a canvas first if
+ * it's larger than AVATAR_MAX_DIMENSION on its longest edge — an
+ * already-small image (or a browser without canvas support) is returned
+ * as-is rather than needlessly re-encoding a lossless format.
+ */
+async function downscaleImage(file: File): Promise<string> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = reject;
+    el.src = dataUrl;
+  }).catch(() => null);
+  if (!img) return dataUrl;
+
+  const scale = Math.min(1, AVATAR_MAX_DIMENSION / Math.max(img.naturalWidth, img.naturalHeight));
+  if (scale >= 1) return dataUrl;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(img.naturalWidth * scale);
+  canvas.height = Math.round(img.naturalHeight * scale);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return dataUrl;
+
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL(file.type || "image/jpeg", 0.85);
+}
+
+/**
+ * A file picker that reads the chosen image to a data: URI client-side
+ * — the server persists that to real storage and swaps it for a long-
+ * lived URL before saving (see src/lib/media/persist-public-image.ts),
+ * never the raw bytes themselves. Shared by every place a creator sets
+ * a profile picture or featured image: /settings, /apply (at signup),
+ * and the Dashboard's Content tab (see ImageUploadField's callers).
  */
 export function ImageUploadField({
   label,
@@ -810,12 +875,7 @@ export function ImageUploadField({
       setError("Image is too large — please pick one under 2MB.");
       return;
     }
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
+    const dataUrl = await downscaleImage(file);
     onChange(dataUrl);
   }
 

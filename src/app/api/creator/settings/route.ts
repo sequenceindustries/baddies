@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
 import { resolveCreatorPricing, EXCLUSIVE_MIN_PRICE_USD } from "@/lib/creator/pricing";
+import { persistPublicImage, publicImageUrlSchema } from "@/lib/media/persist-public-image";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -55,7 +56,7 @@ const UpdateSettingsSchema = z.object({
   unlimitedOptedIn: z.boolean().optional(),
   subscriberCountVisible: z.boolean().optional(),
   locationVisible: z.boolean().optional(),
-  coverImageUrl: z.string().url().nullable().optional(),
+  coverImageUrl: publicImageUrlSchema.nullable().optional(),
   exclusivePriceUsd: z
     .number()
     .min(EXCLUSIVE_MIN_PRICE_USD, `Must be at least $${EXCLUSIVE_MIN_PRICE_USD}.`)
@@ -88,7 +89,12 @@ export async function PATCH(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { exclusivePriceUsd, ...rest } = parsed.data;
+  const { exclusivePriceUsd, coverImageUrl, ...rest } = parsed.data;
+
+  // FeaturedImagePanel (src/app/profile/page.tsx) sends a raw data: URL
+  // via ImageUploadField — see persist-public-image.ts's own comment
+  // for why that must never be persisted (or served back) as-is.
+  const persistedCoverImageUrl = await persistPublicImage(coverImageUrl, `public/covers/${creator.id}`);
 
   let updated;
   try {
@@ -96,6 +102,7 @@ export async function PATCH(req: NextRequest) {
       where: { id: creator.id },
       data: {
         ...rest,
+        coverImageUrl: persistedCoverImageUrl,
         ...(exclusivePriceUsd !== undefined
           ? { vvipPriceOverride: new Prisma.Decimal(exclusivePriceUsd) }
           : {}),

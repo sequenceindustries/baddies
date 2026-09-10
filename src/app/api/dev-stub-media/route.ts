@@ -32,10 +32,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "This link has expired or is invalid." }, { status: 404 });
   }
 
+  // Cache lifetime tracks how long this specific signed URL is actually
+  // still good for, rather than a flat 60s — a short-TTL gated-content
+  // URl (the default 5min) keeps roughly today's behavior, while a
+  // long-TTL one (avatars/cover images — see persist-public-image.ts's
+  // own comment on why those are signed for ~1 year) becomes genuinely
+  // browser-cacheable instead of being re-fetched on every render.
+  // Never longer than what the signature itself already permits — a
+  // cached response can't outlive its own authorization.
+  const maxAge = Math.max(0, Math.min(Math.floor((expires - Date.now()) / 1000), 60 * 60 * 24 * 365));
+
   return new NextResponse(object.body, {
     headers: {
       "Content-Type": object.contentType,
-      "Cache-Control": "private, max-age=60",
+      "Cache-Control": `private, max-age=${maxAge}`,
     },
   });
 }

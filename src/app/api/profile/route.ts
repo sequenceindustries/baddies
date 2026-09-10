@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
+import { persistPublicImage, publicImageUrlSchema } from "@/lib/media/persist-public-image";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -22,7 +23,7 @@ export const dynamic = "force-dynamic";
 const UpdateProfileSchema = z.object({
   displayName: z.string().min(2).max(50).optional(),
   bio: z.string().max(2000).nullable().optional(),
-  avatarUrl: z.string().url().nullable().optional(),
+  avatarUrl: publicImageUrlSchema.nullable().optional(),
   country: z.string().min(1, "Country is required").max(100).optional(),
   city: z.string().min(1, "City is required").max(100).optional(),
 });
@@ -55,9 +56,14 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  // ImageUploadField (components/ui.tsx) sends a raw data: URL — see
+  // persist-public-image.ts's own comment for why that must never be
+  // persisted (or served back) as-is.
+  const avatarUrl = await persistPublicImage(parsed.data.avatarUrl, `public/avatars/${user.id}`);
+
   const profile = await db.profile.update({
     where: { userId: user.id },
-    data: parsed.data,
+    data: { ...parsed.data, avatarUrl },
   });
 
   return NextResponse.json({

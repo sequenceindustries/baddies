@@ -92,12 +92,16 @@ export function StoryAvatarRow() {
   );
 }
 
+// marginBottom widened per direct feedback ("more space between posts,
+// especially between stories and first post") — this row sits directly
+// above the feed's own post list, so it needed more separation than the
+// general between-posts gap (feedListStyle's own 2.5rem), not less.
 const rowStyle: React.CSSProperties = {
   display: "flex",
   gap: "1.1rem",
   overflowX: "auto",
   padding: "0.25rem 0.1rem 0.35rem",
-  marginBottom: "1rem",
+  marginBottom: "3rem",
 };
 
 const itemStyle: React.CSSProperties = {
