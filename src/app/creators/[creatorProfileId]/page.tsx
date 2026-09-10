@@ -4,8 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { VerifiedBadge, CheckTick, displayHeadingStyle, useSession, SignInGate } from "@/components/ui";
 import { ReportButton } from "@/components/cards";
-import { GridThumbnail, PostDetailOverlay } from "@/components/grid-thumbnail";
-import { ComposeMessageModal, type PostCardItem } from "@/components/post-card";
+import { ComposeMessageModal, PostCard, type PostCardItem } from "@/components/post-card";
 
 interface CreatorProfileResponse {
   creatorProfileId: string;
@@ -32,17 +31,26 @@ type Tier = (typeof TIER_ORDER)[number];
 /**
  * Creator profile — header stays exactly as it was (avatar, name,
  * VerifiedBadge, bio, follower/subscriber counts, Subscribe button),
- * per the social-feed redesign brief's own instruction. What changed:
- * the content section below is now the Instagram-style grid
- * (GridThumbnail/PostDetailOverlay, same components Discovery's Phase 2
- * grid uses) instead of ContentTimeline's vertical list, fed by this
- * creator's own now-cursor-paginated /content route with its own
+ * per the social-feed redesign brief's own instruction. Content section
+ * is now a single column of full PostCard posts, matching the home
+ * feed exactly (direct request: "Content should be in one column like
+ * in the home feed") — replaced the earlier Instagram-style thumbnail
+ * grid (GridThumbnail/PostDetailOverlay). PostCard already renders its
+ * own creator byline, Follow button, and "•••" (Subscribe/Report) menu
+ * per post, so those controls now appear both here at the page header
+ * and again on every card below — a deliberate choice, matching how
+ * Instagram/Twitter's own profile pages work, not an oversight; a
+ * second, lighter card type built solely to avoid that redundancy
+ * would be new surface area for a cosmetic concern. Since PostCard
+ * itself doesn't need a click-to-expand affordance (unlike a grid
+ * thumbnail), the earlier click-to-open overlay state is gone too — the
+ * feed's own list has no equivalent to match. Still fed by this
+ * creator's own cursor-paginated /content route with its own
  * infinite-scroll sentinel. The tier tab bar is unchanged in spirit —
- * still only shown once more than one tier is present — but now filters
- * client-side over whatever's already loaded, rather than filtering a
- * single flat array fetched all at once. A Message button sits next to
- * Follow, opening the same ComposeMessageModal the feed's engagement
- * row uses, pre-targeted at this creator.
+ * still only shown once more than one tier is present, now centered —
+ * filters client-side over whatever's already loaded. A Message button
+ * sits next to Follow, opening the same ComposeMessageModal the feed's
+ * engagement row uses, pre-targeted at this creator.
  */
 export default function CreatorProfilePage() {
   const params = useParams<{ creatorProfileId: string }>();
@@ -62,7 +70,6 @@ export default function CreatorProfilePage() {
   const [hasMore, setHasMore] = useState(true);
   const [gridError, setGridError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tier | undefined>(undefined);
-  const [openContentId, setOpenContentId] = useState<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const loadingRef = useRef(false);
 
@@ -250,16 +257,15 @@ export default function CreatorProfilePage() {
       ) : visibleItems.length === 0 ? (
         <p style={{ color: "var(--text-muted)" }}>No content yet.</p>
       ) : (
-        <div style={gridStyle}>
+        <div style={contentListStyle}>
           {visibleItems.map((item) => (
-            <GridThumbnail key={item.contentId} item={item} onOpen={() => setOpenContentId(item.contentId)} />
+            <PostCard key={item.contentId} item={item} />
           ))}
         </div>
       )}
       <div ref={sentinelRef} style={{ height: "1px" }} aria-hidden="true" />
       {gridLoadingMore && <p style={{ color: "var(--text-muted)", textAlign: "center" }}>Loading more...</p>}
 
-      {openContentId && <PostDetailOverlay contentId={openContentId} onClose={() => setOpenContentId(null)} />}
       {messageOpen && <ComposeMessageModal creatorProfileId={creatorProfileId} onClose={() => setMessageOpen(false)} />}
     </main>
   );
@@ -325,7 +331,11 @@ function checkoutButtonStyle(active: boolean): React.CSSProperties {
   };
 }
 
-const mainStyle: React.CSSProperties = { padding: "2.5rem 1.75rem 4rem", maxWidth: "1100px", margin: "0 auto" };
+// Narrowed from 1100px (the old thumbnail-grid's width) to match
+// /feed's own mainStyle exactly (620px) — a single column of full
+// PostCard posts at the old grid width would render each post's fixed
+// 4:5 media box far larger than anywhere else in the app.
+const mainStyle: React.CSSProperties = { padding: "2.5rem 1.75rem 4rem", maxWidth: "620px", margin: "0 auto" };
 
 // Real, confirmed overflow bug: three non-wrapping flex children (the
 // fixed 96px avatar, the name/bio text block, and the Follow/Message/
@@ -443,7 +453,12 @@ const messageButtonStyle: React.CSSProperties = {
   border: "1px solid var(--border)",
 };
 
-const tabRowStyle: React.CSSProperties = { display: "flex", gap: "0.5rem", marginBottom: "1.25rem" };
+const tabRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "center",
+  gap: "0.5rem",
+  marginBottom: "1.25rem",
+};
 
 function tabButtonStyle(active: boolean): React.CSSProperties {
   return {
@@ -458,10 +473,7 @@ function tabButtonStyle(active: boolean): React.CSSProperties {
   };
 }
 
-// Same Instagram Explore convention as Discovery's grid — see that
-// page's own comment on why auto-fill (not auto-fit).
-const gridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
-  gap: "4px",
-};
+// Matches /feed's own feedListStyle exactly — single column of full
+// PostCard posts, per direct request ("Content should be in one
+// column like in the home feed").
+const contentListStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: "2.5rem" };
