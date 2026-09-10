@@ -306,9 +306,37 @@ model User {
   foundingPartner        FoundingPartner?
   partnerInvitationsSent PartnerInvitation[]     @relation("PartnerInvitationsSent")
   foundingApplication    FoundingApplication?
+  blocksInitiated        Block[]                 @relation("BlockBlocker")
+  blocksReceived         Block[]                 @relation("BlockBlocked")
 
   @@index([role])
   @@map("users")
+}
+
+// Creator-profile "..." menu Block action — the viewer blocks the
+// profile owner (or vice versa; enforcement checks both directions).
+// New, small, purpose-built model rather than folding into an existing
+// one — matches this schema's own established preference (see e.g.
+// CreatorIdentity vs Founding's Identity) for a dedicated table over a
+// polymorphic one when nothing else needs to query across both.
+// Enforcement is deliberately narrow this pass: message-send and
+// follow only (see POST /api/creators/:id/message and .../follow) —
+// feed/discovery filtering, retroactively hiding past interactions,
+// and an "unblock" UI are explicit, flagged follow-up work, not built
+// here.
+model Block {
+  id            String @id @default(cuid())
+  blockerId     String
+  blocker       User   @relation("BlockBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedUserId String
+  blockedUser   User   @relation("BlockBlocked", fields: [blockedUserId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedUserId])
+  @@index([blockerId])
+  @@index([blockedUserId])
+  @@map("blocks")
 }
 
 model Session {

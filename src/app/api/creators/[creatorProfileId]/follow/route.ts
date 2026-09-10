@@ -33,6 +33,22 @@ export async function POST(
     return NextResponse.json({ error: "You cannot follow your own creator profile." }, { status: 400 });
   }
 
+  // Either party blocking the other rules out following — a fan who
+  // blocked this creator (or was blocked by them) shouldn't be able to
+  // follow them, same as a blocked pair can't message each other.
+  const blocked = await db.block.findFirst({
+    where: {
+      OR: [
+        { blockerId: user.id, blockedUserId: creator.userId },
+        { blockerId: creator.userId, blockedUserId: user.id },
+      ],
+    },
+    select: { id: true },
+  });
+  if (blocked) {
+    return NextResponse.json({ error: "You can't follow this creator." }, { status: 403 });
+  }
+
   // Swapped from an idempotent upsert to a plain create + P2002 catch
   // (same precedent as src/app/api/creator/settings/route.ts's handle
   // uniqueness check) so a repeat follow can be told apart from a

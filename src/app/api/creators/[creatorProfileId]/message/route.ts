@@ -27,6 +27,8 @@ const SendMessageSchema = z.object({
  * subscription to this creator, checked with the exact same shape
  * canAccessContent uses (src/lib/entitlements/content.ts), and the
  * creator must not have opted out via CreatorProfile.acceptsMessages.
+ * Also blocked either direction by a Block row (creator-profile "..."
+ * menu) — see POST .../block.
  */
 export async function POST(req: NextRequest, { params }: { params: { creatorProfileId: string } }) {
   const user = await getCurrentUser();
@@ -51,6 +53,19 @@ export async function POST(req: NextRequest, { params }: { params: { creatorProf
 
   if (!creator.acceptsMessages) {
     return NextResponse.json({ error: "This creator isn't accepting messages right now." }, { status: 403 });
+  }
+
+  const blocked = await db.block.findFirst({
+    where: {
+      OR: [
+        { blockerId: user.id, blockedUserId: creator.userId },
+        { blockerId: creator.userId, blockedUserId: user.id },
+      ],
+    },
+    select: { id: true },
+  });
+  if (blocked) {
+    return NextResponse.json({ error: "You can't message this creator." }, { status: 403 });
   }
 
   const activeSub = await db.subscription.findFirst({

@@ -30,8 +30,13 @@ export async function GET(
 
   const pricing = await resolveCreatorPricing(creator);
 
-  const [followerCount, subscriberCount, avatarUrl, coverImageUrl] = await Promise.all([
+  const [followerCount, followingCount, subscriberCount, avatarUrl, coverImageUrl] = await Promise.all([
     db.follow.count({ where: { creatorProfileId: creator.id } }),
+    // This creator's own User.id can already be the fanId side of a
+    // Follow row — nothing in the schema restricts fanId to FAN-role
+    // users (confirmed live: creators can already follow other
+    // creators today) — so this is a real count, not a new concept.
+    db.follow.count({ where: { fanId: creator.userId } }),
     creator.subscriberCountVisible
       ? db.subscription.count({ where: { creatorProfileId: creator.id, status: "ACTIVE" } })
       : Promise.resolve(undefined),
@@ -54,6 +59,7 @@ export async function GET(
     unlimitedParticipant: creator.unlimitedOptedIn,
     acceptsMessages: creator.acceptsMessages,
     followerCount,
+    followingCount,
     subscriberCount,
     isFoundingPartner: creator.user.foundingPartner !== null,
     isFoundingBaddie: creator.isFoundingBaddie,
