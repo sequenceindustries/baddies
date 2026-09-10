@@ -336,3 +336,29 @@ a[href]:hover {
         padding-bottom: 58px;
     }
 }
+
+/* Discovery's Instagram Explore grid (src/app/discovery/page.tsx) —
+   explicit column counts (not the previous auto-fill(140px), which
+   packed as many small tiles as fit) so tiles read as deliberately
+   larger, and a real inline style can't express the breakpoint below
+   anyway. max-width: 80% is a deliberate "up to" cap, not a fixed
+   width — centers the grid with real breathing room on wide viewports;
+   dropped back to 100% on mobile, where 80% of an already-narrow phone
+   screen would just waste space for no visual benefit. Square corners
+   (no border-radius here or on GridThumbnail's own tileStyle when
+   variant="discovery") and the hidden avatar/badge byline are the
+   tile's own concern, not this container's. */
+.discovery-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    max-width: 80%;
+    margin: 0 auto;
+}
+
+@media (max-width: 680px) {
+    .discovery-grid {
+        grid-template-columns: repeat(3, 1fr);
+        max-width: 100%;
+    }
+}

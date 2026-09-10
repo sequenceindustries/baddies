@@ -12,48 +12,84 @@ import { POST_ITEM_SELECT, buildLockCta, shapeContentItem, type PostItemRow } fr
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 20;
+const SUGGESTED_POOL_SIZE = 12;
 
 /**
- * The home feed's single source of data — the social-feed redesign's
- * Twitter/X-style vertical scroll (fan-home) and Instagram-style
- * Discovery grid both consume this one cursor-paginated, reverse-
- * chronological stream (Discovery adds nothing of its own beyond
- * lazy-loading media per thumbnail — see GET /api/content/:id for the
- * single-item shape a grid tap's detail overlay uses instead).
- * Previously an unused Sprint-2 stub restricted to FREE/VIP content
- * from VERIFIED creators only; revived and extended:
+ * The single source of data for two different consumers, distinguished
+ * by a `scope` query param:
  *
- *   - VVIP content is now included too, rendered LOCKED rather than
- *     hidden — a deliberate widening of what's LISTED (see the
- *     redesign plan's own callout: this never widens what's
- *     UNLOCKABLE, only what appears, always still gated correctly).
- *   - Every item now carries a `lock` object (see list-lock.ts — a
- *     display-only mirror of canAccessContent, never authoritative)
- *     and a `context` chip (why this is in the stream) so a locked
- *     card can render a real "Subscribe to unlock" / "Get VIP Pass"
- *     CTA instead of nothing.
- *   - Real, per-post engagement counts (likes, tips) rather than
- *     nothing — the actual unlock/like/tip actions still go through
- *     their own existing/new dedicated routes; this route never
- *     returns a signed media URL.
+ *   - `?scope=discovery` (src/app/discovery/page.tsx's Instagram-style
+ *     grid): broad, platform-wide — every VERIFIED creator's content,
+ *     same as this route's original behavior — but with locked items
+ *     filtered out entirely (Discovery is meant to be a browse-what-
+ *     you-can-actually-open surface, not a subscribe-bait wall).
+ *   - anything else, i.e. no param (src/app/(fan)/fan-home/page.tsx's
+ *     Twitter/X-style feed): narrowed to creators this viewer actually
+ *     has a relationship with — followed, actively subscribed to (incl.
+ *     VIP-pass/trial-covered), or "suggested" (see below) — rendered
+ *     LOCKED rather than hidden when the viewer can see it's listed but
+ *     hasn't unlocked it, exactly as before. This is a real behavior
+ *     change from the previous "every VERIFIED creator" home feed.
  *
- * The six flat, non-paginated sections GET /api/home used to compose
- * (Following/Your Exclusive/VIP Content/Nearby/Trending/New) are fully
- * superseded by this one blended, infinite-scrollable stream — no
- * section headers, matching what "Twitter/X-style" actually means (X's
- * own timeline has none). The small `context` chip preserves "why is
- * this here" transparency without a multi-cursor-merge problem this
- * codebase has never needed to solve.
+ * "Suggested" is a deliberately small, honest heuristic — there is no
+ * recommendation engine anywhere in this codebase (build brief §31
+ * explicitly excludes one from MVP scope) — it's just the most-
+ * recently-approved VERIFIED creators (same query shape as
+ * GET /api/discovery/new-creators), always included regardless of
+ * sign-in state so a brand-new fan with zero follows/subscriptions
+ * still sees something on day one instead of a blank feed.
+ *
+ * Every item still carries a `lock` object (see list-lock.ts —
+ * display-only, never authoritative) and a `context` chip explaining
+ * why it's in the stream (`following` > `trending` > `suggested` >
+ * none) — this route never returns a signed media URL either way.
  */
 export async function GET(req: NextRequest) {
   const cursor = req.nextUrl.searchParams.get("cursor") ?? undefined;
+  const scope = req.nextUrl.searchParams.get("scope") === "discovery" ? "discovery" : "home";
   const user = await getCurrentUser();
+
+  const [viewerCtx, trending, businessConfig, follows] = await Promise.all([
+    buildViewerLockContext(user),
+    computeTrendingContent(),
+    getBusinessConfig(),
+    user ? db.follow.findMany({ where: { fanId: user.id }, select: { creatorProfileId: true } }) : Promise.resolve([]),
+  ]);
+
+  const trendingIds = new Set(trending.map((t) => t.contentId));
+  const followedCreatorIds = new Set(follows.map((f: (typeof follows)[number]) => f.creatorProfileId));
+
+  // Only computed for the home scope — Discovery stays platform-wide,
+  // so it never needs a creator-id allowlist at all.
+  let allowedCreatorIds: Set<string> | null = null;
+  let suggestedCreatorIds = new Set<string>();
+  if (scope === "home") {
+    const [vipOptedIn, suggested] = await Promise.all([
+      viewerCtx.vipPassActive || viewerCtx.trialActive
+        ? db.creatorProfile.findMany({ where: { unlimitedOptedIn: true, status: "VERIFIED" }, select: { id: true } })
+        : Promise.resolve([]),
+      db.creatorProfile.findMany({
+        where: { status: "VERIFIED" },
+        orderBy: { approvedAt: "desc" },
+        take: SUGGESTED_POOL_SIZE,
+        select: { id: true },
+      }),
+    ]);
+    suggestedCreatorIds = new Set(suggested.map((c: (typeof suggested)[number]) => c.id));
+    allowedCreatorIds = new Set([
+      ...followedCreatorIds,
+      ...viewerCtx.subscribedCreatorProfileIds,
+      ...vipOptedIn.map((c: (typeof vipOptedIn)[number]) => c.id),
+      ...suggestedCreatorIds,
+    ]);
+  }
 
   const items: (PostItemRow & { likes: { id: string }[] })[] = await db.content.findMany({
     where: {
       status: "APPROVED",
       publishedAt: { not: null },
       creatorProfile: { status: "VERIFIED" },
+      ...(allowedCreatorIds ? { creatorProfileId: { in: Array.from(allowedCreatorIds) } } : {}),
     },
     orderBy: { publishedAt: "desc" },
     take: PAGE_SIZE + 1,
@@ -66,16 +102,10 @@ export async function GET(req: NextRequest) {
 
   const hasMore = items.length > PAGE_SIZE;
   const page = hasMore ? items.slice(0, PAGE_SIZE) : items;
-
-  const [viewerCtx, trending, businessConfig, follows] = await Promise.all([
-    buildViewerLockContext(user),
-    computeTrendingContent(),
-    getBusinessConfig(),
-    user ? db.follow.findMany({ where: { fanId: user.id }, select: { creatorProfileId: true } }) : Promise.resolve([]),
-  ]);
-
-  const trendingIds = new Set(trending.map((t) => t.contentId));
-  const followedCreatorIds = new Set(follows.map((f: (typeof follows)[number]) => f.creatorProfileId));
+  // Always derived from the raw fetched page, never from anything
+  // filtered below — Discovery's locked-item filter must never shift
+  // pagination (skipping or repeating items across pages).
+  const nextCursor = hasMore ? page[page.length - 1]?.id ?? null : null;
 
   // resolveCreatorPricing is pure/no-DB (reads the field we already
   // selected) — cached per creator on this page purely to avoid
@@ -118,13 +148,16 @@ export async function GET(req: NextRequest) {
           ? "following"
           : trendingIds.has(item.id)
             ? "trending"
-            : null,
+            : suggestedCreatorIds.has(item.creatorProfileId)
+              ? "suggested"
+              : null,
       });
     })
   );
 
-  return NextResponse.json({
-    items: shaped,
-    nextCursor: hasMore ? page[page.length - 1]?.id : null,
-  });
+  // Discovery only ever shows what a fan can actually open — a locked
+  // card here would just be subscribe-bait with nothing to browse.
+  const visible = scope === "discovery" ? shaped.filter((i) => !i.lock.locked) : shaped;
+
+  return NextResponse.json({ items: visible, nextCursor });
 }

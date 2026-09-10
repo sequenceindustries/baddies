@@ -29,12 +29,13 @@ export interface PostCardItem {
     priceUsd: number | null;
     ctaLabel: string | null;
   };
-  context: "following" | "trending" | null;
+  context: "following" | "trending" | "suggested" | null;
 }
 
 const CONTEXT_LABEL: Record<NonNullable<PostCardItem["context"]>, string> = {
   following: "Following",
   trending: "🔥 Trending",
+  suggested: "✨ Suggested",
 };
 
 /**

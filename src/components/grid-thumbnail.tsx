@@ -21,8 +21,24 @@ import { PostCard, type PostCardItem } from "./post-card";
  * only when the item isn't locked — a locked tile renders the blurred-
  * creator-backdrop treatment and never calls /media at all, avoiding a
  * guaranteed-403 network request for content the viewer can't open yet.
+ *
+ * `variant="discovery"` is a Discovery-only look (social-feed follow-
+ * up): square corners instead of the default rounded tile, and no
+ * avatar/VerifiedBadge byline overlay at all — Discovery's grid never
+ * receives a locked item in the first place (server-side filtered, see
+ * GET /api/feed's own doc comment), so hiding the byline there is a
+ * pure density/style choice, not an entitlement one. Omitting the prop
+ * (the creator-profile page's own grid use) keeps today's exact look.
  */
-export function GridThumbnail({ item, onOpen }: { item: PostCardItem; onOpen: () => void }) {
+export function GridThumbnail({
+  item,
+  onOpen,
+  variant,
+}: {
+  item: PostCardItem;
+  onOpen: () => void;
+  variant?: "discovery";
+}) {
   const [media, setMedia] = useState<{ mimeType: string; signedUrl: string } | null>(null);
   const [inView, setInView] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -60,7 +76,12 @@ export function GridThumbnail({ item, onOpen }: { item: PostCardItem; onOpen: ()
   const backdrop = item.creator.coverImageUrl ?? item.creator.avatarUrl;
 
   return (
-    <button ref={tileRef} onClick={onOpen} style={tileStyle} aria-label="Open post">
+    <button
+      ref={tileRef}
+      onClick={onOpen}
+      style={variant === "discovery" ? { ...tileStyle, borderRadius: 0 } : tileStyle}
+      aria-label="Open post"
+    >
       {item.lock.locked ? (
         <>
           {backdrop && (
@@ -83,15 +104,17 @@ export function GridThumbnail({ item, onOpen }: { item: PostCardItem; onOpen: ()
         <div style={tileLoadingStyle}>{failed && <span style={tileFailedTextStyle}>—</span>}</div>
       )}
 
-      <div style={tileBylineStyle}>
-        <CardAvatar
-          url={item.creator.avatarUrl}
-          initial={(item.creator.displayName ?? "?").trim().charAt(0).toUpperCase() || "?"}
-        />
-        <span style={tileBadgeWrapStyle}>
-          <VerifiedBadge isFoundingPartner={item.creator.isFoundingPartner} isFoundingBaddie={item.creator.isFoundingBaddie} />
-        </span>
-      </div>
+      {variant !== "discovery" && (
+        <div style={tileBylineStyle}>
+          <CardAvatar
+            url={item.creator.avatarUrl}
+            initial={(item.creator.displayName ?? "?").trim().charAt(0).toUpperCase() || "?"}
+          />
+          <span style={tileBadgeWrapStyle}>
+            <VerifiedBadge isFoundingPartner={item.creator.isFoundingPartner} isFoundingBaddie={item.creator.isFoundingBaddie} />
+          </span>
+        </div>
+      )}
     </button>
   );
 }

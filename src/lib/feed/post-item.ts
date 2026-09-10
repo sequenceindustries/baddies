@@ -76,7 +76,7 @@ export function shapeContentItem(
   opts: {
     lock: { locked: boolean; kind: LockKind; priceUsd: number | null; ctaLabel: string | null };
     viewerHasLiked: boolean;
-    context: "following" | "trending" | null;
+    context: "following" | "trending" | "suggested" | null;
   }
 ) {
   return {

@@ -13,13 +13,24 @@ interface CreatorsResponse {
 /**
  * Discover — search box (unchanged: creator name/bio search stays a
  * plain result list, not a grid) plus, once no search is active, a
- * dense Instagram-style grid of posts (social-feed redesign, Phase 2):
- * replaces the old "Top Baddies"/"Baddies near you" creator-row browse
- * default. Fed by the same GET /api/feed the fan-home Twitter/X-style
- * feed uses — cursor-paginated infinite scroll, same sentinel pattern.
- * Tapping a tile opens PostDetailOverlay (a modal, not a navigation),
- * matching how Instagram's own grid tap behaves. CreatorCardRow/
- * CreatorCard (search results) and /discovery/[slug] are untouched.
+ * dense Instagram-style grid of posts (social-feed redesign, Phase 2;
+ * restyled in a later follow-up pass — see below): replaces the old
+ * "Top Baddies"/"Baddies near you" creator-row browse default. Fed by
+ * the same GET /api/feed the fan-home Twitter/X-style feed uses,
+ * called here with `scope=discovery` — broad and platform-wide (unlike
+ * fan-home's own narrowed-to-following/subscribed/suggested scope) but
+ * pre-filtered server-side to unlocked content only, so this grid is
+ * purely a browse-what-you-can-open surface, never a subscribe-bait
+ * wall. Cursor-paginated infinite scroll, same sentinel pattern as
+ * every other feed in this app. Tapping a tile opens PostDetailOverlay
+ * (a modal, not a navigation), matching how Instagram's own grid tap
+ * behaves. `GridThumbnail`'s `variant="discovery"` hides the creator
+ * avatar/badge byline and squares off the tile corners — a Discovery-
+ * only look; the creator-profile page's own grid use of the same
+ * component is unaffected. CreatorCardRow/CreatorCard (search results)
+ * and /discovery/[slug] are untouched. The 4/3-column, 80%-width grid
+ * itself lives in globals.css's `.discovery-grid` class — inline
+ * styles can't express the responsive breakpoint.
  *
  * Signed-out visitors never see this page's real content — per product
  * decision, the landing page's own Top Baddies row is the only thing an
@@ -50,7 +61,13 @@ export default function DiscoveryPage() {
     if (afterCursor) setGridLoadingMore(true);
     setGridError(null);
     try {
-      const res = await fetch(`/api/feed${afterCursor ? `?cursor=${encodeURIComponent(afterCursor)}` : ""}`);
+      // scope=discovery: broad, platform-wide (not narrowed to
+      // following/subscribed/suggested the way fan-home's feed is) but
+      // pre-filtered server-side to unlocked content only — see
+      // GET /api/feed's own doc comment for why both live in one route.
+      const params = new URLSearchParams({ scope: "discovery" });
+      if (afterCursor) params.set("cursor", afterCursor);
+      const res = await fetch(`/api/feed?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to load.");
       const body = await res.json();
       setItems((prev) => (afterCursor ? [...prev, ...body.items] : body.items));
@@ -146,9 +163,14 @@ export default function DiscoveryPage() {
           ) : items.length === 0 ? (
             <p style={{ color: "var(--text-muted)" }}>Nothing here yet — check back once creators publish content.</p>
           ) : (
-            <div style={gridStyle}>
+            <div className="discovery-grid">
               {items.map((item) => (
-                <GridThumbnail key={item.contentId} item={item} onOpen={() => setOpenContentId(item.contentId)} />
+                <GridThumbnail
+                  key={item.contentId}
+                  item={item}
+                  onOpen={() => setOpenContentId(item.contentId)}
+                  variant="discovery"
+                />
               ))}
             </div>
           )}
@@ -197,13 +219,3 @@ const clearSearchButtonStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
-// Instagram Explore convention: a dense, near-gapless grid of square
-// tiles. auto-fill (not auto-fit) so a half-empty last row never
-// stretches its tiles wider than the rest — matches this file's own
-// existing preference (see globals.css's explicit-column-count comment
-// on the .grid-cols-* classes) for predictable, non-orphaned grids.
-const gridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
-  gap: "4px",
-};
