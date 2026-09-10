@@ -569,6 +569,7 @@ interface CreatorSettingsData {
   unlimitedOptedIn: boolean;
   subscriberCountVisible: boolean;
   locationVisible: boolean;
+  acceptsMessages: boolean;
   handle: string | null;
 }
 
@@ -629,6 +630,7 @@ function CreatorSettingsPanel() {
         unlimitedOptedIn: data.unlimitedOptedIn,
         subscriberCountVisible: data.subscriberCountVisible,
         locationVisible: data.locationVisible,
+        acceptsMessages: data.acceptsMessages,
         handle: normalizedHandle || null,
       }),
     });
@@ -705,6 +707,14 @@ function CreatorSettingsPanel() {
             onChange={(e) => setData({ ...data, locationVisible: e.target.checked })}
           />
           Show country and city publicly
+        </label>
+        <label style={checkboxRowStyle}>
+          <input
+            type="checkbox"
+            checked={data.acceptsMessages}
+            onChange={(e) => setData({ ...data, acceptsMessages: e.target.checked })}
+          />
+          Allow fans to message me
         </label>
         <button type="submit" style={primaryButtonStyle} disabled={saving}>
           {saving ? "Saving..." : saved ? "✓ Saved" : "Save creator settings"}

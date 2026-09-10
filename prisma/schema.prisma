@@ -395,6 +395,11 @@ model CreatorProfile {
 
   subscriberCountVisible Boolean @default(false)
   locationVisible        Boolean @default(false)
+  // Messaging today has zero gating anywhere (any signed-in user can
+  // message any verified creator) — defaults true so this opt-out
+  // toggle doesn't silently break messaging for every existing creator
+  // the moment it ships. See POST /api/creators/:id/message.
+  acceptsMessages Boolean @default(true)
 
   appliedAt  DateTime  @default(now())
   approvedAt DateTime?

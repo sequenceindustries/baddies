@@ -11,12 +11,17 @@ export const dynamic = "force-dynamic";
  * Backs the /messages launcher (social-feed redesign, Phase 4) — there's
  * no real inbox yet (explicit scope decision, see the plan's Context
  * section), so rather than a fake thread list this returns exactly the
- * creators a fan could plausibly already have a real relationship
- * with: everyone they follow, plus everyone they have an active
- * Exclusive subscription to. Composed from the same Follow/Subscription
- * queries already used elsewhere (GET /api/feed, GET /api/fan/
- * subscriptions) rather than any new query shape — just merged and
- * deduplicated for this one listing.
+ * creators a fan can actually message right now.
+ *
+ * Narrowed to active-subscription-only (dropped "everyone they follow"):
+ * POST /api/creators/:id/message now requires a real, currently-active
+ * subscription (direct request: "fans can only message creators theyre
+ * subscribe to") — listing a merely-followed creator here would show a
+ * Message button that 403s the instant it's tapped. `currentPeriodEnd`
+ * is checked too, matching the authoritative shape
+ * canAccessContent/the message route itself use — this route previously
+ * checked `status:"ACTIVE"` alone, which could list a lapsed-but-not-
+ * yet-flipped subscription as messageable.
  */
 export async function GET() {
   const user = await getCurrentUser();
@@ -24,19 +29,13 @@ export async function GET() {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
 
-  const [follows, subscriptions] = await Promise.all([
-    db.follow.findMany({ where: { fanId: user.id }, select: { creatorProfileId: true } }),
-    db.subscription.findMany({
-      where: { fanId: user.id, status: "ACTIVE" },
-      select: { creatorProfileId: true },
-    }),
-  ]);
+  const subscriptions = await db.subscription.findMany({
+    where: { fanId: user.id, status: "ACTIVE", currentPeriodEnd: { gte: new Date() } },
+    select: { creatorProfileId: true },
+  });
 
   const creatorProfileIds = Array.from(
-    new Set([
-      ...follows.map((f: (typeof follows)[number]) => f.creatorProfileId),
-      ...subscriptions.map((s: (typeof subscriptions)[number]) => s.creatorProfileId),
-    ])
+    new Set(subscriptions.map((s: (typeof subscriptions)[number]) => s.creatorProfileId))
   );
 
   if (creatorProfileIds.length === 0) {
@@ -44,7 +43,7 @@ export async function GET() {
   }
 
   const creators = await db.creatorProfile.findMany({
-    where: { id: { in: creatorProfileIds } },
+    where: { id: { in: creatorProfileIds }, acceptsMessages: true },
     select: {
       id: true,
       isFoundingBaddie: true,

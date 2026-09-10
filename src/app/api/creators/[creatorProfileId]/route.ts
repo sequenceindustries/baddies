@@ -52,6 +52,7 @@ export async function GET(
     verifiedBadge: true, // this route only ever returns VERIFIED creators
     vvipPriceUsd: pricing.vvipPriceUsd,
     unlimitedParticipant: creator.unlimitedOptedIn,
+    acceptsMessages: creator.acceptsMessages,
     followerCount,
     subscriberCount,
     isFoundingPartner: creator.user.foundingPartner !== null,

@@ -40,6 +40,7 @@ export async function GET() {
     unlimitedOptedIn: creator.unlimitedOptedIn,
     subscriberCountVisible: creator.subscriberCountVisible,
     locationVisible: creator.locationVisible,
+    acceptsMessages: creator.acceptsMessages,
     coverImageUrl: creator.coverImageUrl,
     handle: creator.handle,
   });
@@ -56,6 +57,7 @@ const UpdateSettingsSchema = z.object({
   unlimitedOptedIn: z.boolean().optional(),
   subscriberCountVisible: z.boolean().optional(),
   locationVisible: z.boolean().optional(),
+  acceptsMessages: z.boolean().optional(),
   coverImageUrl: publicImageUrlSchema.nullable().optional(),
   exclusivePriceUsd: z
     .number()
@@ -125,6 +127,7 @@ export async function PATCH(req: NextRequest) {
     unlimitedOptedIn: updated.unlimitedOptedIn,
     subscriberCountVisible: updated.subscriberCountVisible,
     locationVisible: updated.locationVisible,
+    acceptsMessages: updated.acceptsMessages,
     coverImageUrl: updated.coverImageUrl,
     handle: updated.handle,
   });

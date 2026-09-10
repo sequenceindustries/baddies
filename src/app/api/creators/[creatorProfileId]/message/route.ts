@@ -20,6 +20,13 @@ const SendMessageSchema = z.object({
  * without a backfill — see thread-key.ts's own comment. There is no
  * GET here and nothing anywhere reads Message yet; this route exists
  * purely so the compose modal's "Send" button does something real.
+ *
+ * Gated (direct request: "fans can only message creators theyre
+ * subscribe to, creator has the option to allow or not allow
+ * messages") — a fan needs a real, currently-active Exclusive
+ * subscription to this creator, checked with the exact same shape
+ * canAccessContent uses (src/lib/entitlements/content.ts), and the
+ * creator must not have opted out via CreatorProfile.acceptsMessages.
  */
 export async function POST(req: NextRequest, { params }: { params: { creatorProfileId: string } }) {
   const user = await getCurrentUser();
@@ -40,6 +47,23 @@ export async function POST(req: NextRequest, { params }: { params: { creatorProf
 
   if (creator.userId === user.id) {
     return NextResponse.json({ error: "You cannot message your own creator profile." }, { status: 400 });
+  }
+
+  if (!creator.acceptsMessages) {
+    return NextResponse.json({ error: "This creator isn't accepting messages right now." }, { status: 403 });
+  }
+
+  const activeSub = await db.subscription.findFirst({
+    where: {
+      fanId: user.id,
+      creatorProfileId: creator.id,
+      status: "ACTIVE",
+      currentPeriodEnd: { gte: new Date() },
+    },
+    select: { id: true },
+  });
+  if (!activeSub) {
+    return NextResponse.json({ error: "Subscribe to this creator to send a message." }, { status: 403 });
   }
 
   const message = await db.message.create({
