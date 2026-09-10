@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import { hashPassword } from "@/lib/auth/session";
 import { encryptField } from "@/lib/security/field-encryption";
 import { getMediaStorageProvider } from "@/lib/providers/storage";
+import { generateDisplayVariant, getImageDimensions } from "@/lib/media/image-pipeline";
 
 /**
  * The seeded 5-creator demo roster + the logic that writes it to the DB.
@@ -379,6 +380,72 @@ export async function seedDummyCreators(db: PrismaClient): Promise<void> {
         update: { mimeType, byteSize: bytes.byteLength, storageProvider: storage.name },
       });
     }
+
+    // Real "story" per dummy creator too — reuses their own most-recent
+    // already-seeded post photo through the exact same real storage/
+    // image-pipeline a live story upload uses (POST /api/creator/stories),
+    // so the feed's story row has more than one creator to browse on a
+    // fresh/demo environment rather than only whichever real account
+    // happens to have posted one. Deliberately kept inside this function
+    // rather than a one-off script — seedDummyCreators already re-runs on
+    // every deploy and after "reset founding roster" (see this file's own
+    // top comment), so upserting here with a freshly-computed 24h
+    // expiresAt on every run keeps the demo story perpetually current
+    // instead of silently lapsing between deploys, the same reproducible-
+    // by-construction guarantee every other field in this function has.
+    const latestPost = spec.posts.reduce((a, b) => (a.daysAgo < b.daysAgo ? a : b));
+    const storyId = `${spec.slug}-story`;
+    const storyStorageKey = `creators/${creatorProfile.id}/stories/${storyId}`;
+    const { bytes: storyBytes, mimeType: storyMimeType } = await fetchPhotoBytes(
+      latestPost.photoId,
+      spec.displayName,
+      "Story",
+      spec.colorA,
+      spec.colorB
+    );
+    const storyStorage = getMediaStorageProvider();
+    await storyStorage.putObject({ key: storyStorageKey, contentType: storyMimeType, body: storyBytes });
+
+    // Same IMAGE-only guard the real upload route uses — sharp can't
+    // process the SVG gradient fallback fetchPhotoBytes returns if the
+    // real Unsplash fetch fails, and that fallback shouldn't be treated
+    // as a broken upload.
+    let storyDims: { width: number; height: number } | null = null;
+    let storyDisplay: Awaited<ReturnType<typeof generateDisplayVariant>> = null;
+    let storyDisplayKey: string | undefined;
+    if (storyMimeType === "image/jpeg") {
+      storyDims = await getImageDimensions(storyBytes);
+      storyDisplay = await generateDisplayVariant(storyBytes);
+      if (storyDisplay) {
+        const displayUpload = await storyStorage.putObject({
+          key: `${storyStorageKey}-display`,
+          contentType: storyDisplay.mimeType,
+          body: storyDisplay.buffer,
+        });
+        storyDisplayKey = displayUpload.storageKey;
+      }
+    }
+
+    const storyNow = new Date();
+    const storyExpiresAt = new Date(storyNow.getTime() + 24 * 60 * 60 * 1000);
+    const storyFields = {
+      storageProvider: storyStorage.name,
+      storageKey: storyStorageKey,
+      mimeType: storyMimeType,
+      width: storyDims?.width,
+      height: storyDims?.height,
+      displayStorageKey: storyDisplayKey,
+      displayMimeType: storyDisplay?.mimeType,
+      displayWidth: storyDisplay?.width,
+      displayHeight: storyDisplay?.height,
+      createdAt: storyNow,
+      expiresAt: storyExpiresAt,
+    };
+    await db.story.upsert({
+      where: { id: storyId },
+      create: { id: storyId, creatorProfileId: creatorProfile.id, mediaType: "IMAGE", ...storyFields },
+      update: storyFields,
+    });
   }
 
   console.log(`Seeded ${DUMMY_CREATORS.length} dummy creators.`);
