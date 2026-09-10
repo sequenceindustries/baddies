@@ -137,7 +137,7 @@ function fileToBase64(file: File): Promise<string> {
 // 1.6-1.8, round caps/joins, fill=none, aria-hidden, fixed pixel size.
 function StoryIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path
         d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.2l.9-1.5a1 1 0 0 1 .86-.5h5.08a1 1 0 0 1 .86.5l.9 1.5h1.2A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-8Z"
         stroke="currentColor"
@@ -149,15 +149,22 @@ function StoryIcon() {
   );
 }
 
+// Shrunk to 28px (from 44px) and given an accent ring so this reads as
+// "story" rather than just "camera" without a full icon redraw — per
+// direct request ("change the stories camera icon into something that
+// implies story") and ("plus sign to post must be larger the stories
+// and discovery icons, which must be smaller and same size on the
+// sides of the +" — this and the new discovery/search icon share the
+// same 28px size, both smaller than FeedComposer's now-44px "+").
 const storyButtonStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  width: "44px",
-  height: "44px",
+  width: "28px",
+  height: "28px",
   borderRadius: "50%",
   background: "var(--surface)",
-  border: "1px solid var(--border)",
+  border: "2px solid var(--accent)",
   color: "var(--accent)",
   cursor: "pointer",
   flexShrink: 0,

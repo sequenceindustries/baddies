@@ -91,6 +91,7 @@ export default function FeedPage() {
       <div style={composerRowStyle}>
         <StoryComposerButton onPosted={() => setStoryRefreshKey((k) => k + 1)} />
         <FeedComposer />
+        <DiscoverySearchButton />
       </div>
 
       <StoryAvatarRow refreshKey={storyRefreshKey} />
@@ -191,11 +192,8 @@ function FeedComposer() {
 
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} style={composerPromptStyle}>
-        <span style={composerPromptIconStyle} aria-hidden="true">
-          +
-        </span>
-        Share something new
+      <button type="button" onClick={() => setOpen(true)} style={composerPromptStyle} aria-label="Share something new">
+        +
       </button>
     );
   }
@@ -238,44 +236,36 @@ function FeedComposer() {
   );
 }
 
-// Sibling wrapper for StoryComposerButton + FeedComposer, per direct
-// request ("put the button next to share something new") — the icon
-// button is a fixed-size circle, the composer fills the rest of the
-// row whether collapsed (prompt) or expanded (full card).
+// Sibling row for StoryComposerButton + FeedComposer + DiscoverySearchButton,
+// per direct request ("put the button next to share something new" and,
+// later, "search icon pops out discovery... to the right of the plus
+// sign"). All three render as fixed-size icon-only circles when
+// collapsed — the "+" (post) trigger is the visually dominant one
+// (44px), story and discovery are equal and smaller (28px each) on
+// either side of it. FeedComposer alone grows into a full-width card
+// when expanded (composerCardStyle, flex:1) — the row's marginBottom
+// lives here rather than on the individual collapsed/expanded styles,
+// so spacing before StoryAvatarRow stays consistent either way.
 const composerRowStyle: React.CSSProperties = {
   display: "flex",
-  alignItems: "flex-start",
+  alignItems: "center",
   gap: "0.6rem",
+  marginBottom: "1.5rem",
 };
 
 const composerPromptStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: "0.6rem",
-  flex: 1,
-  width: "100%",
-  background: "var(--surface)",
-  border: "1px solid var(--border)",
-  borderRadius: "12px",
-  padding: "0.9rem 1.1rem",
-  marginBottom: "1.5rem",
-  color: "var(--text-muted)",
-  fontSize: "0.92rem",
-  fontWeight: 600,
-  cursor: "pointer",
-  textAlign: "left",
-};
-
-const composerPromptIconStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
   justifyContent: "center",
-  width: "28px",
-  height: "28px",
+  width: "44px",
+  height: "44px",
   borderRadius: "50%",
   background: "var(--accent-soft)",
   color: "var(--accent)",
-  fontSize: "1.2rem",
+  fontSize: "1.5rem",
+  fontWeight: 600,
+  border: "none",
+  cursor: "pointer",
   flexShrink: 0,
 };
 
@@ -284,8 +274,55 @@ const composerCardStyle: React.CSSProperties = {
   border: "1px solid var(--border)",
   borderRadius: "16px",
   padding: "1.25rem",
-  marginBottom: "1.5rem",
   flex: 1,
+};
+
+/**
+ * Icon-only, opens /discovery — per direct request ("search icon pops
+ * out discovery content/page"), placed to the right of the "+" post
+ * trigger. Same 28px sizing as StoryComposerButton so both flank the
+ * larger "+" equally, matching this row's own established icon-only
+ * convention rather than a new visual language.
+ */
+function DiscoverySearchButton() {
+  const { user } = useSession();
+  const creatorStatus = user?.creatorProfile?.status;
+  const creatorActive = Boolean(creatorStatus) && creatorStatus !== "REJECTED" && creatorStatus !== "BANNED";
+  // Same creatorActive gating as StoryComposerButton/FeedComposer — this
+  // whole row is a creator's own posting toolkit, not a general nav
+  // element (Nav's own "Discover" link already covers every role); a
+  // lone search icon surviving for fans while its two siblings vanish
+  // would read as a layout bug, not a deliberate choice.
+  if (!creatorActive) return null;
+
+  return (
+    <Link href="/discovery" style={discoverySearchButtonStyle} aria-label="Discover">
+      <SearchIcon />
+    </Link>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M15.5 15.5 20 20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+const discoverySearchButtonStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "28px",
+  height: "28px",
+  borderRadius: "50%",
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
+  color: "var(--accent)",
+  flexShrink: 0,
+  textDecoration: "none",
 };
 
 const composerHeaderStyle: React.CSSProperties = {
