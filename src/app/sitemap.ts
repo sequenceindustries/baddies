@@ -1,14 +1,26 @@
 import type { MetadataRoute } from "next";
+import { db } from "@/lib/db/client";
+import { resolveCreatorCanonicalPath } from "@/lib/creator/public-profile";
 import { SITE_URL } from "@/lib/seo/site-url";
+
+// Without this, Next statically generates sitemap.xml once at build
+// time and never again — a new creator wouldn't appear until the next
+// deploy, which fails "the sitemap must automatically update as new
+// creators are added." force-dynamic makes this route re-query on
+// every request, matching every other live-data route in this app.
+export const dynamic = "force-dynamic";
 
 /**
  * Native Next.js file convention — generates /sitemap.xml.
  *
- * SEO Phase 2: only the static routes that exist and are indexable
- * today — the homepage and the 7 legal pages. Later SEO phases append
- * their own section here (verified creator profiles, category pages,
- * curated location pages) rather than rewriting this file, so each
- * section stays independently reviewable in its own commit.
+ * SEO Phase 2 shipped the static routes (homepage + 7 legal pages).
+ * Phase 3 appends every VERIFIED creator's profile below, using the
+ * same canonical-path logic (handle-preferred) the profile page's own
+ * `alternates.canonical` uses, so the sitemap and the page's own
+ * canonical tag can never disagree about which URL is "the" one for a
+ * given creator. Later phases (categories, curated locations) append
+ * their own further sections the same way, rather than rewriting this
+ * file.
  *
  * Deliberately a single sitemap rather than a sitemap index split
  * across multiple files/`generateSitemaps` — that split only earns its
@@ -17,7 +29,7 @@ import { SITE_URL } from "@/lib/seo/site-url";
  * scale for a long while. Revisit if/when this file's list would
  * genuinely approach that size, not before.
  */
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticEntries: MetadataRoute.Sitemap = [
     { url: SITE_URL, changeFrequency: "daily", priority: 1 },
     { url: `${SITE_URL}/terms`, changeFrequency: "yearly", priority: 0.3 },
@@ -29,5 +41,16 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/contact`, changeFrequency: "yearly", priority: 0.3 },
   ];
 
-  return staticEntries;
+  const verifiedCreators = await db.creatorProfile.findMany({
+    where: { status: "VERIFIED" },
+    select: { id: true, handle: true, updatedAt: true },
+  });
+  const creatorEntries: MetadataRoute.Sitemap = verifiedCreators.map((creator) => ({
+    url: `${SITE_URL}${resolveCreatorCanonicalPath({ creatorProfileId: creator.id, handle: creator.handle })}`,
+    lastModified: creator.updatedAt,
+    changeFrequency: "daily",
+    priority: 0.7,
+  }));
+
+  return [...staticEntries, ...creatorEntries];
 }
