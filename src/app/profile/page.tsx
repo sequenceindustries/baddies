@@ -14,6 +14,7 @@ import {
   LocationField,
   ImageUploadField,
   EmptyContentState,
+  SkeletonBlock,
 } from "@/components/ui";
 import { SegmentedTabs } from "@/components/segmented-tabs";
 import { VerificationFlow } from "@/components/verification-capture";
@@ -869,7 +870,11 @@ function ContentPanel() {
         )}
       </div>
       {loadingItems ? (
-        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <SkeletonBlock key={i} height="4.5rem" />
+          ))}
+        </div>
       ) : items.length === 0 ? (
         <EmptyContentState message="Nothing uploaded yet." />
       ) : (
@@ -958,7 +963,11 @@ function MessagesPanel() {
     <>
       <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>Messages</h2>
       {threads === null ? (
-        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <SkeletonBlock key={i} height="3.5rem" />
+          ))}
+        </div>
       ) : threads.length === 0 ? (
         <p style={{ color: "var(--text-muted)" }}>No messages yet.</p>
       ) : (
@@ -1039,7 +1048,7 @@ function ThreadDetailView({ threadKey, onBack, onSent }: { threadKey: string; on
       </button>
 
       {!data ? (
-        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+        <SkeletonBlock height="10rem" />
       ) : (
         <>
           <h2 style={{ ...sectionHeadingStyle, marginTop: 0 }}>{data.otherParty?.displayName ?? "Unknown"}</h2>

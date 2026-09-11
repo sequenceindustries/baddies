@@ -6,7 +6,9 @@
 import NextImage from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { Children, createContext, useContext, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion, useInView, useMotionValue, useReducedMotion, animate } from "motion/react";
+import { fadeSlideUp, transitions, DURATION, EASE } from "@/lib/motion/tokens";
 
 export interface SessionUser {
   id: string;
@@ -283,19 +285,26 @@ export function Nav({ comingSoon = false }: { comingSoon?: boolean }) {
       </div>
     </nav>
     <div style={navAccentBarStyle} aria-hidden="true" />
-    {mobileOpen && (
-      <div ref={mobileMenuRef} className="nav-mobile-menu" style={mobileMenuStyle}>
-        <NavLinks
-          user={user ?? null}
-          hideAuthLinks={hideAuthLinks}
-          showLoginLink={showLoginLink}
-          comingSoon={comingSoon}
-          onLogout={handleLogout}
-          layout="column"
-          pathname={pathname}
-        />
-      </div>
-    )}
+    <AnimatePresence>
+      {mobileOpen && (
+        <motion.div
+          ref={mobileMenuRef}
+          className="nav-mobile-menu"
+          style={mobileMenuStyle}
+          {...fadeSlideUp}
+        >
+          <NavLinks
+            user={user ?? null}
+            hideAuthLinks={hideAuthLinks}
+            showLoginLink={showLoginLink}
+            comingSoon={comingSoon}
+            onLogout={handleLogout}
+            layout="column"
+            pathname={pathname}
+          />
+        </motion.div>
+      )}
+    </AnimatePresence>
     </div>
   );
 }
@@ -631,18 +640,20 @@ function NotificationBell() {
         <NotificationHeartIcon />
         {unreadCount > 0 && <span style={notificationBadgeStyle}>{unreadCount > 9 ? "9+" : unreadCount}</span>}
       </button>
-      {open && (
-        <div style={notificationPanelStyle}>
-          <div style={notificationPanelHeaderStyle}>Notifications</div>
-          {loadingList && items === null ? (
-            <div style={notificationEmptyStyle}>Loading...</div>
-          ) : !items || items.length === 0 ? (
-            <div style={notificationEmptyStyle}>Nothing yet.</div>
-          ) : (
-            items.map((n) => <NotificationRow key={n.id} item={n} />)
-          )}
-        </div>
-      )}
+      <AnimatePresence>
+        {open && (
+          <motion.div style={notificationPanelStyle} {...fadeSlideUp}>
+            <div style={notificationPanelHeaderStyle}>Notifications</div>
+            {loadingList && items === null ? (
+              <div style={notificationEmptyStyle}>Loading...</div>
+            ) : !items || items.length === 0 ? (
+              <div style={notificationEmptyStyle}>Nothing yet.</div>
+            ) : (
+              items.map((n) => <NotificationRow key={n.id} item={n} />)
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -789,15 +800,18 @@ function MessageBell() {
         <MessageBellIcon />
         {unreadCount > 0 && <span style={notificationBadgeStyle}>{unreadCount > 9 ? "9+" : unreadCount}</span>}
       </button>
-      {open &&
-        (selectedThreadKey ? (
-          <MessageThreadPanel
-            threadKey={selectedThreadKey}
-            onBack={() => setSelectedThreadKey(null)}
-            onSent={loadThreads}
-          />
-        ) : (
-          <div style={notificationPanelStyle}>
+      <AnimatePresence mode="wait">
+        {open &&
+          (selectedThreadKey ? (
+            <motion.div key="thread" {...fadeSlideUp}>
+              <MessageThreadPanel
+                threadKey={selectedThreadKey}
+                onBack={() => setSelectedThreadKey(null)}
+                onSent={loadThreads}
+              />
+            </motion.div>
+          ) : (
+          <motion.div key="list" style={notificationPanelStyle} {...fadeSlideUp}>
             <div style={notificationPanelHeaderStyle}>Messages</div>
             {!threads ? (
               <div style={notificationEmptyStyle}>Loading...</div>
@@ -839,8 +853,9 @@ function MessageBell() {
                 </div>
               ))
             )}
-          </div>
-        ))}
+          </motion.div>
+          ))}
+      </AnimatePresence>
     </div>
   );
 }
@@ -975,27 +990,29 @@ function AccountMenu({ user, onLogout }: { user: SessionUser; onLogout: () => vo
         {user.displayName ?? user.email}
         <span style={{ fontSize: "0.65rem" }}>▾</span>
       </button>
-      {open && (
-        <div style={accountMenuPanelStyle}>
-          <div style={{ padding: "0.2rem 0.2rem 0.7rem" }}>
-            <div style={{ fontWeight: 600, fontSize: "0.92rem" }}>{user.displayName ?? "Unnamed"}</div>
-            <div style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginTop: "0.15rem" }}>{user.email}</div>
-            <div style={{ marginTop: "0.5rem" }}>
-              <AccountTypeBadge role={user.role} creatorProfile={user.creatorProfile} foundingPartner={user.foundingPartner} />
+      <AnimatePresence>
+        {open && (
+          <motion.div style={accountMenuPanelStyle} {...fadeSlideUp}>
+            <div style={{ padding: "0.2rem 0.2rem 0.7rem" }}>
+              <div style={{ fontWeight: 600, fontSize: "0.92rem" }}>{user.displayName ?? "Unnamed"}</div>
+              <div style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginTop: "0.15rem" }}>{user.email}</div>
+              <div style={{ marginTop: "0.5rem" }}>
+                <AccountTypeBadge role={user.role} creatorProfile={user.creatorProfile} foundingPartner={user.foundingPartner} />
+              </div>
             </div>
-          </div>
-          <Link href="/profile" style={accountMenuLinkStyle} onClick={() => setOpen(false)}>
-            Profile
-          </Link>
-          <Link href="/settings" style={accountMenuLinkStyle} onClick={() => setOpen(false)}>
-            Settings
-          </Link>
-          {user.creatorProfile && <WalletMenuLink onNavigate={() => setOpen(false)} />}
-          <button onClick={onLogout} style={accountMenuButtonStyle}>
-            Sign out
-          </button>
-        </div>
-      )}
+            <Link href="/profile" style={accountMenuLinkStyle} onClick={() => setOpen(false)}>
+              Profile
+            </Link>
+            <Link href="/settings" style={accountMenuLinkStyle} onClick={() => setOpen(false)}>
+              Settings
+            </Link>
+            {user.creatorProfile && <WalletMenuLink onNavigate={() => setOpen(false)} />}
+            <button onClick={onLogout} style={accountMenuButtonStyle}>
+              Sign out
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1653,6 +1670,203 @@ const emptyContentLogoStyle: React.CSSProperties = {
   opacity: 0.3,
 };
 
+// Motion/interactivity upgrade — three shared primitives (Reveal,
+// SkeletonBlock/SkeletonCard, AnimatedNumber), added here alongside
+// EmptyContentState/SignInGate/LocationField at this file's own
+// established bar for promoting something to a real shared component
+// (3-4+ call sites wanting the identical treatment) rather than
+// duplicated per-use. See src/lib/motion/tokens.ts for the shared
+// duration/easing/variant tokens these build on.
+
+/**
+ * Scroll-triggered fade/slide-up reveal, built on motion's own
+ * useInView (already IntersectionObserver-based under the hood — not a
+ * second hand-rolled observer alongside the 6 lazy-load ones already in
+ * this codebase, which are a data-loading concern, not an animation
+ * one). `once` defaults true: a section reveals the first time it
+ * enters view and then stays visible, it does not replay every time you
+ * scroll past it again — matching the product brief's own "don't
+ * animate everything, use it to establish hierarchy" instruction.
+ * Short-circuits to a plain unanimated render for anyone who's asked
+ * for prefers-reduced-motion, via motion's own useReducedMotion (the
+ * CSS blanket rule in globals.css only ever catches CSS transitions/
+ * animations, not this component's JS-driven ones).
+ */
+export function Reveal({
+  children,
+  delay = 0,
+  y = 20,
+  once = true,
+  style,
+}: {
+  children: React.ReactNode;
+  delay?: number;
+  y?: number;
+  once?: boolean;
+  style?: React.CSSProperties;
+}) {
+  const reduceMotion = useReducedMotion();
+  const ref = useRef(null);
+  const inView = useInView(ref, { once, margin: "-80px 0px" });
+
+  if (reduceMotion) {
+    return (
+      <div ref={ref} style={style}>
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <motion.div
+      ref={ref}
+      style={style}
+      initial={{ opacity: 0, y }}
+      animate={inView ? { opacity: 1, y: 0 } : {}}
+      transition={{ ...transitions.large, delay }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/**
+ * Staggers its direct children in on scroll, same useInView/
+ * reduced-motion behavior as Reveal above — used where several items
+ * (a row of cards, a set of hero elements) should reveal in sequence
+ * rather than all at once. Each child is wrapped individually so this
+ * works with any children, not just a specific component shape.
+ */
+export function RevealGroup({
+  children,
+  staggerDelay = 0.08,
+  y = 20,
+  style,
+}: {
+  children: React.ReactNode;
+  staggerDelay?: number;
+  y?: number;
+  style?: React.CSSProperties;
+}) {
+  const reduceMotion = useReducedMotion();
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, margin: "-80px 0px" });
+  const items = Children.toArray(children);
+
+  if (reduceMotion) {
+    return (
+      <div ref={ref} style={style}>
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <div ref={ref} style={style}>
+      {items.map((child, i) => (
+        <motion.div
+          key={i}
+          initial={{ opacity: 0, y }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ ...transitions.large, delay: i * staggerDelay }}
+        >
+          {child}
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Shimmer/pulse loading placeholder — an opacity pulse only (never a
+ * background-position shimmer sweep), so it's strictly transform/
+ * opacity and needs no exception to the "avoid animating expensive
+ * properties" rule. `borderRadius` defaults to this app's own
+ * `--radius` token so a bare SkeletonBlock already matches every other
+ * card/surface's corner rounding without the caller repeating it.
+ */
+export function SkeletonBlock({
+  width = "100%",
+  height = "1rem",
+  borderRadius = "var(--radius)",
+  style,
+}: {
+  width?: string | number;
+  height?: string | number;
+  borderRadius?: string | number;
+  style?: React.CSSProperties;
+}) {
+  const reduceMotion = useReducedMotion();
+  return (
+    <motion.div
+      style={{ width, height, borderRadius, background: "var(--surface-raised)", ...style }}
+      animate={reduceMotion ? { opacity: 0.55 } : { opacity: [0.4, 0.7, 0.4] }}
+      transition={reduceMotion ? undefined : { duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+    />
+  );
+}
+
+/** A SkeletonBlock composed to roughly match CreatorCard's own real
+ * proportions (see cards.tsx's contentCardStyle) — for drop-in use
+ * wherever a card-shaped loading placeholder is needed (carousel/grid
+ * loading states) instead of blank space or plain "Loading..." text. */
+export function SkeletonCard({ width = 220 }: { width?: number }) {
+  return (
+    <div style={{ width, flexShrink: 0 }}>
+      <SkeletonBlock height={width * 1.25} borderRadius="var(--radius)" />
+      <div style={{ marginTop: "0.6rem" }}>
+        <SkeletonBlock height="0.85rem" width="70%" />
+        <div style={{ marginTop: "0.4rem" }}>
+          <SkeletonBlock height="0.7rem" width="45%" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Count-up number primitive — animates from 0 (or the previous value)
+ * to `value` over a "large" duration, triggered once the element enters
+ * view. Used sparingly, per the product brief's own "don't overdo this"
+ * instruction — today that means the admin Command Centre's KpiCard
+ * values only, the one place real numeric KPIs exist in this app (see
+ * that component's own usage). `format` lets a caller apply its own
+ * existing formatting (.toLocaleString(), money(), etc.) to the
+ * in-progress rounded number on every tick.
+ */
+export function AnimatedNumber({
+  value,
+  format = (n: number) => n.toLocaleString(),
+}: {
+  value: number;
+  format?: (n: number) => string;
+}) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true });
+  const reduceMotion = useReducedMotion();
+  const motionValue = useMotionValue(0);
+  const [display, setDisplay] = useState(format(0));
+
+  useEffect(() => {
+    const unsubscribe = motionValue.on("change", (v) => setDisplay(format(Math.round(v))));
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!inView) return;
+    if (reduceMotion) {
+      setDisplay(format(value));
+      return;
+    }
+    const controls = animate(motionValue, value, { duration: DURATION.large, ease: EASE.out });
+    return () => controls.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inView, value]);
+
+  return <span ref={ref}>{display}</span>;
+}
+
 export const errorBannerStyle: React.CSSProperties = {
   background: "rgba(217, 115, 106, 0.12)",
   border: "1px solid rgba(217, 115, 106, 0.4)",
@@ -1663,17 +1877,43 @@ export const errorBannerStyle: React.CSSProperties = {
   marginBottom: "1.2rem",
 };
 
-/** Hamburger/X glyph — two fixed SVGs rather than an animated morph,
- * matching this file's plain-and-legible style over decorative motion. */
+/** Hamburger/X glyph — two fixed SVGs, cross-faded with a small rotation
+ * via AnimatePresence rather than a true path morph (keeps each glyph's
+ * own markup simple and legible, just makes the swap between them read
+ * as one continuous motion instead of an instant swap). */
 function MenuIcon({ open }: { open: boolean }) {
-  return open ? (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  ) : (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      {open ? (
+        <motion.svg
+          key="x"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
+          initial={{ opacity: 0, rotate: -45 }}
+          animate={{ opacity: 1, rotate: 0, transition: transitions.micro }}
+          exit={{ opacity: 0, rotate: 45, transition: transitions.micro }}
+        >
+          <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </motion.svg>
+      ) : (
+        <motion.svg
+          key="burger"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
+          initial={{ opacity: 0, rotate: 45 }}
+          animate={{ opacity: 1, rotate: 0, transition: transitions.micro }}
+          exit={{ opacity: 0, rotate: -45, transition: transitions.micro }}
+        >
+          <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </motion.svg>
+      )}
+    </AnimatePresence>
   );
 }
 

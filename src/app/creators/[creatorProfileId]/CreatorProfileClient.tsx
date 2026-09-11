@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { VerifiedBadge, CheckTick, useSession, EmptyContentState } from "@/components/ui";
+import { AnimatePresence, motion } from "motion/react";
+import { backdropFade, fadeSlideUp, transitions } from "@/lib/motion/tokens";
+import { VerifiedBadge, CheckTick, useSession, EmptyContentState, SkeletonBlock } from "@/components/ui";
 import { ReportButton } from "@/components/cards";
 import { ComposeMessageModal, PostCard, type PostCardItem } from "@/components/post-card";
 import type { PublicCreatorProfile } from "@/lib/creator/public-profile";
@@ -189,13 +191,27 @@ export function CreatorProfileClient({
               </span>
             )}
             <SubscribeButton creatorProfileId={creatorProfileId} vvipPriceUsd={creator.vvipPriceUsd} />
-            <button onClick={toggleFollow} disabled={followBusy} style={followButtonStyle(following)}>
+            <motion.button
+              onClick={toggleFollow}
+              disabled={followBusy}
+              style={followButtonStyle(following)}
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
+              transition={transitions.micro}
+            >
               {following ? "Following" : "Follow"}
-            </button>
+            </motion.button>
             {creator.acceptsMessages && (
-              <button onClick={() => setMessageOpen(true)} style={messageIconButtonStyle} aria-label="Message">
+              <motion.button
+                onClick={() => setMessageOpen(true)}
+                style={messageIconButtonStyle}
+                aria-label="Message"
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.92 }}
+                transition={transitions.micro}
+              >
                 <MessageIcon />
-              </button>
+              </motion.button>
             )}
           </div>
         )}
@@ -208,31 +224,56 @@ export function CreatorProfileClient({
       {showTabs && (
         <div style={tabRowStyle}>
           {tiersPresent.map((t) => (
-            <button
+            <motion.button
               key={t}
               onClick={() => setTab((cur) => (cur === t ? undefined : t))}
               style={tabButtonStyle(tab === t)}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.96 }}
+              transition={transitions.micro}
             >
               {t === "FREE" ? "Teasers" : t === "VIP" ? "VIP" : "Exclusive"}
-            </button>
+            </motion.button>
           ))}
         </div>
       )}
 
       {gridError && <p style={{ color: "var(--danger)" }}>{gridError}</p>}
-      {visibleItems.length === 0 ? (
-        <EmptyContentState message="No content yet." />
-      ) : (
-        <div style={contentListStyle}>
-          {visibleItems.map((item) => (
-            <PostCard key={item.contentId} item={item} />
-          ))}
+      {/* Cross-fades on tab switch instead of the list instantly
+          swapping — same "filtering should transition smoothly" idea
+          applied here as on Discovery's own search results. */}
+      <AnimatePresence mode="wait">
+        {visibleItems.length === 0 ? (
+          <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={transitions.standard}>
+            <EmptyContentState message="No content yet." />
+          </motion.div>
+        ) : (
+          <motion.div
+            key={tab ?? "all"}
+            style={contentListStyle}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={transitions.standard}
+          >
+            {visibleItems.map((item) => (
+              <PostCard key={item.contentId} item={item} />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <div ref={sentinelRef} style={{ height: "1px" }} aria-hidden="true" />
+      {gridLoadingMore && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "1rem" }}>
+          <SkeletonBlock height="18rem" />
         </div>
       )}
-      <div ref={sentinelRef} style={{ height: "1px" }} aria-hidden="true" />
-      {gridLoadingMore && <p style={{ color: "var(--text-muted)", textAlign: "center" }}>Loading more...</p>}
 
-      {messageOpen && <ComposeMessageModal creatorProfileId={creatorProfileId} onClose={() => setMessageOpen(false)} />}
+      <AnimatePresence>
+        {messageOpen && (
+          <ComposeMessageModal key="compose" creatorProfileId={creatorProfileId} onClose={() => setMessageOpen(false)} />
+        )}
+      </AnimatePresence>
     </>
   );
 }
@@ -270,9 +311,28 @@ function SubscribeButton({ creatorProfileId, vvipPriceUsd }: { creatorProfileId:
 
   return (
     <div style={{ display: "inline-flex", flexDirection: "column", gap: "0.3rem" }}>
-      <button onClick={subscribeVvip} disabled={busy || subscribed} style={checkoutButtonStyle(subscribed)}>
-        {subscribed ? "✓ Subscribed" : busy ? "..." : `Subscribe $${vvipPriceUsd.toFixed(2)}/mo`}
-      </button>
+      <motion.button
+        onClick={subscribeVvip}
+        disabled={busy || subscribed}
+        style={checkoutButtonStyle(subscribed)}
+        whileHover={busy || subscribed ? undefined : { scale: 1.04 }}
+        whileTap={busy || subscribed ? undefined : { scale: 0.96 }}
+        transition={transitions.micro}
+        layout
+      >
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={subscribed ? "subscribed" : busy ? "busy" : "idle"}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={transitions.micro}
+            style={{ display: "inline-block" }}
+          >
+            {subscribed ? "✓ Subscribed" : busy ? "···" : `Subscribe $${vvipPriceUsd.toFixed(2)}/mo`}
+          </motion.span>
+        </AnimatePresence>
+      </motion.button>
       {error && <span style={{ fontSize: "0.78rem", color: "var(--danger)" }}>{error}</span>}
     </div>
   );
@@ -372,10 +432,14 @@ function CreatorOptionsMenu({
       >
         <DotsIcon />
       </button>
-      {open && (
-        <>
-          <div style={optionsMenuBackdropStyle} onClick={() => setOpen(false)} />
-          <div style={optionsMenuPanelStyle} onClick={(e) => e.stopPropagation()}>
+      <AnimatePresence>
+        {open && (
+          <motion.div key="backdrop" style={optionsMenuBackdropStyle} onClick={() => setOpen(false)} {...backdropFade} />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {open && (
+          <motion.div key="panel" style={optionsMenuPanelStyle} onClick={(e) => e.stopPropagation()} {...fadeSlideUp}>
             <button onClick={handleShare} style={optionsMenuItemStyle}>
               {shareCopied ? "Copied" : "Share"}
             </button>
@@ -389,9 +453,9 @@ function CreatorOptionsMenu({
                 {blocking ? "..." : "Block"}
               </button>
             )}
-          </div>
-        </>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

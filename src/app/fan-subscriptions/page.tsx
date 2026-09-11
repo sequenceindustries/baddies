@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useSession, displayHeadingStyle } from "@/components/ui";
+import { useSession, displayHeadingStyle, SkeletonBlock } from "@/components/ui";
 import { SegmentedTabs } from "@/components/segmented-tabs";
 
 type SubsTab = "vip" | "subscriptions" | "history";
@@ -104,7 +104,7 @@ export default function SubscriptionsPage() {
       <h1 style={displayHeadingStyle}>My subscriptions</h1>
 
       {loading ? (
-        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+        <SkeletonBlock height="10rem" />
       ) : (
         <>
           <SegmentedTabs tabs={tabs} active={activeTab} onChange={setTab} />

@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "motion/react";
+import { backdropFade, fadeScale } from "@/lib/motion/tokens";
 import { useSession } from "@/components/ui";
 
 /**
@@ -42,16 +44,19 @@ export function StoryComposerButton({ onPosted }: { onPosted: () => void }) {
         }}
         style={{ display: "none" }}
       />
-      {pendingFile && (
-        <StoryUploadModal
-          file={pendingFile}
-          onClose={() => setPendingFile(null)}
-          onPosted={() => {
-            setPendingFile(null);
-            onPosted();
-          }}
-        />
-      )}
+      <AnimatePresence>
+        {pendingFile && (
+          <StoryUploadModal
+            key="story-upload"
+            file={pendingFile}
+            onClose={() => setPendingFile(null)}
+            onPosted={() => {
+              setPendingFile(null);
+              onPosted();
+            }}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 }
@@ -93,8 +98,8 @@ function StoryUploadModal({ file, onClose, onPosted }: { file: File; onClose: ()
   }
 
   return createPortal(
-    <div style={modalBackdropStyle} onClick={handleClose} role="dialog" aria-modal="true">
-      <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
+    <motion.div style={modalBackdropStyle} onClick={handleClose} role="dialog" aria-modal="true" {...backdropFade}>
+      <motion.div style={modalContentStyle} onClick={(e) => e.stopPropagation()} {...fadeScale}>
         <div style={modalPreviewWrapStyle}>
           {isVideo ? (
             <video src={previewUrl} style={modalPreviewMediaStyle} controls muted playsInline />
@@ -113,8 +118,8 @@ function StoryUploadModal({ file, onClose, onPosted }: { file: File; onClose: ()
           </button>
         </div>
         <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", margin: "0.6rem 0 0" }}>Disappears in 24 hours.</p>
-      </div>
-    </div>,
+      </motion.div>
+    </motion.div>,
     document.body
   );
 }

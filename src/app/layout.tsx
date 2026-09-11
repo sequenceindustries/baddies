@@ -5,6 +5,7 @@ import "./globals.css";
 import { Nav, SessionProvider } from "@/components/ui";
 import { AgeGate } from "@/components/age-gate";
 import { BottomTabBar } from "@/components/bottom-tab-bar";
+import { RouteTransition } from "@/components/route-transition";
 import { StructuredData } from "@/components/structured-data";
 import { isKnownCrawlerUserAgent } from "@/lib/seo/crawler";
 import { SITE_URL } from "@/lib/seo/site-url";
@@ -91,7 +92,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               SessionProvider's own comment in components/ui.tsx. */}
           <SessionProvider>
             <Nav comingSoon={comingSoon} />
-            {children}
+            <RouteTransition>{children}</RouteTransition>
             <BottomTabBar />
           </SessionProvider>
         </AgeGate>

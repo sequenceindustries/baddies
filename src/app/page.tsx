@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { useSession, roleHomePath } from "@/components/ui";
+import { motion, useReducedMotion } from "motion/react";
+import { transitions } from "@/lib/motion/tokens";
+import { useSession, roleHomePath, Reveal } from "@/components/ui";
 import { CreatorCardRow, type CreatorCardData } from "@/components/cards";
 import { HowItWorks } from "@/components/how-it-works";
 import { Countdown } from "@/components/countdown";
@@ -61,9 +63,24 @@ export default function LandingPage() {
 
   return (
     <main>
-      <section className="hero-plain">
-        <div className="hero-plain-content">
-          <h1 style={heroTitleStyle}>
+      <section className="hero-plain" style={{ position: "relative", overflow: "hidden" }}>
+        <HeroBackground />
+        {/* One-time on-mount entrance stagger (logo → subhead →
+            countdown), not continuous/idle motion — a previous hero here
+            had a real-time cursor-parallax effect that was deliberately
+            removed (see globals.css's own comment on .hero-plain); this
+            plays once and settles, it never keeps moving after that. */}
+        <motion.div
+          className="hero-plain-content"
+          style={{ position: "relative", zIndex: 1 }}
+          initial="hidden"
+          animate="visible"
+          variants={{ visible: { transition: { staggerChildren: 0.12 } } }}
+        >
+          <motion.h1
+            style={heroTitleStyle}
+            variants={{ hidden: { opacity: 0, scale: 0.96 }, visible: { opacity: 1, scale: 1, transition: transitions.large } }}
+          >
             {/* SEO Phase 8: the wordmark is the one genuinely static,
                 non-expiring image asset used site-wide (unlike avatar/
                 cover URLs, which are signed and re-signed per read —
@@ -72,45 +89,58 @@ export default function LandingPage() {
                 reserve the correct aspect ratio and avoid any CLS,
                 while `style` still governs the actual rendered size. */}
             <Image src="/baddies-wordmark-white.webp" alt="baddies" width={2000} height={462} priority style={heroLogoStyle} />
-          </h1>
-          <p style={heroSubStyle}>
+          </motion.h1>
+          <motion.p
+            style={heroSubStyle}
+            variants={{ hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0, transition: transitions.large } }}
+          >
             Africa&apos;s adult content network — where verified South African creators publish
             exclusive content and get paid directly by the fans who support them. Browse free
             previews with no card required, or subscribe to unlock more.
-          </p>
-          <Countdown target={LAUNCH_DATE} label="Launching in" />
-        </div>
+          </motion.p>
+          <motion.div variants={{ hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0, transition: transitions.large } }}>
+            <Countdown target={LAUNCH_DATE} label="Launching in" />
+          </motion.div>
+        </motion.div>
       </section>
 
       {/* Larger cards, one sliding row (CreatorCardRow's size="lg"
           scroll) rather than several stacked rows — this is the one
           creator row a signed-out visitor sees before joining, so it
           gets more visual weight than the same row does elsewhere
-          (Discover, fan Home). */}
+          (Discover, fan Home). Below the fold / loads async, so this
+          reveals on scroll rather than joining the hero's initial
+          stagger above. */}
       {topCreators.length > 0 && (
-        <section style={sectionStyle}>
-          <CreatorCardRow title="The Baddest" creators={topCreators} size="lg" scroll />
-        </section>
+        <Reveal>
+          <section style={sectionStyle}>
+            <CreatorCardRow title="The Baddest" creators={topCreators} size="lg" scroll />
+          </section>
+        </Reveal>
       )}
 
-      <HowItWorks />
+      <Reveal>
+        <HowItWorks />
+      </Reveal>
 
       {/* Moved to the bottom of the page per product decision — this
           used to sit right under the hero (pulled up over its bottom
           edge); now it's the last thing before the footer, after the
           visitor has already seen the creator row and both "how it
           works" explainers. */}
-      <section style={foundingBannerSectionStyle}>
-        <Link href="/founding-baddies" style={foundingBannerStyle} className="hover-lift">
-          <span style={foundingBannerKickerStyle}>First generation</span>
-          <span style={foundingBannerTitleStyle}>Become a Founding baddie</span>
-          <p style={foundingBannerBodyStyle}>
-            Be part of baddies from the beginning. Join the first generation of creators helping
-            shape Africa&apos;s new adult content network.
-          </p>
-          <span style={foundingBannerArrowStyle}>Join baddies →</span>
-        </Link>
-      </section>
+      <Reveal>
+        <section style={foundingBannerSectionStyle}>
+          <Link href="/founding-baddies" style={foundingBannerStyle} className="hover-lift">
+            <span style={foundingBannerKickerStyle}>First generation</span>
+            <span style={foundingBannerTitleStyle}>Become a Founding baddie</span>
+            <p style={foundingBannerBodyStyle}>
+              Be part of baddies from the beginning. Join the first generation of creators helping
+              shape Africa&apos;s new adult content network.
+            </p>
+            <span style={foundingBannerArrowStyle}>Join baddies →</span>
+          </Link>
+        </section>
+      </Reveal>
 
       <footer style={footerStyle}>
         <p style={footerTaglineStyle}>South Africa to the World!</p>
@@ -266,6 +296,33 @@ const footerSocialLinkStyle: React.CSSProperties = {
   color: "var(--text-muted)",
   marginBottom: "1rem",
 };
+
+// The one place in the whole motion/interactivity upgrade with ambient
+// background motion, by direct product decision — everywhere else
+// deliberately has none ("premium and sexy, not like a gaming
+// website"). transform/opacity only, an extremely slow loop (18s),
+// very low amplitude and opacity — meant to be felt more than seen.
+// pointerEvents: none so it never intercepts clicks on the hero content
+// sitting above it (see the hero section's own zIndex: 1).
+function HeroBackground() {
+  const reduceMotion = useReducedMotion();
+  if (reduceMotion) return null;
+  return (
+    <motion.div
+      aria-hidden="true"
+      style={{
+        position: "absolute",
+        inset: "-10%",
+        background: "radial-gradient(ellipse at 30% 40%, var(--accent-soft) 0%, transparent 55%)",
+        opacity: 0.6,
+        pointerEvents: "none",
+        zIndex: 0,
+      }}
+      animate={{ x: ["-2%", "2%", "-2%"], y: ["-1%", "1.5%", "-1%"] }}
+      transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
+    />
+  );
+}
 
 function InstagramIcon() {
   return (

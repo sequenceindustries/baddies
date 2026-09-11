@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, animate, motion, useMotionValue, useTransform } from "motion/react";
+import { backdropFade, fadeScale } from "@/lib/motion/tokens";
 import { useSession } from "@/components/ui";
 
 // How long an IMAGE story stays on screen before auto-advancing — a
@@ -210,18 +212,21 @@ export function StoryAvatarRow({ refreshKey }: { refreshKey?: number }) {
         })}
       </div>
 
-      {viewerItems && viewerCreator && (
-        <StoryViewerOverlay
-          items={viewerItems}
-          initialIndex={viewerInitialIndex}
-          creator={viewerCreator}
-          isSelf={viewerCreator.creatorProfileId === ownCreatorProfileId}
-          hasPrevCreator={viewerIndex !== null && viewerIndex > 0}
-          onClose={closeViewer}
-          onFinished={goToNextCreator}
-          onPrevCreator={goToPrevCreator}
-        />
-      )}
+      <AnimatePresence>
+        {viewerItems && viewerCreator && (
+          <StoryViewerOverlay
+            key="story-viewer"
+            items={viewerItems}
+            initialIndex={viewerInitialIndex}
+            creator={viewerCreator}
+            isSelf={viewerCreator.creatorProfileId === ownCreatorProfileId}
+            hasPrevCreator={viewerIndex !== null && viewerIndex > 0}
+            onClose={closeViewer}
+            onFinished={goToNextCreator}
+            onPrevCreator={goToPrevCreator}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 }
@@ -259,7 +264,14 @@ function StoryViewerOverlay({
   onPrevCreator: () => void;
 }) {
   const [index, setIndex] = useState(Math.min(initialIndex, items.length - 1));
-  const [progress, setProgress] = useState(0);
+  // A real WAAPI/rAF-driven value via motion's animate() instead of a
+  // 50ms setInterval nudging React state on every tick — smoother (not
+  // fighting React's own render cycle) and exactly what motion's
+  // useMotionValue/animate exist for. VIDEO items still drive it
+  // directly via .set() from onTimeUpdate below (real playback
+  // position, not a guessed duration — unchanged behavior).
+  const progress = useMotionValue(0);
+  const progressWidth = useTransform(progress, (v) => `${v}%`);
   const current = items[index];
 
   // Re-lands on the requested initial index whenever a different
@@ -273,23 +285,21 @@ function StoryViewerOverlay({
 
   // Drives the IMAGE auto-advance timer; a no-op for VIDEO, which is
   // driven by the <video> element's own onTimeUpdate/onEnded instead.
-  // setInterval rather than requestAnimationFrame deliberately — rAF is
-  // fully paused by the browser whenever the tab/page isn't visible,
-  // which would silently freeze the countdown instead of just ticking
-  // along in the background like a real timer should.
+  // animate() keeps ticking correctly even while the tab is backgrounded
+  // (same reason the old setInterval version was chosen over
+  // requestAnimationFrame — a bare rAF loop pauses on an invisible tab,
+  // silently freezing the countdown; motion's own animate() is built on
+  // top of setInterval/rAF hybrids that don't have that problem for a
+  // duration-based tween like this one).
   useEffect(() => {
-    setProgress(0);
+    progress.set(0);
     if (!current || current.mediaType === "VIDEO") return;
-    const start = Date.now();
-    const interval = setInterval(() => {
-      const pct = Math.min(100, ((Date.now() - start) / IMAGE_DURATION_MS) * 100);
-      setProgress(pct);
-      if (pct >= 100) {
-        clearInterval(interval);
-        goNext();
-      }
-    }, 50);
-    return () => clearInterval(interval);
+    const controls = animate(progress, 100, {
+      duration: IMAGE_DURATION_MS / 1000,
+      ease: "linear",
+      onComplete: () => goNext(),
+    });
+    return () => controls.stop();
     // Deliberately only re-runs on index/items change — goNext is stable
     // enough per-render for a one-shot-per-story timer, matching the
     // same pattern this file's own data-fetch effects already use.
@@ -315,17 +325,16 @@ function StoryViewerOverlay({
   }
 
   return createPortal(
-    <div style={viewerBackdropStyle} onClick={handleClose} role="dialog" aria-modal="true">
-      <div style={viewerContentStyle} onClick={(e) => e.stopPropagation()}>
+    <motion.div style={viewerBackdropStyle} onClick={handleClose} role="dialog" aria-modal="true" {...backdropFade}>
+      <motion.div style={viewerContentStyle} onClick={(e) => e.stopPropagation()} {...fadeScale}>
         <div style={viewerSegmentsStyle}>
           {items.map((it, i) => (
             <span key={it.storyId} style={viewerSegmentTrackStyle}>
-              <span
-                style={{
-                  ...viewerSegmentFillStyle,
-                  width: `${i < index ? 100 : i === index ? progress : 0}%`,
-                }}
-              />
+              {i === index ? (
+                <motion.span style={{ ...viewerSegmentFillStyle, width: progressWidth }} />
+              ) : (
+                <span style={{ ...viewerSegmentFillStyle, width: i < index ? "100%" : "0%" }} />
+              )}
             </span>
           ))}
         </div>
@@ -353,7 +362,7 @@ function StoryViewerOverlay({
             controls={false}
             onTimeUpdate={(e) => {
               const v = e.currentTarget;
-              if (v.duration) setProgress((v.currentTime / v.duration) * 100);
+              if (v.duration) progress.set((v.currentTime / v.duration) * 100);
             }}
             onEnded={() => goNext()}
           />
@@ -363,8 +372,8 @@ function StoryViewerOverlay({
         )}
         <button onClick={goPrev} style={{ ...viewerTapZoneStyle, left: 0 }} aria-label="Previous story" />
         <button onClick={goNext} style={{ ...viewerTapZoneStyle, right: 0 }} aria-label="Next story" />
-      </div>
-    </div>,
+      </motion.div>
+    </motion.div>,
     document.body
   );
 }

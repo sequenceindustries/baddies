@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { motion, useScroll, useTransform } from "motion/react";
+import { backdropFade, fadeScale, transitions } from "@/lib/motion/tokens";
 import { VerifiedBadge } from "./ui";
 
 export interface CreatorCardData {
@@ -52,6 +54,30 @@ export const ACCESS_LABEL: Record<ContentAccessLevel, string> = {
  * box on a load error at each step, rather than ever showing a blank
  * broken-image box — see the thumbFailed/avatarFailed state below.
  */
+// Drives CreatorCard's media-scale/overlay-reveal/CTA motion together —
+// the parent motion.div below sets whileHover="hover"/whileTap="tap",
+// every child here just declares what it looks like in each named
+// state, so the "hover the card, several things move in sync" effect
+// needs no manual event wiring per child. whileTap covers mobile/touch
+// press feedback on its own (motion fires it correctly from a tap
+// regardless of hover support) — no separate device-detection branch
+// needed for that part, unlike CreatorCardRow's drag-to-scroll below.
+const cardMediaVariants = {
+  rest: { scale: 1 },
+  hover: { scale: 1.06, transition: transitions.large },
+  tap: { scale: 1.06, transition: transitions.micro },
+};
+const cardOverlayVariants = {
+  rest: { opacity: 0 },
+  hover: { opacity: 1, transition: transitions.standard },
+  tap: { opacity: 0 },
+};
+const cardCtaVariants = {
+  rest: { y: 0, opacity: 0.85 },
+  hover: { y: -2, opacity: 1, transition: transitions.standard },
+  tap: { y: 0, opacity: 0.85 },
+};
+
 export function CreatorCard({ creator, size = "md" }: { creator: CreatorCardData; size?: "md" | "lg" }) {
   const [thumbFailed, setThumbFailed] = useState(false);
   const [avatarFailed, setAvatarFailed] = useState(false);
@@ -63,28 +89,42 @@ export function CreatorCard({ creator, size = "md" }: { creator: CreatorCardData
 
   return (
     <Link href={`/creators/${creator.creatorProfileId}`} style={cardLinkStyle}>
-      <div className="hover-lift" style={{ ...contentCardStyle, width }}>
+      <motion.div
+        className="hover-lift"
+        style={{ ...contentCardStyle, width }}
+        initial="rest"
+        whileHover="hover"
+        whileTap="tap"
+      >
         {showThumb ? (
           creator.thumbnailMimeType?.startsWith("video/") ? (
-            <video src={creator.thumbnailUrl!} muted style={cardMediaLayerStyle} onError={() => setThumbFailed(true)} />
+            <motion.video
+              src={creator.thumbnailUrl!}
+              muted
+              style={cardMediaLayerStyle}
+              variants={cardMediaVariants}
+              onError={() => setThumbFailed(true)}
+            />
           ) : (
             // SEO Phase 8: real, non-keyword-stuffed alt text — this
             // card renders in genuinely public HTML on /discovery,
             // category, and location pages (since Phases 4-5).
             // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <motion.img
               src={creator.thumbnailUrl!}
               alt={`${creator.displayName ?? "Creator"} — verified creator on baddies`}
               style={cardMediaLayerStyle}
+              variants={cardMediaVariants}
               onError={() => setThumbFailed(true)}
             />
           )
         ) : showAvatarAsMedia ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <motion.img
             src={creator.avatarUrl!}
             alt={`${creator.displayName ?? "Creator"} — verified creator on baddies`}
             style={cardMediaLayerStyle}
+            variants={cardMediaVariants}
             onError={() => setAvatarFailed(true)}
           />
         ) : (
@@ -94,6 +134,11 @@ export function CreatorCard({ creator, size = "md" }: { creator: CreatorCardData
             </span>
           </div>
         )}
+
+        {/* A soft accent wash that only shows on hover — reads as "this
+            card just came alive," composes with (doesn't replace) the
+            two permanent top/bottom scrims below it. */}
+        <motion.div style={cardHoverOverlayStyle} variants={cardOverlayVariants} aria-hidden="true" />
 
         {/* Stacked and centered, not side-by-side — the badge sits
             directly under the name rather than racing it for horizontal
@@ -110,11 +155,11 @@ export function CreatorCard({ creator, size = "md" }: { creator: CreatorCardData
 
         <div style={cardBottomScrimStyle}>
           {location && <div style={cardTimeStyle}>{location}</div>}
-          <div style={priceRowStyle}>
+          <motion.div style={priceRowStyle} variants={cardCtaVariants}>
             <span>Subscribe</span>
-          </div>
+          </motion.div>
         </div>
-      </div>
+      </motion.div>
     </Link>
   );
 }
@@ -134,6 +179,25 @@ export function CreatorCardRow({
   scroll?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Real click-and-drag-to-scroll for desktop mouse users, layered on
+  // top of (not replacing) the existing native overflow-x/scroll-snap
+  // mechanism — deliberately plain mouse event listeners rather than
+  // motion's drag="x" prop, since that prop animates via transform and
+  // would fight this row's own native scrollLeft-based scrolling
+  // instead of driving it. This needs no touch/pointer-type detection
+  // at all (the one thing CreatorCardRow's own plan flagged as a
+  // possible exception to "no JS device detection"): mousedown/
+  // mousemove never fire from a touch interaction on a scrollable
+  // element in any modern mobile browser, so mobile's native touch
+  // scroll is completely unaffected by any of this.
+  const dragState = useRef<{ dragging: boolean; startX: number; startScrollLeft: number }>({
+    dragging: false,
+    startX: 0,
+    startScrollLeft: 0,
+  });
+  const { scrollXProgress } = useScroll({ container: scrollRef });
+  const leftFadeOpacity = useTransform(scrollXProgress, [0, 0.04], [0, 1]);
+  const rightFadeOpacity = useTransform(scrollXProgress, [0.96, 1], [1, 0]);
 
   if (creators.length === 0) return null;
 
@@ -146,6 +210,33 @@ export function CreatorCardRow({
     const card = el.firstElementChild as HTMLElement | null;
     const amount = (card?.offsetWidth ?? 320) + 28;
     el.scrollBy({ left: direction * amount, behavior: "smooth" });
+  }
+
+  function onMouseDown(e: React.MouseEvent) {
+    const el = scrollRef.current;
+    if (!el) return;
+    dragState.current = { dragging: true, startX: e.clientX, startScrollLeft: el.scrollLeft };
+    // Snap fights a free drag (it keeps trying to pull back to the
+    // nearest card mid-gesture) — suspended only while actively
+    // dragging, restored the instant the drag ends so a released card
+    // still settles into place.
+    el.style.scrollSnapType = "none";
+    el.style.cursor = "grabbing";
+  }
+  function onMouseMove(e: React.MouseEvent) {
+    if (!dragState.current.dragging) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollLeft = dragState.current.startScrollLeft - (e.clientX - dragState.current.startX);
+  }
+  function endDrag() {
+    if (!dragState.current.dragging) return;
+    dragState.current.dragging = false;
+    const el = scrollRef.current;
+    if (el) {
+      el.style.scrollSnapType = "x proximity";
+      el.style.cursor = "";
+    }
   }
 
   return (
@@ -166,7 +257,14 @@ export function CreatorCardRow({
             ‹
           </button>
         )}
-        <div ref={scrollRef} style={scroll ? creatorScrollRowStyle : creatorGridStyle}>
+        <div
+          ref={scrollRef}
+          style={scroll ? { ...creatorScrollRowStyle, cursor: "grab" } : creatorGridStyle}
+          onMouseDown={scroll ? onMouseDown : undefined}
+          onMouseMove={scroll ? onMouseMove : undefined}
+          onMouseUp={scroll ? endDrag : undefined}
+          onMouseLeave={scroll ? endDrag : undefined}
+        >
           {creators.map((c) => (
             <div key={c.creatorProfileId} style={scroll ? creatorScrollItemStyle : undefined}>
               <CreatorCard creator={c} size={size} />
@@ -174,14 +272,24 @@ export function CreatorCardRow({
           ))}
         </div>
         {scroll && (
-          <button
-            type="button"
-            onClick={() => scrollByCard(1)}
-            style={sliderNavButtonStyle("right")}
-            aria-label="Scroll right"
-          >
-            ›
-          </button>
+          <>
+            <motion.div
+              aria-hidden="true"
+              style={{ ...edgeFadeStyle, left: 0, background: "linear-gradient(to right, var(--bg), transparent)", opacity: leftFadeOpacity }}
+            />
+            <motion.div
+              aria-hidden="true"
+              style={{ ...edgeFadeStyle, right: 0, background: "linear-gradient(to left, var(--bg), transparent)", opacity: rightFadeOpacity }}
+            />
+            <button
+              type="button"
+              onClick={() => scrollByCard(1)}
+              style={sliderNavButtonStyle("right")}
+              aria-label="Scroll right"
+            >
+              ›
+            </button>
+          </>
         )}
       </div>
     </section>
@@ -210,12 +318,19 @@ export function MediaLightbox({ mimeType, url, onClose }: { mimeType: string; ur
     e.stopPropagation();
     onClose();
   }
+  // No AnimatePresence *inside* this component — MediaLightbox itself
+  // has no internal open/closed state, it's entirely mounted/unmounted
+  // by its caller (e.g. {expanded && <MediaLightbox key="lightbox" .../>}
+  // in post-card.tsx). initial/animate/exit below only take effect
+  // (including a real exit transition instead of an instant unmount)
+  // because every call site wraps that conditional in its own
+  // <AnimatePresence> — see each caller.
   return createPortal(
-    <div style={lightboxBackdropStyle} onClick={handleClose} role="dialog" aria-modal="true">
+    <motion.div style={lightboxBackdropStyle} onClick={handleClose} role="dialog" aria-modal="true" {...backdropFade}>
       <button onClick={handleClose} style={lightboxCloseStyle} aria-label="Close">
         ✕
       </button>
-      <div style={lightboxContentStyle} onClick={(e) => e.stopPropagation()}>
+      <motion.div style={lightboxContentStyle} onClick={(e) => e.stopPropagation()} {...fadeScale}>
         {mimeType.startsWith("video/") ? (
           <video src={url} controls autoPlay style={lightboxMediaStyle} />
         ) : mimeType.startsWith("audio/") ? (
@@ -224,8 +339,8 @@ export function MediaLightbox({ mimeType, url, onClose }: { mimeType: string; ur
           // eslint-disable-next-line @next/next/no-img-element
           <img src={url} alt="" style={lightboxMediaStyle} />
         )}
-      </div>
-    </div>,
+      </motion.div>
+    </motion.div>,
     document.body,
   );
 }
@@ -437,6 +552,20 @@ const creatorScrollItemStyle: React.CSSProperties = {
 };
 
 const sliderWrapStyle: React.CSSProperties = { position: "relative" };
+
+// Edge-fade indicators for the scroll carousel — opacity driven by
+// scrollXProgress (see CreatorCardRow), so they only show when there's
+// actually more to scroll toward on that side, not as a permanent
+// decoration. pointerEvents: none so they never intercept clicks on the
+// nav buttons or cards underneath them.
+const edgeFadeStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 0,
+  bottom: "0.5rem",
+  width: "48px",
+  pointerEvents: "none",
+  zIndex: 2,
+};
 
 function sliderNavButtonStyle(side: "left" | "right"): React.CSSProperties {
   return {
@@ -654,6 +783,18 @@ const cardMediaLayerStyle: React.CSSProperties = {
   height: "100%",
   objectFit: "cover",
   zIndex: 0,
+};
+
+// Hover-only accent wash (see cardOverlayVariants) — a diagonal tint,
+// not a flat darken, so it reads as a deliberate glow rather than
+// "the photo just got dimmer." Sits above the media layer, below both
+// scrims (z-index 0.5-ish in stacking order via source order, since
+// this app doesn't otherwise use z-index gaps this fine).
+const cardHoverOverlayStyle: React.CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  background: "linear-gradient(135deg, var(--accent-soft) 0%, rgba(59, 130, 246, 0) 60%)",
+  pointerEvents: "none",
 };
 
 // Loading/locked states render in the same full-bleed slot, centered.

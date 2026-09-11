@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { useSession, displayHeadingStyle, SignInGate } from "@/components/ui";
+import { motion } from "motion/react";
+import { transitions } from "@/lib/motion/tokens";
+import { useSession, displayHeadingStyle, SignInGate, AnimatedNumber, SkeletonBlock } from "@/components/ui";
 import { FOUNDING_STATUSES } from "@/lib/founding/status";
 
 interface CreatorApplication {
@@ -398,11 +400,17 @@ function OverviewPanel({
         </div>
       </div>
 
-      {loading && <p style={{ color: "var(--text-muted)" }}>Loading...</p>}
+      {loading && (
+        <div className="overview-stat-grid">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <SkeletonBlock key={i} height="5.5rem" />
+          ))}
+        </div>
+      )}
       {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
 
       {data && (
-        <>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={transitions.standard}>
           {/* What needs YOUR attention, first — before any general
               health metrics. Its own heading carries the same total
               openIssues used to show as a disconnected 6th KPI card
@@ -471,7 +479,7 @@ function OverviewPanel({
                 real ledger activity to plot. */}
             <p style={mutedSmallStyle}>Revenue: {money(data.kpis.revenue.allTimeUsd)} all-time.</p>
           </section>
-        </>
+        </motion.div>
       )}
     </section>
   );
@@ -501,7 +509,9 @@ function KpiCard({
       onClick={onClick}
       role={onClick ? "button" : undefined}
     >
-      <div style={heroStatValueStyle}>{value}</div>
+      <div style={heroStatValueStyle}>
+        <KpiValue value={value} />
+      </div>
       <div style={mutedSmallStyle}>{label}</div>
       {caption && <div style={mutedSmallStyle}>{caption}</div>}
       {hasDelta && (
@@ -515,6 +525,36 @@ function KpiCard({
         </div>
       )}
     </div>
+  );
+}
+
+// Count-up for KpiCard's value — used sparingly per the product brief's
+// own "don't overdo this" instruction, and this is the one place real
+// numeric KPIs exist anywhere in the app (no public-facing stat/social-
+// proof section exists on the landing page today, confirmed while
+// scoping this upgrade). KpiCard's own `value` prop is already a
+// pre-formatted string ("$1,234.00", "12", "—") from each caller
+// (OverviewPanel, RevenuePanel) — rather than changing that API and
+// touching every call site, this parses the formatted string back into
+// a number + prefix/suffix, animates the number, and reapplies the same
+// prefix/suffix/decimal-precision on every tick. Anything that doesn't
+// parse as a real number (e.g. "—" for missing data) renders as plain
+// text, unanimated — never a broken or misleading count-up.
+function KpiValue({ value }: { value: string }) {
+  const match = value.match(/^([^\d-]*)(-?[\d,]+(?:\.\d+)?)([^\d%]*)$/);
+  if (!match) return <>{value}</>;
+  const [, prefix, numStr, suffix] = match;
+  if (!numStr) return <>{value}</>;
+  const decimals = numStr.includes(".") ? numStr.split(".")[1]!.length : 0;
+  const num = Number(numStr.replace(/,/g, ""));
+  if (Number.isNaN(num)) return <>{value}</>;
+  return (
+    <AnimatedNumber
+      value={num}
+      format={(n) =>
+        `${prefix}${n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}${suffix}`
+      }
+    />
   );
 }
 

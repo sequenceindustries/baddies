@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { motion } from "motion/react";
+import { backdropFade, fadeScale, transitions } from "@/lib/motion/tokens";
 import { CardAvatar } from "./cards";
-import { VerifiedBadge } from "./ui";
+import { SkeletonBlock, VerifiedBadge } from "./ui";
 import { PostCard, type PostCardItem } from "./post-card";
 
 /**
@@ -42,6 +44,7 @@ export function GridThumbnail({
   const [media, setMedia] = useState<{ mimeType: string; signedUrl: string } | null>(null);
   const [inView, setInView] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const tileRef = useRef<HTMLButtonElement | null>(null);
   const fetchedRef = useRef(false);
 
@@ -76,7 +79,7 @@ export function GridThumbnail({
   const backdrop = item.creator.coverImageUrl ?? item.creator.avatarUrl;
 
   return (
-    <button
+    <motion.button
       ref={tileRef}
       onClick={onOpen}
       // Discovery variant: square corners (0 radius) plus a taller,
@@ -89,6 +92,9 @@ export function GridThumbnail({
       // square 1:1 tile untouched.
       style={variant === "discovery" ? { ...tileStyle, borderRadius: 0, aspectRatio: "3 / 4" } : tileStyle}
       aria-label="Open post"
+      initial="rest"
+      whileHover="hover"
+      whileTap={{ scale: 0.98, transition: transitions.micro }}
     >
       {item.lock.locked ? (
         <>
@@ -101,7 +107,7 @@ export function GridThumbnail({
         </>
       ) : media ? (
         media.mimeType.startsWith("video/") ? (
-          <video src={media.signedUrl} muted style={tileMediaStyle} />
+          <motion.video src={media.signedUrl} muted style={tileMediaStyle} variants={tileMediaVariants} />
         ) : media.mimeType.startsWith("audio/") ? (
           <div style={tileAudioGlyphStyle}>♪</div>
         ) : (
@@ -109,16 +115,25 @@ export function GridThumbnail({
           // tile now renders in genuinely public HTML (Discovery,
           // creator-profile grids) since Phase 4. A post's own caption
           // is the most descriptive text available; falls back to
-          // crediting the creator when there isn't one.
+          // crediting the creator when there isn't one. Blur-to-sharp
+          // reveal on load (filter/opacity, tracked via onLoad — the
+          // signed URL is never cached across visits, so this plays on
+          // every fresh view, not just the first).
           // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <motion.img
             src={media.signedUrl}
             alt={item.caption || `Photo by ${item.creator.displayName ?? "a baddies creator"}`}
             style={tileMediaStyle}
+            variants={tileMediaVariants}
+            animate={{ filter: loaded ? "blur(0px)" : "blur(12px)", opacity: loaded ? 1 : 0 }}
+            transition={transitions.standard}
+            onLoad={() => setLoaded(true)}
           />
         )
       ) : (
-        <div style={tileLoadingStyle}>{failed && <span style={tileFailedTextStyle}>—</span>}</div>
+        <div style={tileLoadingStyle}>
+          {failed ? <span style={tileFailedTextStyle}>—</span> : <SkeletonBlock borderRadius={0} />}
+        </div>
       )}
 
       {variant !== "discovery" && (
@@ -132,9 +147,14 @@ export function GridThumbnail({
           </span>
         </div>
       )}
-    </button>
+    </motion.button>
   );
 }
+
+const tileMediaVariants = {
+  rest: { scale: 1 },
+  hover: { scale: 1.06, transition: transitions.large },
+};
 
 function LockGlyph() {
   return (
@@ -175,9 +195,13 @@ export function PostDetailOverlay({ contentId, onClose }: { contentId: string; o
 
   if (typeof document === "undefined") return null;
 
+  // No AnimatePresence inside this component — see MediaLightbox's own
+  // comment (cards.tsx) for why: the caller's conditional is what needs
+  // wrapping so this component gets a chance to exit-animate instead of
+  // unmounting instantly.
   return createPortal(
-    <div style={overlayBackdropStyle} onClick={onClose} role="dialog" aria-modal="true">
-      <div style={overlayContentStyle} onClick={(e) => e.stopPropagation()}>
+    <motion.div style={overlayBackdropStyle} onClick={onClose} role="dialog" aria-modal="true" {...backdropFade}>
+      <motion.div style={overlayContentStyle} onClick={(e) => e.stopPropagation()} {...fadeScale}>
         <button onClick={onClose} style={overlayCloseStyle} aria-label="Close">
           ✕
         </button>
@@ -186,10 +210,10 @@ export function PostDetailOverlay({ contentId, onClose }: { contentId: string; o
         ) : item ? (
           <PostCard item={item} />
         ) : (
-          <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+          <SkeletonBlock height="20rem" />
         )}
-      </div>
-    </div>,
+      </motion.div>
+    </motion.div>,
     document.body
   );
 }

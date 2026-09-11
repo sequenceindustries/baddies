@@ -248,6 +248,22 @@ a[href]:hover {
     }
 }
 
+/* Everything above this line is this app's original, deliberately-CSS-
+   only motion (generic button/link hover, .hover-lift, heart-pop) —
+   left exactly as it was, still the right tool for anything with no
+   real exit/unmount lifecycle to animate. The motion/interactivity
+   upgrade (modals, dropdowns, scroll-reveal, carousels/drag, count-up,
+   page transitions) is built with the `motion` library instead (see
+   src/lib/motion/tokens.ts) specifically because AnimatePresence can
+   animate a component OUT before it unmounts, which plain conditional
+   JSX rendering — every modal/overlay in this app, until now — cannot
+   do on its own. That layer applies its own inline/JS-driven
+   animations and respects prefers-reduced-motion via motion's own
+   useReducedMotion() hook, checked explicitly in each shared primitive
+   (src/components/ui.tsx: Reveal/SkeletonBlock/AnimatedNumber) since
+   the blanket CSS rule just above only ever catches CSS transitions/
+   animations, not motion's WAAPI/rAF-driven ones. */
+
 /* Landing page's full-width hero — plain black, no image (the previous
    version's photo + cursor-parallax effect, components/hero-visual.tsx,
    was removed outright rather than left dead). Kept as real CSS, not

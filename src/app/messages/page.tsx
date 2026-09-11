@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { AnimatePresence } from "motion/react";
 import { CardAvatar } from "@/components/cards";
 import { ComposeMessageModal } from "@/components/post-card";
-import { VerifiedBadge, displayHeadingStyle, useSession, SignInGate } from "@/components/ui";
+import { VerifiedBadge, displayHeadingStyle, useSession, SignInGate, SkeletonBlock } from "@/components/ui";
 
 interface MessageableCreator {
   creatorProfileId: string;
@@ -51,7 +52,11 @@ export default function MessagesPage() {
 
       {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
       {creators === null ? (
-        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+        <div style={listStyle}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <SkeletonBlock key={i} height="3.5rem" />
+          ))}
+        </div>
       ) : creators.length === 0 ? (
         <p style={{ color: "var(--text-muted)" }}>
           Follow or subscribe to a creator to message them here.
@@ -73,9 +78,11 @@ export default function MessagesPage() {
         </div>
       )}
 
-      {messageTarget && (
-        <ComposeMessageModal creatorProfileId={messageTarget} onClose={() => setMessageTarget(null)} />
-      )}
+      <AnimatePresence>
+        {messageTarget && (
+          <ComposeMessageModal key="compose" creatorProfileId={messageTarget} onClose={() => setMessageTarget(null)} />
+        )}
+      </AnimatePresence>
     </main>
   );
 }

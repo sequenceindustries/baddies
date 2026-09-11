@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { transitions } from "@/lib/motion/tokens";
 import { CreatorCardRow, type CreatorCardData } from "@/components/cards";
 import { GridThumbnail, PostDetailOverlay } from "@/components/grid-thumbnail";
 import type { PostCardItem } from "@/components/post-card";
-import { EmptyContentState, inputStyle } from "@/components/ui";
+import { EmptyContentState, SkeletonBlock, inputStyle } from "@/components/ui";
 
 interface CreatorsResponse {
   creators: CreatorCardData[];
@@ -126,34 +128,54 @@ export function DiscoveryClient({
       </form>
       {searchError && <p style={{ color: "var(--danger)" }}>{searchError}</p>}
 
-      {results ? (
-        <>
-          <CreatorCardRow title={`${results.length} result${results.length === 1 ? "" : "s"}`} creators={results} />
-          {results.length === 0 && <p style={{ color: "var(--text-muted)" }}>No creators found.</p>}
-        </>
-      ) : (
-        <>
-          {gridError && <p style={{ color: "var(--danger)" }}>{gridError}</p>}
-          {items.length === 0 ? (
-            <EmptyContentState message="Nothing here yet — check back once creators publish content." />
-          ) : (
-            <div className="discovery-grid">
-              {items.map((item) => (
-                <GridThumbnail
-                  key={item.contentId}
-                  item={item}
-                  onOpen={() => setOpenContentId(item.contentId)}
-                  variant="discovery"
-                />
-              ))}
-            </div>
-          )}
-          <div ref={sentinelRef} style={{ height: "1px" }} aria-hidden="true" />
-          {gridLoadingMore && <p style={{ color: "var(--text-muted)", textAlign: "center" }}>Loading more...</p>}
-        </>
-      )}
+      {/* mode="wait" cross-fades between the search-results view and the
+          infinite-scroll grid rather than swapping instantly — the
+          concrete implementation of "when filtering, cards should
+          transition smoothly, not simply disappear instantly." */}
+      <AnimatePresence mode="wait">
+        {results ? (
+          <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={transitions.standard}>
+            <CreatorCardRow title={`${results.length} result${results.length === 1 ? "" : "s"}`} creators={results} />
+            {results.length === 0 && <p style={{ color: "var(--text-muted)" }}>No creators found.</p>}
+          </motion.div>
+        ) : (
+          <motion.div key="grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={transitions.standard}>
+            {gridError && <p style={{ color: "var(--danger)" }}>{gridError}</p>}
+            {items.length === 0 ? (
+              <EmptyContentState message="Nothing here yet — check back once creators publish content." />
+            ) : (
+              <div className="discovery-grid">
+                <AnimatePresence initial={false}>
+                  {items.map((item) => (
+                    <motion.div
+                      key={item.contentId}
+                      layout
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      transition={transitions.standard}
+                    >
+                      <GridThumbnail item={item} onOpen={() => setOpenContentId(item.contentId)} variant="discovery" />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+            )}
+            <div ref={sentinelRef} style={{ height: "1px" }} aria-hidden="true" />
+            {gridLoadingMore && (
+              <div className="discovery-grid" style={{ marginTop: "6px" }}>
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <SkeletonBlock key={i} height="0" style={{ aspectRatio: "3 / 4", borderRadius: 0 }} />
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {openContentId && <PostDetailOverlay contentId={openContentId} onClose={() => setOpenContentId(null)} />}
+      <AnimatePresence>
+        {openContentId && <PostDetailOverlay key="detail" contentId={openContentId} onClose={() => setOpenContentId(null)} />}
+      </AnimatePresence>
     </>
   );
 }

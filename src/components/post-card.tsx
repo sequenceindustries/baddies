@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useSession, VerifiedBadge } from "./ui";
+import { AnimatePresence, motion, type PanInfo } from "motion/react";
+import { backdropFade, fadeScale, fadeSlideUp, transitions } from "@/lib/motion/tokens";
+import { SkeletonBlock, useSession, VerifiedBadge } from "./ui";
 import { CardAvatar, HeartIcon, MediaLightbox, ReportButton, timeAgo } from "./cards";
 
 export interface PostCardItem {
@@ -79,7 +81,6 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
   const [shareCopied, setShareCopied] = useState(false);
   const lastTapRef = useRef(0);
   const pendingTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const fetchedRef = useRef(false);
   const rootRef = useRef<HTMLElement | null>(null);
   const [inView, setInView] = useState(false);
@@ -198,23 +199,26 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
     }
   }
 
-  // Hand-rolled swipe detection (no gesture library exists anywhere in
-  // this codebase) — only active on a real carousel. A genuine swipe is
-  // unambiguous (no double-tap window to wait out): it navigates
-  // immediately and cancels any pending single-tap timer the same way a
-  // real double-tap already does. The 1.5x horizontal-vs-vertical ratio
-  // keeps a normal vertical feed-scroll that happens to start on the
-  // media from ever being mistaken for a slide change.
+  // Carousel navigation via motion's drag — replaces what used to be
+  // hand-rolled onTouchStart/onTouchEnd threshold detection (this
+  // codebase's own comment on the old version noted "no gesture library
+  // exists anywhere in this codebase"; this is that gap being filled).
+  // dragDirectionLock is motion's built-in equivalent of the old 1.5x
+  // horizontal-vs-vertical ratio check — it locks to whichever axis the
+  // first several pixels of movement indicate, so a normal vertical
+  // feed-scroll that happens to start on the media still scrolls the
+  // page instead of being mistaken for a slide change. Only active on a
+  // real carousel (drag=false is a no-op on a single-item post).
+  // dragConstraints pinned to {0,0} + a high dragElastic reads as a
+  // free, elastic drag while actually dragging (not a hard stop) and
+  // makes motion itself spring the element back to x:0 on release —
+  // the index change below (which swaps in a freshly-keyed element at
+  // its own natural x:0) is a completely separate concern from that
+  // visual snap-back.
   const SWIPE_THRESHOLD_PX = 50;
-  function onTouchStart(e: React.TouchEvent) {
-    touchStartRef.current = { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY };
-  }
-  function onTouchEnd(e: React.TouchEvent) {
-    const start = touchStartRef.current;
-    touchStartRef.current = null;
-    if (!start || !isCarousel) return;
-    const dx = e.changedTouches[0]!.clientX - start.x;
-    const dy = e.changedTouches[0]!.clientY - start.y;
+  function onCarouselDragEnd(_e: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) {
+    const dx = info.offset.x;
+    const dy = info.offset.y;
     if (Math.abs(dx) < SWIPE_THRESHOLD_PX || Math.abs(dx) < Math.abs(dy) * 1.5) return;
     if (pendingTapTimeoutRef.current) {
       clearTimeout(pendingTapTimeoutRef.current);
@@ -301,8 +305,6 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
       <div
         style={postMediaWrapStyle}
         onClick={isCarousel ? undefined : () => handleMediaTap()}
-        onTouchStart={isCarousel ? onTouchStart : undefined}
-        onTouchEnd={isCarousel ? onTouchEnd : undefined}
         role="button"
         aria-label="Post media"
       >
@@ -311,7 +313,17 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
         ) : media ? (
           <>
             {media.mimeType.startsWith("video/") ? (
-              <video key={activeIndex} src={media.signedUrl} controls style={postMediaElementStyle} />
+              <motion.video
+                key={activeIndex}
+                src={media.signedUrl}
+                controls
+                style={postMediaElementStyle}
+                drag={isCarousel ? "x" : false}
+                dragDirectionLock
+                dragConstraints={{ left: 0, right: 0 }}
+                dragElastic={0.8}
+                onDragEnd={onCarouselDragEnd}
+              />
             ) : media.mimeType.startsWith("audio/") ? (
               <audio key={activeIndex} src={media.signedUrl} controls style={{ width: "100%" }} onClick={(e) => e.stopPropagation()} />
             ) : (
@@ -319,16 +331,24 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
               // now renders in genuinely public HTML (a creator's own
               // profile content list, since Phase 4).
               // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <motion.img
                 key={activeIndex}
                 src={media.signedUrl}
                 alt={item.caption || `Photo by ${item.creator.displayName ?? "a baddies creator"}`}
                 style={postMediaElementStyle}
+                drag={isCarousel ? "x" : false}
+                dragDirectionLock
+                dragConstraints={{ left: 0, right: 0 }}
+                dragElastic={0.8}
+                onDragEnd={onCarouselDragEnd}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={transitions.micro}
               />
             )}
-            {heartPopKey && (
-              <HeartPop key={heartPopKey} onDone={() => setHeartPopKey(null)} />
-            )}
+            {/* Untouched — .heart-pop is deliberately plain CSS (see
+                globals.css's own comment), no motion wrapper needed. */}
+            {heartPopKey && <HeartPop key={heartPopKey} onDone={() => setHeartPopKey(null)} />}
             {isCarousel && (
               <>
                 <button onClick={() => handleMediaTap("prev")} style={{ ...mediaTapZoneStyle, left: 0 }} aria-label="Previous item" />
@@ -343,7 +363,7 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
           </>
         ) : (
           <div style={postMediaLoadingStyle}>
-            <span style={mutedSmallStyle}>{loading ? "Loading..." : error ?? "Couldn't load this content."}</span>
+            {loading ? <SkeletonBlock height="100%" borderRadius={0} /> : <span style={mutedSmallStyle}>{error ?? "Couldn't load this content."}</span>}
           </div>
         )}
       </div>
@@ -390,12 +410,16 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
         </p>
       )}
 
-      {expanded && !isCarousel && media && (
-        <MediaLightbox mimeType={media.mimeType} url={media.signedUrl} onClose={() => setExpanded(false)} />
-      )}
-      {messageOpen && (
-        <ComposeMessageModal creatorProfileId={item.creator.creatorProfileId} onClose={() => setMessageOpen(false)} />
-      )}
+      <AnimatePresence>
+        {expanded && !isCarousel && media && (
+          <MediaLightbox key="lightbox" mimeType={media.mimeType} url={media.signedUrl} onClose={() => setExpanded(false)} />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {messageOpen && (
+          <ComposeMessageModal key="compose" creatorProfileId={item.creator.creatorProfileId} onClose={() => setMessageOpen(false)} />
+        )}
+      </AnimatePresence>
     </article>
   );
 }
@@ -418,12 +442,10 @@ function FollowButton({ creatorProfileId, initialFollowing }: { creatorProfileId
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (following || (user && user.creatorProfile?.id === creatorProfileId)) {
-    // Matches Instagram's own "already following" treatment inside a
-    // post card: nothing to click, no button at all — the profile page
-    // itself (not this card) is where an existing follow gets managed.
-    return null;
-  }
+  // Viewing your own post — never renders, never changes for the life
+  // of this component, so a hard null (no animation) is correct here.
+  // Matches the dedicated creator-profile page's own Follow button.
+  if (user && user.creatorProfile?.id === creatorProfileId) return null;
 
   async function toggleFollow(e: React.MouseEvent) {
     e.stopPropagation();
@@ -439,13 +461,39 @@ function FollowButton({ creatorProfileId, initialFollowing }: { creatorProfileId
     setFollowing(true);
   }
 
+  // Once followed, this fades out rather than vanishing — the "already
+  // following" state (Instagram's own convention: nothing to click, no
+  // button at all here) is still reached, just with a beat to notice
+  // the follow actually landed instead of an instant disappearance.
   return (
-    <div style={followWrapStyle}>
-      <button onClick={toggleFollow} disabled={busy} style={followButtonStyle}>
-        {busy ? "..." : "Follow"}
-      </button>
-      {error && <span style={followErrorStyle}>{error}</span>}
-    </div>
+    <AnimatePresence>
+      {!following && (
+        <motion.div key="follow" style={followWrapStyle} exit={{ opacity: 0, scale: 0.9 }} transition={transitions.micro}>
+          <motion.button
+            onClick={toggleFollow}
+            disabled={busy}
+            style={followButtonStyle}
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.96 }}
+            transition={transitions.micro}
+          >
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span
+                key={busy ? "busy" : "idle"}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={transitions.micro}
+                style={{ display: "inline-block" }}
+              >
+                {busy ? "···" : "Follow"}
+              </motion.span>
+            </AnimatePresence>
+          </motion.button>
+          {error && <span style={followErrorStyle}>{error}</span>}
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -492,10 +540,14 @@ function PostOptionsMenu({
       >
         <DotsIcon />
       </button>
-      {open && (
-        <>
-          <div style={optionsMenuBackdropStyle} onClick={() => setOpen(false)} />
-          <div style={optionsMenuPanelStyle} onClick={(e) => e.stopPropagation()}>
+      <AnimatePresence>
+        {open && (
+          <motion.div key="backdrop" style={optionsMenuBackdropStyle} onClick={() => setOpen(false)} {...backdropFade} />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {open && (
+          <motion.div key="panel" style={optionsMenuPanelStyle} onClick={(e) => e.stopPropagation()} {...fadeSlideUp}>
             <SubscribeMenuItem
               creatorProfileId={creatorProfileId}
               vvipPriceUsd={vvipPriceUsd}
@@ -503,9 +555,9 @@ function PostOptionsMenu({
               onDone={() => setOpen(false)}
             />
             <ReportButton contentId={contentId} />
-          </div>
-        </>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -664,6 +716,10 @@ export function ComposeMessageModal({ creatorProfileId, onClose }: { creatorProf
   );
 }
 
+// No internal AnimatePresence — same reasoning as MediaLightbox/
+// PostDetailOverlay (see cards.tsx's own comment): this component has
+// no open/closed state of its own, its caller's conditional needs to be
+// the one wrapped in <AnimatePresence> for exit to actually animate.
 function ModalPortal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   if (typeof document === "undefined") return null;
   function handleBackdropClick(e: React.MouseEvent) {
@@ -671,8 +727,8 @@ function ModalPortal({ title, onClose, children }: { title: string; onClose: () 
     onClose();
   }
   return createPortal(
-    <div style={modalBackdropStyle} onClick={handleBackdropClick} role="dialog" aria-modal="true">
-      <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
+    <motion.div style={modalBackdropStyle} onClick={handleBackdropClick} role="dialog" aria-modal="true" {...backdropFade}>
+      <motion.div style={modalContentStyle} onClick={(e) => e.stopPropagation()} {...fadeScale}>
         <div style={modalHeaderStyle}>
           <span style={modalTitleStyle}>{title}</span>
           <button onClick={onClose} style={modalCloseStyle} aria-label="Close">
@@ -680,8 +736,8 @@ function ModalPortal({ title, onClose, children }: { title: string; onClose: () 
           </button>
         </div>
         {children}
-      </div>
-    </div>,
+      </motion.div>
+    </motion.div>,
     document.body
   );
 }

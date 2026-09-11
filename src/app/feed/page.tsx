@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { AnimatePresence, motion } from "motion/react";
+import { transitions } from "@/lib/motion/tokens";
 import { PostCard, type PostCardItem } from "@/components/post-card";
 import { StoryAvatarRow } from "@/components/story-avatar-row";
 import { StoryComposerButton } from "@/components/story-composer-button";
 import { UploadForm } from "@/components/upload-form";
-import { EmptyContentState, useSession } from "@/components/ui";
+import { EmptyContentState, SkeletonBlock, useSession } from "@/components/ui";
 
 /**
  * The feed — Twitter/X-style single-column, infinite-scroll vertical
@@ -97,7 +99,11 @@ export default function FeedPage() {
       <StoryAvatarRow refreshKey={storyRefreshKey} />
 
       {initialLoading ? (
-        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
+        <div style={feedListStyle}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <SkeletonBlock key={i} height="26rem" />
+          ))}
+        </div>
       ) : items.length === 0 ? (
         <EmptyContentState message="Nothing here yet — once creators publish content, it'll show up here." />
       ) : (
@@ -109,7 +115,7 @@ export default function FeedPage() {
       )}
 
       <div ref={sentinelRef} style={{ height: "1px" }} aria-hidden="true" />
-      {loadingMore && <p style={{ color: "var(--text-muted)", textAlign: "center" }}>Loading more...</p>}
+      {loadingMore && <SkeletonBlock height="26rem" style={{ marginTop: "1rem" }} />}
     </main>
   );
 }
@@ -218,59 +224,77 @@ function FeedComposer() {
     />
   );
 
-  if (!open) {
-    return (
-      <>
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          style={composerPromptStyle}
-          aria-label="Share something new"
-        >
-          +
-        </button>
-        {hiddenInput}
-      </>
-    );
-  }
-
   return (
-    <div style={composerCardStyle}>
+    <>
       {hiddenInput}
-      <div style={composerHeaderStyle}>
-        <h2 style={{ margin: 0, fontSize: "1rem", fontWeight: 600 }}>Share something new</h2>
-        <button
-          type="button"
-          onClick={() => {
-            setOpen(false);
-            setJustPosted(false);
-            setInitialFiles(null);
-          }}
-          style={composerCloseButtonStyle}
-          aria-label="Close composer"
-        >
-          ×
-        </button>
-      </div>
-      {justPosted ? (
-        <div>
-          <p style={{ margin: 0, fontWeight: 600 }}>Posted ✓</p>
-          <p style={{ margin: "0.4rem 0 1rem", fontSize: "0.85rem", color: "var(--text-muted)" }}>
-            It&apos;s live now. Your feed here only shows creators you follow/subscribe to, so a post of your own
-            may not show up in this list — you&apos;ll always find it on{" "}
-            <Link href="/profile?tab=content" style={{ color: "var(--accent)" }}>
-              your Content history
-            </Link>
-            .
-          </p>
-          <button type="button" onClick={() => setJustPosted(false)} style={composerPostAnotherButtonStyle}>
-            Post another
-          </button>
-        </div>
-      ) : (
-        <UploadForm bare initialFiles={initialFiles ?? undefined} onUploaded={() => setJustPosted(true)} />
-      )}
-    </div>
+      {/* mode="popLayout" (not the usual "wait") lets the collapsed "+"
+          fade out in place while the expanding card grows into the
+          space next to it, rather than waiting for a full disappear-
+          then-appear — reads as one continuous "the + became the card"
+          motion instead of two separate swaps. */}
+      <AnimatePresence mode="popLayout" initial={false}>
+        {!open ? (
+          <motion.button
+            key="collapsed"
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            style={composerPromptStyle}
+            aria-label="Share something new"
+            initial={{ opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.85 }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            transition={transitions.standard}
+          >
+            +
+          </motion.button>
+        ) : (
+          <motion.div
+            key="expanded"
+            style={composerCardStyle}
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={transitions.standard}
+          >
+            <div style={composerHeaderStyle}>
+              <h2 style={{ margin: 0, fontSize: "1rem", fontWeight: 600 }}>Share something new</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setJustPosted(false);
+                  setInitialFiles(null);
+                }}
+                style={composerCloseButtonStyle}
+                aria-label="Close composer"
+              >
+                ×
+              </button>
+            </div>
+            {justPosted ? (
+              <div>
+                <p style={{ margin: 0, fontWeight: 600 }}>Posted ✓</p>
+                <p style={{ margin: "0.4rem 0 1rem", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                  It&apos;s live now. Your feed here only shows creators you follow/subscribe to, so a post of your
+                  own may not show up in this list — you&apos;ll always find it on{" "}
+                  <Link href="/profile?tab=content" style={{ color: "var(--accent)" }}>
+                    your Content history
+                  </Link>
+                  .
+                </p>
+                <button type="button" onClick={() => setJustPosted(false)} style={composerPostAnotherButtonStyle}>
+                  Post another
+                </button>
+              </div>
+            ) : (
+              <UploadForm bare initialFiles={initialFiles ?? undefined} onUploaded={() => setJustPosted(true)} />
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
