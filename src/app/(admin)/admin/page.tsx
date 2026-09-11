@@ -29,7 +29,7 @@ interface ContentQueueItem {
   participantCount: number;
 }
 
-const TABS = ["Overview", "Members", "Creators", "Applications", "Founding Partners", "Content", "Revenue", "Payouts", "Trust & Safety", "Activity", "Audit Log", "System Health", "Reset Roster"] as const;
+const TABS = ["Overview", "Members", "Creators", "Applications", "Founding Partners", "Content", "Revenue", "Payouts", "Trust & Safety", "Activity", "Audit Log", "System Health", "Reset Roster", "Wipe Test Content"] as const;
 type Tab = (typeof TABS)[number];
 
 type RangeKey = "today" | "7d" | "30d" | "90d" | "all";
@@ -132,6 +132,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "System Health", tab: "System Health" },
       { label: "Reset Roster", tab: "Reset Roster" },
+      { label: "Wipe Test Content", tab: "Wipe Test Content" },
     ],
   },
 ];
@@ -340,6 +341,7 @@ export default function AdminDashboardPage() {
         {tab === "Audit Log" && <AuditLogPanel />}
         {tab === "System Health" && <SystemHealthPanel />}
         {tab === "Reset Roster" && <ResetRosterPanel />}
+        {tab === "Wipe Test Content" && <WipeTestContentPanel />}
       </main>
     </div>
   );
@@ -2930,6 +2932,115 @@ function ResetRosterPanel() {
             {result.reseeded
               ? `Reseeded ${result.seededCreatorCount} demo creator accounts.`
               : `Reseed did not fully complete: ${result.reseedError}. Safe to trigger this reset again — the reseed step is idempotent.`}
+          </span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+interface WipeTestContentResult {
+  contentAffected: number;
+  mediaAssetsReplaced: number;
+  creatorsAffected: number;
+}
+
+const WIPE_CONFIRM_PHRASE = "WIPE TEST CONTENT";
+
+/**
+ * The lighter-weight sibling of ResetRosterPanel: replaces every stray
+ * (non-official-demo) creator's posted photo with the brand wordmark, in
+ * place, without deleting their accounts — see
+ * POST /api/admin/system/wipe-test-content's own doc comment for exact
+ * scope (IMAGE content only; the 5 official DUMMY_CREATORS are never
+ * touched). Same "type the exact phrase" second-step pattern as the
+ * roster reset, for the same reason: this overwrites real stored bytes
+ * with no undo.
+ */
+function WipeTestContentPanel() {
+  const [phrase, setPhrase] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<WipeTestContentResult | null>(null);
+
+  const canSubmit = phrase === WIPE_CONFIRM_PHRASE && !busy;
+
+  async function submit() {
+    if (!canSubmit) return;
+    if (
+      !window.confirm(
+        "This permanently overwrites the posted photos of every creator account that isn't one of the 5 official demo creators. Continue?"
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch("/api/admin/system/wipe-test-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: phrase }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? "Wipe failed.");
+      setResult(body);
+      setPhrase("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Wipe failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section>
+      <h2 style={sectionHeadingStyle}>Wipe Test Content</h2>
+      <p style={mutedSmallStyle}>
+        Overwrites the posted image for every photo post belonging to a creator account that isn&apos;t one of the 5
+        official demo creators (Thandeka, Amara, Zoe, Lerato, Naledi) with the baddies wordmark. Accounts, captions,
+        and every other field are left untouched — only the image itself changes, and there&apos;s no undo. Video
+        and audio posts are never affected.
+      </p>
+
+      <div style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch", gap: "0.75rem", marginTop: "1rem" }}>
+        <label style={{ fontSize: "0.82rem", fontWeight: 600 }}>
+          Type <code>{WIPE_CONFIRM_PHRASE}</code> to enable the button
+        </label>
+        <input
+          type="text"
+          value={phrase}
+          onChange={(e) => setPhrase(e.target.value)}
+          placeholder={WIPE_CONFIRM_PHRASE}
+          style={{ ...memberSearchInputStyle, flex: "none" }}
+          disabled={busy}
+        />
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!canSubmit}
+          style={{
+            ...rejectButtonStyle,
+            background: canSubmit ? "var(--danger)" : "transparent",
+            color: canSubmit ? "#fff" : "var(--text-muted)",
+            borderColor: canSubmit ? "var(--danger)" : "var(--border)",
+            cursor: canSubmit ? "pointer" : "not-allowed",
+            opacity: busy ? 0.7 : 1,
+          }}
+        >
+          {busy ? "Wiping..." : "Replace test content images"}
+        </button>
+      </div>
+
+      {error && <p style={{ color: "var(--danger)", marginTop: "0.75rem" }}>{error}</p>}
+
+      {result && (
+        <div style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch", gap: "0.4rem", marginTop: "1rem" }}>
+          <span style={{ fontWeight: 600, color: "var(--success)" }}>Done.</span>
+          <span style={mutedSmallStyle}>
+            Replaced {result.mediaAssetsReplaced} image file(s) across {result.contentAffected} post(s) from{" "}
+            {result.creatorsAffected} creator account(s).
           </span>
         </div>
       )}
