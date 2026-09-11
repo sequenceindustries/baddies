@@ -1025,6 +1025,33 @@ export function CheckTick({ color, size = 13 }: { color: string; size?: number }
 }
 
 /**
+ * A small, hand-drawn inline SVG in the real flag's own colors — chosen
+ * over the 🇿🇦 Unicode flag emoji, whose regional-indicator rendering is
+ * genuinely inconsistent across platforms (some Windows/Chrome
+ * combinations show literal "ZA" letters instead of a flag glyph), and
+ * matching this app's own established convention of small hand-drawn
+ * inline icons (this file's own CheckTick, StoryIcon/MessageIcon/
+ * SearchIcon elsewhere) rather than an external asset. Simplified,
+ * axis-aligned geometry (not the real flag's diagonal pall) at this
+ * decorative size — still unmistakably the South African flag's own
+ * six colors in their real relative positions: red top, blue bottom, a
+ * gold-bordered green band through the middle, a white-bordered black
+ * triangle at the hoist.
+ */
+export function SouthAfricaFlagIcon() {
+  return (
+    <svg width="18" height="12" viewBox="0 0 30 20" aria-hidden="true" style={{ borderRadius: "2px", flexShrink: 0 }}>
+      <rect width="30" height="8" fill="#DE3831" />
+      <rect y="12" width="30" height="8" fill="#002395" />
+      <rect y="8" width="30" height="4" fill="#FFB612" />
+      <polygon points="0,6 0,14 9,10" fill="#FFFFFF" />
+      <polygon points="0,7 0,13 7,10" fill="#000000" />
+      <rect x="7" y="8.7" width="23" height="2.6" fill="#007A4D" />
+    </svg>
+  );
+}
+
+/**
  * isFoundingPartner takes priority over isFoundingBaddie when a creator
  * somehow holds both (the same dual-role shape FoundingPartner/
  * CreatorProfile already allow elsewhere in this app) — a real Founding
@@ -1160,7 +1187,10 @@ export function LocationField({
   return (
     <div style={{ marginBottom: "1.1rem" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.4rem" }}>
-        <span style={fieldLabelStyle}>Location</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+          <span style={fieldLabelStyle}>Location</span>
+          <SouthAfricaFlagIcon />
+        </span>
         <button type="button" onClick={redetect} disabled={status === "detecting"} style={detectButtonStyle}>
           {status === "detecting" ? "Detecting..." : hasLocation ? "Detect again" : "Detect my location"}
         </button>
