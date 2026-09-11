@@ -185,21 +185,60 @@ function FeedComposer() {
   const { user } = useSession();
   const [open, setOpen] = useState(false);
   const [justPosted, setJustPosted] = useState(false);
+  // Seeds UploadForm the instant a file is picked — see the hidden
+  // input below. Only ever consumed once by UploadForm's own mount
+  // effect, so a stale value here after that first consumption is
+  // harmless (the composer closing via "×" and reopening starts a
+  // fresh UploadForm instance anyway, remounting it).
+  const [initialFiles, setInitialFiles] = useState<File[] | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const creatorStatus = user?.creatorProfile?.status;
   const creatorActive = Boolean(creatorStatus) && creatorStatus !== "REJECTED" && creatorStatus !== "BANNED";
   if (!creatorActive) return null;
 
+  // Hidden input lives outside the `if (!open)` branch so it's always
+  // mounted and ready — the collapsed "+" triggers it directly rather
+  // than first expanding an empty card, matching StoryComposerButton's
+  // own one-click-to-the-OS-picker pattern right next to it (the old
+  // behavior took 2 clicks: "+" to expand, then the dropzone inside to
+  // actually open the picker).
+  const hiddenInput = (
+    <input
+      ref={fileInputRef}
+      type="file"
+      accept="image/*,video/*,audio/*"
+      multiple
+      style={{ display: "none" }}
+      onChange={(e) => {
+        if (e.target.files && e.target.files.length > 0) {
+          setInitialFiles(Array.from(e.target.files));
+          setOpen(true);
+        }
+        e.target.value = "";
+      }}
+    />
+  );
+
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} style={composerPromptStyle} aria-label="Share something new">
-        +
-      </button>
+      <>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          style={composerPromptStyle}
+          aria-label="Share something new"
+        >
+          +
+        </button>
+        {hiddenInput}
+      </>
     );
   }
 
   return (
     <div style={composerCardStyle}>
+      {hiddenInput}
       <div style={composerHeaderStyle}>
         <h2 style={{ margin: 0, fontSize: "1rem", fontWeight: 600 }}>Share something new</h2>
         <button
@@ -207,6 +246,7 @@ function FeedComposer() {
           onClick={() => {
             setOpen(false);
             setJustPosted(false);
+            setInitialFiles(null);
           }}
           style={composerCloseButtonStyle}
           aria-label="Close composer"
@@ -230,7 +270,7 @@ function FeedComposer() {
           </button>
         </div>
       ) : (
-        <UploadForm bare onUploaded={() => setJustPosted(true)} />
+        <UploadForm bare initialFiles={initialFiles ?? undefined} onUploaded={() => setJustPosted(true)} />
       )}
     </div>
   );

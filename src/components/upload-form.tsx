@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cardStyle, Field, inputStyle, errorBannerStyle, primaryButtonStyle } from "@/components/ui";
+import { ImageCropStep } from "@/components/image-crop-step";
 
 // FREE/VIP/VVIP only — PPV is retired from the product and was never
 // offered here even before this file existed (see the upload route's
@@ -28,16 +29,29 @@ const MAX_ITEMS = 10; // matches the API route's own carousel cap (Instagram's o
 export function UploadForm({
   onUploaded,
   bare = false,
+  initialFiles,
 }: {
   onUploaded: () => void;
   // Skips the outer card chrome + heading — the feed composer already
   // provides its own framing (see FeedComposer) and doesn't want a
   // second nested card border around this one.
   bare?: boolean;
+  // Seeds this form with files already chosen elsewhere — see
+  // FeedComposer's own hidden file input, which opens the OS picker
+  // the instant "+" is tapped (matching StoryComposerButton's existing
+  // 1-click pattern) rather than requiring a second click on this
+  // form's own dropzone. Only ever consumed once, on mount.
+  initialFiles?: File[];
 }) {
   const [caption, setCaption] = useState("");
   const [accessLevel, setAccessLevel] = useState<AccessLevel>("FREE");
-  const [files, setFiles] = useState<File[]>([]);
+  const [staged, setStaged] = useState<{ id: string; file: File }[]>([]);
+  // Ids (from `staged`) of images still awaiting a crop decision — only
+  // image/* files ever enter this queue; video/audio skip cropping
+  // entirely. While non-empty, ImageCropStep renders instead of the
+  // dropzone/preview grid, one image at a time ("Image X of Y").
+  const [cropQueue, setCropQueue] = useState<string[]>([]);
+  const [totalImagesThisBatch, setTotalImagesThisBatch] = useState(0);
   const [dragActive, setDragActive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,15 +59,16 @@ export function UploadForm({
 
   // Live thumbnail/video previews — "here's what you're about to post"
   // feedback instead of a bare filename list. Object URLs are
-  // regenerated whenever `files` changes and every URL this effect
+  // regenerated whenever `staged` changes and every URL this effect
   // created is revoked on the way out (both the next run and unmount),
-  // so adding/removing files repeatedly never leaks memory.
+  // so adding/removing files repeatedly never leaks memory. Also what
+  // ImageCropStep crops from while an image is in cropQueue.
   const [previews, setPreviews] = useState<string[]>([]);
   useEffect(() => {
-    const urls = files.map((f) => URL.createObjectURL(f));
+    const urls = staged.map((s) => URL.createObjectURL(s.file));
     setPreviews(urls);
     return () => urls.forEach((u) => URL.revokeObjectURL(u));
-  }, [files]);
+  }, [staged]);
 
   function addFiles(fileList: FileList | File[] | null) {
     setError(null);
@@ -63,11 +78,35 @@ export function UploadForm({
       setError(`${tooLarge.length === 1 ? "One file exceeds" : `${tooLarge.length} files exceed`} the 100MB limit and won't be included: ${tooLarge.map((f) => f.name).join(", ")}`);
     }
     const ok = chosen.filter((f) => f.size <= MAX_UPLOAD_BYTES);
-    if (ok.length > 0) setFiles((prev) => [...prev, ...ok]);
+    if (ok.length === 0) return;
+    const entries = ok.map((file) => ({ id: crypto.randomUUID(), file }));
+    setStaged((prev) => [...prev, ...entries]);
+    const imageIds = entries.filter((e) => e.file.type.startsWith("image/")).map((e) => e.id);
+    if (imageIds.length > 0) {
+      setCropQueue((prev) => [...prev, ...imageIds]);
+      setTotalImagesThisBatch((prev) => prev + imageIds.length);
+    }
   }
 
-  function removeFile(index: number) {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
+  // Consumes `initialFiles` exactly once, on mount — see the prop's own
+  // doc comment above.
+  useEffect(() => {
+    if (initialFiles && initialFiles.length > 0) addFiles(initialFiles);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function removeFile(id: string) {
+    setStaged((prev) => prev.filter((s) => s.id !== id));
+    setCropQueue((prev) => prev.filter((qid) => qid !== id));
+  }
+
+  function applyCrop(id: string, croppedFile: File) {
+    setStaged((prev) => prev.map((s) => (s.id === id ? { ...s, file: croppedFile } : s)));
+    setCropQueue((prev) => prev.filter((qid) => qid !== id));
+  }
+
+  function skipCrop(id: string) {
+    setCropQueue((prev) => prev.filter((qid) => qid !== id));
   }
 
   function handleDrop(e: React.DragEvent<HTMLDivElement>) {
@@ -75,6 +114,13 @@ export function UploadForm({
     setDragActive(false);
     addFiles(e.dataTransfer.files);
   }
+
+  // A fresh batch starts its own "Image X of Y" count at zero, whether
+  // the previous batch just submitted successfully or every file was
+  // manually removed.
+  useEffect(() => {
+    if (staged.length === 0) setTotalImagesThisBatch(0);
+  }, [staged.length]);
 
   // One request for the whole batch — every selected file becomes one
   // slide of a single carousel post (see POST /api/creator/content's own
@@ -85,12 +131,12 @@ export function UploadForm({
   // caught up until now.
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (files.length === 0) {
+    if (staged.length === 0) {
       setError("Choose at least one file to upload.");
       return;
     }
-    if (files.length > MAX_ITEMS) {
-      setError(`You can post up to ${MAX_ITEMS} files at a time — you have ${files.length} selected.`);
+    if (staged.length > MAX_ITEMS) {
+      setError(`You can post up to ${MAX_ITEMS} files at a time — you have ${staged.length} selected.`);
       return;
     }
     setSubmitting(true);
@@ -98,7 +144,7 @@ export function UploadForm({
 
     try {
       const items = await Promise.all(
-        files.map(async (file) => ({
+        staged.map(async ({ file }) => ({
           mediaType: file.type.startsWith("video/") ? "VIDEO" : file.type.startsWith("audio/") ? "AUDIO" : "IMAGE",
           mimeType: file.type,
           base64Data: await fileToBase64(file),
@@ -117,95 +163,118 @@ export function UploadForm({
         return;
       }
       setCaption("");
-      setFiles([]);
+      setStaged([]);
       onUploaded();
     } finally {
       setSubmitting(false);
     }
   }
 
+  // Cropping happens strictly between file-selection and caption/tier —
+  // while any image still needs a crop decision, everything below (the
+  // preview grid, caption, access level, submit) waits.
+  const activeCropId = cropQueue[0];
+  const activeCropEntry = activeCropId ? staged.find((s) => s.id === activeCropId) : undefined;
+  const activeCropPreviewIndex = activeCropEntry ? staged.findIndex((s) => s.id === activeCropId) : -1;
+
   const body = (
     <form onSubmit={handleSubmit}>
       {error && <div style={{ ...errorBannerStyle, whiteSpace: "pre-line" }}>{error}</div>}
 
-      <Field label="Photos & videos" hint="Up to 100MB per file — drop several at once to post them all together.">
-        {files.length === 0 ? (
-          <div
-            style={dragActive ? { ...dropzoneStyle, ...dropzoneActiveStyle } : dropzoneStyle}
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragActive(true);
-            }}
-            onDragLeave={() => setDragActive(false)}
-            onDrop={handleDrop}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click();
-            }}
-          >
-            <UploadCloudIcon />
-            <span style={dropzoneTextStyle}>Drag photos or videos here, or click to browse</span>
-          </div>
-        ) : (
-          <div style={previewGridStyle}>
-            {files.map((file, i) => (
-              <div key={`${file.name}-${file.lastModified}-${i}`} style={previewTileStyle}>
-                {file.type.startsWith("video/") ? (
-                  <video src={previews[i]} style={previewMediaStyle} muted playsInline />
-                ) : file.type.startsWith("image/") ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={previews[i]} alt="" style={previewMediaStyle} />
-                ) : (
-                  <span style={previewAudioIconStyle}>♪</span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => removeFile(i)}
-                  style={previewRemoveButtonStyle}
-                  aria-label={`Remove ${file.name}`}
-                >
-                  ×
+      {activeCropEntry && activeCropPreviewIndex >= 0 && previews[activeCropPreviewIndex] ? (
+        <Field label="Crop" hint="Choose a ratio, or keep Original to post it uncropped.">
+          <ImageCropStep
+            key={activeCropEntry.id}
+            file={activeCropEntry.file}
+            imageUrl={previews[activeCropPreviewIndex]}
+            index={totalImagesThisBatch - cropQueue.length}
+            total={totalImagesThisBatch}
+            onApply={(croppedFile) => applyCrop(activeCropEntry.id, croppedFile)}
+            onSkip={() => skipCrop(activeCropEntry.id)}
+          />
+        </Field>
+      ) : (
+        <>
+          <Field label="Photos & videos" hint="Up to 100MB per file — drop several at once to post them all together.">
+            {staged.length === 0 ? (
+              <div
+                style={dragActive ? { ...dropzoneStyle, ...dropzoneActiveStyle } : dropzoneStyle}
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragActive(true);
+                }}
+                onDragLeave={() => setDragActive(false)}
+                onDrop={handleDrop}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click();
+                }}
+              >
+                <UploadCloudIcon />
+                <span style={dropzoneTextStyle}>Drag photos or videos here, or click to browse</span>
+              </div>
+            ) : (
+              <div style={previewGridStyle}>
+                {staged.map(({ id, file }, i) => (
+                  <div key={id} style={previewTileStyle}>
+                    {file.type.startsWith("video/") ? (
+                      <video src={previews[i]} style={previewMediaStyle} muted playsInline />
+                    ) : file.type.startsWith("image/") ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={previews[i]} alt="" style={previewMediaStyle} />
+                    ) : (
+                      <span style={previewAudioIconStyle}>♪</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeFile(id)}
+                      style={previewRemoveButtonStyle}
+                      aria-label={`Remove ${file.name}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <button type="button" onClick={() => fileInputRef.current?.click()} style={previewAddTileStyle} aria-label="Add more files">
+                  +
                 </button>
               </div>
-            ))}
-            <button type="button" onClick={() => fileInputRef.current?.click()} style={previewAddTileStyle} aria-label="Add more files">
-              +
-            </button>
-          </div>
-        )}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*,video/*,audio/*"
-          multiple
-          onChange={(e) => {
-            addFiles(e.target.files);
-            e.target.value = "";
-          }}
-          style={hiddenFileInputStyle}
-        />
-      </Field>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,video/*,audio/*"
+              multiple
+              onChange={(e) => {
+                addFiles(e.target.files);
+                e.target.value = "";
+              }}
+              style={hiddenFileInputStyle}
+            />
+          </Field>
 
-      <Field label="Caption" hint="Optional. Applied to every file in this batch.">
-        <input style={inputStyle} value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={2000} />
-      </Field>
+          <Field label="Caption" hint="Optional. Applied to every file in this batch.">
+            <input style={inputStyle} value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={2000} />
+          </Field>
 
-      <Field
-        label="Access level"
-        hint="Teasers: anyone. VIP: unlocked by the platform-wide VIP pass. Exclusive: only your own subscribers."
-      >
-        <select style={inputStyle} value={accessLevel} onChange={(e) => setAccessLevel(e.target.value as AccessLevel)}>
-          <option value="FREE">Teasers</option>
-          <option value="VIP">VIP</option>
-          <option value="VVIP">Exclusive</option>
-        </select>
-      </Field>
+          <Field
+            label="Access level"
+            hint="Teasers: anyone. VIP: unlocked by the platform-wide VIP pass. Exclusive: only your own subscribers."
+          >
+            <select style={inputStyle} value={accessLevel} onChange={(e) => setAccessLevel(e.target.value as AccessLevel)}>
+              <option value="FREE">Teasers</option>
+              <option value="VIP">VIP</option>
+              <option value="VVIP">Exclusive</option>
+            </select>
+          </Field>
 
-      <button type="submit" style={primaryButtonStyle} disabled={submitting}>
-        {submitting ? "Uploading..." : "Upload"}
-      </button>
+          <button type="submit" style={primaryButtonStyle} disabled={submitting}>
+            {submitting ? "Uploading..." : "Upload"}
+          </button>
+        </>
+      )}
     </form>
   );
 
