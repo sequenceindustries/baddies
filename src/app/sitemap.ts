@@ -32,6 +32,7 @@ export const dynamic = "force-dynamic";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticEntries: MetadataRoute.Sitemap = [
     { url: SITE_URL, changeFrequency: "daily", priority: 1 },
+    { url: `${SITE_URL}/discovery`, changeFrequency: "daily", priority: 0.8 },
     { url: `${SITE_URL}/terms`, changeFrequency: "yearly", priority: 0.3 },
     { url: `${SITE_URL}/privacy`, changeFrequency: "yearly", priority: 0.3 },
     { url: `${SITE_URL}/creator-terms`, changeFrequency: "yearly", priority: 0.3 },
@@ -52,5 +53,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
-  return [...staticEntries, ...creatorEntries];
+  // SEO Phase 4: every admin-managed category is a real, indexable
+  // page (src/app/discovery/[slug]/page.tsx) — no threshold gating
+  // here the way curated locations will need (Phase 5): categories are
+  // hand-created by an admin in the first place, so an empty one is
+  // rare/temporary, not a structural risk of thin-page spam.
+  const categories = await db.category.findMany({ select: { slug: true } });
+  const categoryEntries: MetadataRoute.Sitemap = categories.map((category) => ({
+    url: `${SITE_URL}/discovery/${category.slug}`,
+    changeFrequency: "weekly",
+    priority: 0.5,
+  }));
+
+  return [...staticEntries, ...creatorEntries, ...categoryEntries];
 }

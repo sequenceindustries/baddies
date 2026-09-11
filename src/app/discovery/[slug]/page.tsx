@@ -1,64 +1,70 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { CreatorCardRow } from "@/components/cards";
-import type { CreatorCardData } from "@/components/cards";
-import { displayHeadingStyle, useSession, SignInGate } from "@/components/ui";
+import { displayHeadingStyle } from "@/components/ui";
+import { getCategoryCreators } from "@/lib/discovery/categories";
+import { SITE_URL } from "@/lib/seo/site-url";
 
-// Signed-out visitors are gated the same as /discovery — see that
-// page's comment. No in-app link points here anymore (Discover by
-// category was removed), but the route itself still needs the same
-// gate for anyone reaching it directly by URL.
-export default function CategoryPage() {
-  const params = useParams<{ slug: string }>();
-  const { user, loading } = useSession();
-  const [name, setName] = useState<string | null>(null);
-  const [creators, setCreators] = useState<CreatorCardData[] | null>(null);
-  const [notFound, setNotFound] = useState(false);
+/**
+ * SEO Phase 4: server-rendered, no more sign-in wall. This route's own
+ * backing data (GET /api/discovery/categories/[slug], now delegating
+ * to the same getCategoryCreators this page calls directly) never had
+ * an auth check — the page itself was the only thing hiding it from a
+ * signed-out visitor or crawler. No in-app link points here anymore
+ * ("Discover by category" was removed from the UI), but the route
+ * stays real and indexable for anyone who reaches it directly, and for
+ * search engines via the sitemap.
+ */
+export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+  const category = await getCategoryCreators(params.slug);
+  if (!category) {
+    return { robots: { index: false, follow: false } };
+  }
+  const title = `${category.name} creators | baddies`;
+  const description = `Discover ${category.name.toLowerCase()} creators on baddies — Africa's adult content network.`;
+  return {
+    title,
+    description,
+    alternates: { canonical: `/discovery/${category.slug}` },
+    openGraph: { title, description },
+  };
+}
 
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    fetch(`/api/discovery/categories/${params.slug}`)
-      .then((r) => {
-        if (r.status === 404) {
-          if (!cancelled) setNotFound(true);
-          return null;
-        }
-        return r.json();
-      })
-      .then((body) => {
-        if (!cancelled && body) {
-          setName(body.category.name);
-          setCreators(body.creators ?? []);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [params.slug, user]);
-
-  if (loading) return <main style={mainStyle} />;
-  if (!user) {
-    return <SignInGate message="Create a free account or sign in to browse creators by category." />;
+export default async function CategoryPage({ params }: { params: { slug: string } }) {
+  const category = await getCategoryCreators(params.slug);
+  if (!category) {
+    notFound();
   }
 
-  if (notFound) {
-    return (
-      <main style={mainStyle}>
-        <h1 style={displayHeadingStyle}>Category not found</h1>
-      </main>
-    );
-  }
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+          { "@type": "ListItem", position: 2, name: "Discover", item: `${SITE_URL}/discovery` },
+          {
+            "@type": "ListItem",
+            position: 3,
+            name: category.name,
+            item: `${SITE_URL}/discovery/${category.slug}`,
+          },
+        ],
+      },
+    ],
+  };
 
   return (
     <main style={mainStyle}>
-      <h1 style={displayHeadingStyle}>{name ?? "Loading..."}</h1>
-      {creators && creators.length === 0 && (
+      {/* eslint-disable-next-line react/no-danger -- server-generated from already-public category fields only */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <h1 style={displayHeadingStyle}>{category.name}</h1>
+      {category.creators.length === 0 ? (
         <p style={{ color: "var(--text-muted)" }}>No verified creators in this category yet.</p>
+      ) : (
+        <CreatorCardRow creators={category.creators} />
       )}
-      {creators && creators.length > 0 && <CreatorCardRow creators={creators} />}
     </main>
   );
 }

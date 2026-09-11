@@ -33,21 +33,27 @@ type Tier = (typeof TIER_ORDER)[number];
  * at all. That's what actually fixes the SEO problem here, not merely
  * moving files around.
  *
- * SEO Phase 3 scope: only the profile shell above is server-rendered.
- * The content grid below still loads client-side, gated on
- * `isSignedIn` exactly as before — a signed-out visitor/crawler sees a
- * sign-in prompt in its place rather than an infinite loading spinner
- * (the previous behavior, when this component was unreachable for a
- * signed-out visitor at all, never had to handle that state). Phase 4
- * of this project's SEO plan extends this to server-render the
- * (already viewer-null-safe) content list too.
+ * SEO Phase 4: the content grid's FIRST page now comes pre-loaded from
+ * the server (`initialItems`/`initialCursor`, computed by page.tsx via
+ * the same viewer-null-safe getCreatorPublicContentPage the API route
+ * itself delegates to) — real, unique, crawlable caption text for
+ * every visitor including a crawler, with locked items still rendering
+ * only their lock/CTA state, never a media URL. Only pagination beyond
+ * the first page still fetches client-side, and it now runs for every
+ * visitor (signed in or not) rather than being gated on `isSignedIn` —
+ * the backing route was already safe for an anonymous viewer, this
+ * component just used to never be reached that way.
  */
 export function CreatorProfileClient({
   creatorProfileId,
   initialCreator,
+  initialItems,
+  initialCursor,
 }: {
   creatorProfileId: string;
   initialCreator: PublicCreatorProfile;
+  initialItems: PostCardItem[];
+  initialCursor: string | null;
 }) {
   const { user } = useSession();
 
@@ -56,11 +62,10 @@ export function CreatorProfileClient({
   const [followBusy, setFollowBusy] = useState(false);
   const [messageOpen, setMessageOpen] = useState(false);
 
-  const [items, setItems] = useState<PostCardItem[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [gridInitialLoading, setGridInitialLoading] = useState(true);
+  const [items, setItems] = useState<PostCardItem[]>(initialItems);
+  const [cursor, setCursor] = useState<string | null>(initialCursor);
   const [gridLoadingMore, setGridLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(Boolean(initialCursor));
   const [gridError, setGridError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tier | undefined>(undefined);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -70,7 +75,7 @@ export function CreatorProfileClient({
     async (afterCursor: string | null) => {
       if (loadingRef.current) return;
       loadingRef.current = true;
-      if (afterCursor) setGridLoadingMore(true);
+      setGridLoadingMore(true);
       setGridError(null);
       try {
         const res = await fetch(
@@ -78,27 +83,18 @@ export function CreatorProfileClient({
         );
         if (!res.ok) throw new Error("Failed to load.");
         const body = await res.json();
-        setItems((prev) => (afterCursor ? [...prev, ...body.items] : body.items));
+        setItems((prev) => [...prev, ...body.items]);
         setCursor(body.nextCursor ?? null);
         setHasMore(Boolean(body.nextCursor));
       } catch {
-        setGridError("Couldn't load this creator's posts. Try refreshing.");
+        setGridError("Couldn't load more posts. Try refreshing.");
       } finally {
         loadingRef.current = false;
-        setGridInitialLoading(false);
         setGridLoadingMore(false);
       }
     },
     [creatorProfileId]
   );
-
-  useEffect(() => {
-    // SEO Phase 3 scope: the content grid stays gated on sign-in for
-    // now (see this component's own doc comment) — Phase 4 removes
-    // this guard once the first page is server-rendered too.
-    if (!user) return;
-    loadPage(null);
-  }, [user, loadPage]);
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -207,45 +203,34 @@ export function CreatorProfileClient({
 
       <h2 style={sectionHeadingStyle}>Content</h2>
 
-      {!user ? (
-        <p style={{ color: "var(--text-muted)" }}>
-          <a href="/login" style={{ color: "var(--accent)" }}>
-            Sign in
-          </a>{" "}
-          to see this creator&apos;s posts.
-        </p>
-      ) : (
-        <>
-          {showTabs && (
-            <div style={tabRowStyle}>
-              {tiersPresent.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTab((cur) => (cur === t ? undefined : t))}
-                  style={tabButtonStyle(tab === t)}
-                >
-                  {t === "FREE" ? "Teasers" : t === "VIP" ? "VIP" : "Exclusive"}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {gridError && <p style={{ color: "var(--danger)" }}>{gridError}</p>}
-          {gridInitialLoading ? (
-            <p style={{ color: "var(--text-muted)" }}>Loading...</p>
-          ) : visibleItems.length === 0 ? (
-            <p style={{ color: "var(--text-muted)" }}>No content yet.</p>
-          ) : (
-            <div style={contentListStyle}>
-              {visibleItems.map((item) => (
-                <PostCard key={item.contentId} item={item} />
-              ))}
-            </div>
-          )}
-          <div ref={sentinelRef} style={{ height: "1px" }} aria-hidden="true" />
-          {gridLoadingMore && <p style={{ color: "var(--text-muted)", textAlign: "center" }}>Loading more...</p>}
-        </>
+      {/* SEO Phase 4: no more sign-in gate here — the first page arrives
+          server-rendered (initialItems), real for every visitor. */}
+      {showTabs && (
+        <div style={tabRowStyle}>
+          {tiersPresent.map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab((cur) => (cur === t ? undefined : t))}
+              style={tabButtonStyle(tab === t)}
+            >
+              {t === "FREE" ? "Teasers" : t === "VIP" ? "VIP" : "Exclusive"}
+            </button>
+          ))}
+        </div>
       )}
+
+      {gridError && <p style={{ color: "var(--danger)" }}>{gridError}</p>}
+      {visibleItems.length === 0 ? (
+        <p style={{ color: "var(--text-muted)" }}>No content yet.</p>
+      ) : (
+        <div style={contentListStyle}>
+          {visibleItems.map((item) => (
+            <PostCard key={item.contentId} item={item} />
+          ))}
+        </div>
+      )}
+      <div ref={sentinelRef} style={{ height: "1px" }} aria-hidden="true" />
+      {gridLoadingMore && <p style={{ color: "var(--text-muted)", textAlign: "center" }}>Loading more...</p>}
 
       {messageOpen && <ComposeMessageModal creatorProfileId={creatorProfileId} onClose={() => setMessageOpen(false)} />}
     </>

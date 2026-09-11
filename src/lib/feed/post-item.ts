@@ -107,7 +107,13 @@ export async function shapeContentItem(
     mediaType: item.mediaType,
     accessLevel: item.accessLevel,
     caption: item.caption,
-    publishedAt: item.publishedAt,
+    // Normalized to a real ISO string here rather than left as
+    // Date|string — this used to work only by accident, relying on
+    // NextResponse.json() to coerce a Date on its way out. SEO Phase 4
+    // added direct (non-HTTP) callers of this function from Server
+    // Components, which receive whatever this returns verbatim with no
+    // such coercion in between.
+    publishedAt: item.publishedAt instanceof Date ? item.publishedAt.toISOString() : item.publishedAt,
     likeCount: item._count.likes,
     viewerHasLiked: opts.viewerHasLiked,
     creator: {

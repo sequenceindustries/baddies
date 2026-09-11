@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { getPublicCreatorProfile, resolveCreatorCanonicalPath } from "@/lib/creator/public-profile";
+import { getCreatorPublicContentPage } from "@/lib/creator/public-content";
 import { SITE_URL } from "@/lib/seo/site-url";
 import { CreatorProfileClient } from "./CreatorProfileClient";
 
@@ -63,11 +65,21 @@ export default async function CreatorProfilePage({
 }: {
   params: { creatorProfileId: string };
 }) {
-  const creator = await getPublicCreatorProfile(params.creatorProfileId);
+  const [creator, viewer] = await Promise.all([
+    getPublicCreatorProfile(params.creatorProfileId),
+    getCurrentUser(),
+  ]);
 
   if (!creator) {
     notFound();
   }
+
+  // SEO Phase 4: the first content page is now server-rendered too —
+  // real, unique, crawlable caption text per creator instead of a bare
+  // shell. Never a media URL either way (see getCreatorPublicContentPage's
+  // own doc comment) — `viewer` being null (anonymous/crawler) is
+  // already a safe, supported case, not a new one.
+  const contentPage = await getCreatorPublicContentPage({ creatorProfileId: creator.creatorProfileId, viewer });
 
   const canonicalPath = resolveCreatorCanonicalPath(creator);
   const name = creator.displayName ?? "Creator";
@@ -107,7 +119,12 @@ export default async function CreatorProfilePage({
     <main style={mainStyle}>
       {/* eslint-disable-next-line react/no-danger -- server-generated from already-public creator fields only, never raw user HTML */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <CreatorProfileClient creatorProfileId={creator.creatorProfileId} initialCreator={creator} />
+      <CreatorProfileClient
+        creatorProfileId={creator.creatorProfileId}
+        initialCreator={creator}
+        initialItems={contentPage?.items ?? []}
+        initialCursor={contentPage?.nextCursor ?? null}
+      />
     </main>
   );
 }
