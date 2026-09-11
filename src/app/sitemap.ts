@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { db } from "@/lib/db/client";
 import { resolveCreatorCanonicalPath } from "@/lib/creator/public-profile";
+import { LOCATIONS, getLocationCreators } from "@/lib/discovery/locations";
 import { SITE_URL } from "@/lib/seo/site-url";
 
 // Without this, Next statically generates sitemap.xml once at build
@@ -65,5 +66,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.5,
   }));
 
-  return [...staticEntries, ...creatorEntries, ...categoryEntries];
+  // SEO Phase 5: a curated location is only listed here once it clears
+  // its own indexability threshold — kept in agreement with that same
+  // page's own generateMetadata robots.index value (both read the same
+  // getLocationCreators result), so the sitemap never advertises a URL
+  // Google would be told not to index if it followed the link anyway.
+  const locationResults = await Promise.all(LOCATIONS.map((location) => getLocationCreators(location.slug)));
+  const locationEntries: MetadataRoute.Sitemap = locationResults
+    .filter((location): location is NonNullable<typeof location> => location !== null && location.indexable)
+    .map((location) => ({
+      url: `${SITE_URL}/locations/${location.slug}`,
+      changeFrequency: "weekly",
+      priority: 0.6,
+    }));
+
+  return [...staticEntries, ...creatorEntries, ...categoryEntries, ...locationEntries];
 }
