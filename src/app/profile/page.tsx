@@ -13,6 +13,7 @@ import {
   errorBannerStyle,
   LocationField,
   ImageUploadField,
+  EmptyContentState,
 } from "@/components/ui";
 import { SegmentedTabs } from "@/components/segmented-tabs";
 import { VerificationFlow } from "@/components/verification-capture";
@@ -870,7 +871,7 @@ function ContentPanel() {
       {loadingItems ? (
         <p style={{ color: "var(--text-muted)" }}>Loading...</p>
       ) : items.length === 0 ? (
-        <p style={{ color: "var(--text-muted)" }}>Nothing uploaded yet.</p>
+        <EmptyContentState message="Nothing uploaded yet." />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
           {sortedItems.map((item) => {

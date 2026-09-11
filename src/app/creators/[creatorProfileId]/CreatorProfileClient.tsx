@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { VerifiedBadge, CheckTick, useSession } from "@/components/ui";
+import { VerifiedBadge, CheckTick, useSession, EmptyContentState } from "@/components/ui";
 import { ReportButton } from "@/components/cards";
 import { ComposeMessageModal, PostCard, type PostCardItem } from "@/components/post-card";
 import type { PublicCreatorProfile } from "@/lib/creator/public-profile";
@@ -221,7 +221,7 @@ export function CreatorProfileClient({
 
       {gridError && <p style={{ color: "var(--danger)" }}>{gridError}</p>}
       {visibleItems.length === 0 ? (
-        <p style={{ color: "var(--text-muted)" }}>No content yet.</p>
+        <EmptyContentState message="No content yet." />
       ) : (
         <div style={contentListStyle}>
           {visibleItems.map((item) => (

@@ -1614,6 +1614,45 @@ const signInGateSecondaryStyle: React.CSSProperties = {
   display: "inline-block",
 };
 
+// A small shared empty-state visual for the 4 places a content grid/feed
+// can come up genuinely empty (discovery, home feed, a creator's own
+// content tab, a public creator profile) — previously plain muted text
+// in each, independently duplicated. Promoted to one real component
+// (matching LocationField/SignInGate's own precedent for a shared
+// abstraction, not this codebase's usual small-duplication default)
+// because all 4 want the exact same dimmed-wordmark-plus-message
+// treatment, and a single change here now reaches every call site.
+export function EmptyContentState({ message }: { message: string }) {
+  return (
+    <div style={emptyContentStateStyle}>
+      <NextImage
+        src="/baddies-wordmark-white.webp"
+        alt=""
+        aria-hidden="true"
+        width={2000}
+        height={462}
+        style={emptyContentLogoStyle}
+      />
+      <p style={{ color: "var(--text-muted)", margin: 0 }}>{message}</p>
+    </div>
+  );
+}
+
+const emptyContentStateStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  gap: "0.85rem",
+  padding: "2.75rem 1rem",
+  textAlign: "center",
+};
+
+const emptyContentLogoStyle: React.CSSProperties = {
+  width: "130px",
+  height: "auto",
+  opacity: 0.3,
+};
+
 export const errorBannerStyle: React.CSSProperties = {
   background: "rgba(217, 115, 106, 0.12)",
   border: "1px solid rgba(217, 115, 106, 0.4)",

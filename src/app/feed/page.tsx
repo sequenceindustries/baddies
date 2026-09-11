@@ -6,7 +6,7 @@ import { PostCard, type PostCardItem } from "@/components/post-card";
 import { StoryAvatarRow } from "@/components/story-avatar-row";
 import { StoryComposerButton } from "@/components/story-composer-button";
 import { UploadForm } from "@/components/upload-form";
-import { useSession } from "@/components/ui";
+import { EmptyContentState, useSession } from "@/components/ui";
 
 /**
  * The feed — Twitter/X-style single-column, infinite-scroll vertical
@@ -99,9 +99,7 @@ export default function FeedPage() {
       {initialLoading ? (
         <p style={{ color: "var(--text-muted)" }}>Loading...</p>
       ) : items.length === 0 ? (
-        <p style={{ color: "var(--text-muted)" }}>
-          Nothing here yet — once creators publish content, it&apos;ll show up here.
-        </p>
+        <EmptyContentState message="Nothing here yet — once creators publish content, it'll show up here." />
       ) : (
         <div style={feedListStyle}>
           {items.map((item) => (

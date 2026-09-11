@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CreatorCardRow, type CreatorCardData } from "@/components/cards";
 import { GridThumbnail, PostDetailOverlay } from "@/components/grid-thumbnail";
 import type { PostCardItem } from "@/components/post-card";
-import { inputStyle } from "@/components/ui";
+import { EmptyContentState, inputStyle } from "@/components/ui";
 
 interface CreatorsResponse {
   creators: CreatorCardData[];
@@ -135,7 +135,7 @@ export function DiscoveryClient({
         <>
           {gridError && <p style={{ color: "var(--danger)" }}>{gridError}</p>}
           {items.length === 0 ? (
-            <p style={{ color: "var(--text-muted)" }}>Nothing here yet — check back once creators publish content.</p>
+            <EmptyContentState message="Nothing here yet — check back once creators publish content." />
           ) : (
             <div className="discovery-grid">
               {items.map((item) => (
