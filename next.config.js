@@ -67,6 +67,36 @@ const nextConfig = {
       },
     ];
   },
+
+  // SEO Phase 6: 6 renamed routes from earlier in this app's history
+  // (/home, /search, /dashboard, /subscriptions, /fan-home, /creator-
+  // dashboard) used to be "use client" pages that only redirected
+  // inside a useEffect — a crawler, or anything not executing JS, saw
+  // a blank page with no real HTTP redirect at all. The obvious fix —
+  // a page.tsx calling `redirect()`/`permanentRedirect()` from
+  // "next/navigation" — turned out to have a reproducible bug in this
+  // exact Next.js 14.2.35 setup: the redirect digest gets embedded in
+  // the RSC payload as a hydration-time signal instead of ever being
+  // converted into a real top-level HTTP 3xx response, confirmed via
+  // curl/fetch against both `next dev` and a real `next start` build
+  // (not a dev-only quirk). This `redirects()` config is the standard,
+  // documented, framework-level mechanism for exactly this situation —
+  // Next resolves it before ever looking for a matching page component,
+  // so it reliably produces a real redirect (permanent: true → 308) for
+  // every client (crawler, curl, or a real browser) — and it's what
+  // real-world Next apps use for renamed routes in the first place, not
+  // a workaround. The now-unnecessary page.tsx stubs at all 6 old paths
+  // were deleted.
+  async redirects() {
+    return [
+      { source: "/home", destination: "/feed", permanent: true },
+      { source: "/search", destination: "/discovery", permanent: true },
+      { source: "/dashboard", destination: "/profile", permanent: true },
+      { source: "/subscriptions", destination: "/fan-subscriptions", permanent: true },
+      { source: "/fan-home", destination: "/feed", permanent: true },
+      { source: "/creator-dashboard", destination: "/profile", permanent: true },
+    ];
+  },
 };
 
 module.exports = nextConfig;

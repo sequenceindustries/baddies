@@ -34,6 +34,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticEntries: MetadataRoute.Sitemap = [
     { url: SITE_URL, changeFrequency: "daily", priority: 1 },
     { url: `${SITE_URL}/discovery`, changeFrequency: "daily", priority: 0.8 },
+    // SEO Phase 6 cross-check: a real, genuinely public marketing/
+    // application page (already in middleware's PUBLIC_PATHS, reachable
+    // pre-launch and pre-account) that Phase 2 missed from this list.
+    { url: `${SITE_URL}/founding-baddies`, changeFrequency: "weekly", priority: 0.6 },
     { url: `${SITE_URL}/terms`, changeFrequency: "yearly", priority: 0.3 },
     { url: `${SITE_URL}/privacy`, changeFrequency: "yearly", priority: 0.3 },
     { url: `${SITE_URL}/creator-terms`, changeFrequency: "yearly", priority: 0.3 },

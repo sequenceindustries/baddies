@@ -22,6 +22,30 @@ import { SITE_URL } from "@/lib/seo/site-url";
  * named `(admin)`/`(partner)` as paths, which are Next.js route groups
  * stripped from the actual URL and would match nothing. The real path
  * behind `(partner)` is `/partner-dashboard`, included below.
+ *
+ * SEO Phase 6 cross-check against every top-level route folder added
+ * two real, distinct gaps:
+ *   - `/apply` — a signed-in creator's private application/identity-
+ *     verification flow, same privacy class as /settings or /wallet.
+ *   - `/feed` — NOT private (its GET /api/feed already tolerates a
+ *     signed-out viewer), but it's still a "use client" page with no
+ *     server-rendered content, unlike /discovery after this project's
+ *     Phase 4 conversion — a crawler visiting it today gets an empty
+ *     shell either way, so disallowing it avoids wasting crawl budget
+ *     until (if) it gets the same SSR treatment. A genuine future SEO
+ *     opportunity, not a privacy decision — revisit this entry if that
+ *     conversion ever happens.
+ * `/home`, `/search`, `/dashboard`, `/creator-dashboard`, `/fan-home`,
+ * `/subscriptions` need no entry here at all — Phase 6 also converted
+ * every one of them from a client-side-only redirect (a "use client"
+ * page.tsx stub) into a real, framework-level 308 via `redirects()` in
+ * next.config.js (see that file's own doc comment for why: page-level
+ * `redirect()`/`permanentRedirect()` from "next/navigation" turned out
+ * to have a reproducible bug in this exact Next.js version that never
+ * produces a real top-level HTTP redirect). A crawler now gets
+ * redirected immediately to whatever real, already-classified page
+ * each one points at, rather than rendering blank content of its own
+ * to potentially disallow.
  */
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -41,6 +65,8 @@ export default function robots(): MetadataRoute.Robots {
         "/fan-home",
         "/fan-subscriptions",
         "/subscriptions",
+        "/apply",
+        "/feed",
       ],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,
