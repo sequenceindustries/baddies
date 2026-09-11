@@ -5,7 +5,9 @@ import "./globals.css";
 import { Nav, SessionProvider } from "@/components/ui";
 import { AgeGate } from "@/components/age-gate";
 import { BottomTabBar } from "@/components/bottom-tab-bar";
+import { StructuredData } from "@/components/structured-data";
 import { isKnownCrawlerUserAgent } from "@/lib/seo/crawler";
+import { SITE_URL } from "@/lib/seo/site-url";
 
 // Performance audit, P0: this was a `@import url("https://fonts.
 // googleapis.com/...")` inside globals.css — one of the classic render-
@@ -36,8 +38,32 @@ const montserrat = Montserrat({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "baddies",
   description: "Verified. Safe. Africa's adult content network. 18+ only.",
+  // Every page inherits these unless it exports its own generateMetadata
+  // with its own openGraph/twitter block (Next.js merges shallowly, so
+  // a page-level override replaces this default rather than needing to
+  // repeat it). hero-banner.jpg (2400x1371, ~1.75:1) is the only stable,
+  // non-expiring image asset available site-wide — see this project's
+  // SEO plan for why avatar/cover URLs (7-day signed, re-signed per
+  // read) can't back a fallback OG image.
+  openGraph: {
+    type: "website",
+    siteName: "baddies",
+    images: ["/hero-banner.jpg"],
+  },
+  twitter: {
+    card: "summary_large_image",
+  },
+  // The real, honest, industry-standard adult-content label recognized
+  // by SafeSearch and parental-control content filters — not a
+  // manipulative indexing trick. baddies is 18+ only (see AgeGate); this
+  // just makes that machine-readable the same way real adult platforms
+  // already do.
+  other: {
+    rating: "RTA-5042-1996-1400-1577-RTA",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -57,6 +83,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={montserrat.variable}>
       <body>
+        <StructuredData />
         <AgeGate isCrawler={isCrawler}>
           {/* Performance audit: one shared session fetch for the whole
               tree instead of every useSession() caller (Nav, every
