@@ -1,5 +1,9 @@
 "use client";
 
+// Aliased: this file already uses the browser's native `Image`
+// constructor (`new Image()`, for client-side avatar-resize preview)
+// further down, which the default `next/image` import name would shadow.
+import NextImage from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
@@ -227,8 +231,12 @@ export function Nav({ comingSoon = false }: { comingSoon?: boolean }) {
     <div style={navWrapStyle}>
     <nav style={navStyle}>
       <Link href="/" style={{ ...brandStyle, textDecoration: "none" }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/baddies-wordmark-white.webp" alt="baddies" style={brandLogoStyle} />
+        {/* SEO Phase 8 — see src/app/page.tsx's own comment on the
+            same asset for why this is the one <img> in the app worth
+            converting to next/image (a genuinely static, non-expiring
+            file, unlike signed avatar/cover URLs). Above-the-fold on
+            every page, so `priority` here too. */}
+        <NextImage src="/baddies-wordmark-white.webp" alt="baddies" width={2000} height={462} priority style={brandLogoStyle} />
       </Link>
 
       <div className="nav-links-desktop" style={navDesktopLinksStyle}>

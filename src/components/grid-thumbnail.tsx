@@ -105,8 +105,17 @@ export function GridThumbnail({
         ) : media.mimeType.startsWith("audio/") ? (
           <div style={tileAudioGlyphStyle}>♪</div>
         ) : (
+          // SEO Phase 8: real, non-keyword-stuffed alt text — this
+          // tile now renders in genuinely public HTML (Discovery,
+          // creator-profile grids) since Phase 4. A post's own caption
+          // is the most descriptive text available; falls back to
+          // crediting the creator when there isn't one.
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={media.signedUrl} alt="" style={tileMediaStyle} />
+          <img
+            src={media.signedUrl}
+            alt={item.caption || `Photo by ${item.creator.displayName ?? "a baddies creator"}`}
+            style={tileMediaStyle}
+          />
         )
       ) : (
         <div style={tileLoadingStyle}>{failed && <span style={tileFailedTextStyle}>—</span>}</div>

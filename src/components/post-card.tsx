@@ -315,8 +315,16 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
             ) : media.mimeType.startsWith("audio/") ? (
               <audio key={activeIndex} src={media.signedUrl} controls style={{ width: "100%" }} onClick={(e) => e.stopPropagation()} />
             ) : (
+              // SEO Phase 8: real, non-keyword-stuffed alt text — this
+              // now renders in genuinely public HTML (a creator's own
+              // profile content list, since Phase 4).
               // eslint-disable-next-line @next/next/no-img-element
-              <img key={activeIndex} src={media.signedUrl} alt="" style={postMediaElementStyle} />
+              <img
+                key={activeIndex}
+                src={media.signedUrl}
+                alt={item.caption || `Photo by ${item.creator.displayName ?? "a baddies creator"}`}
+                style={postMediaElementStyle}
+              />
             )}
             {heartPopKey && (
               <HeartPop key={heartPopKey} onDone={() => setHeartPopKey(null)} />

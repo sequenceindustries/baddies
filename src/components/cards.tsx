@@ -68,12 +68,25 @@ export function CreatorCard({ creator, size = "md" }: { creator: CreatorCardData
           creator.thumbnailMimeType?.startsWith("video/") ? (
             <video src={creator.thumbnailUrl!} muted style={cardMediaLayerStyle} onError={() => setThumbFailed(true)} />
           ) : (
+            // SEO Phase 8: real, non-keyword-stuffed alt text — this
+            // card renders in genuinely public HTML on /discovery,
+            // category, and location pages (since Phases 4-5).
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={creator.thumbnailUrl!} alt="" style={cardMediaLayerStyle} onError={() => setThumbFailed(true)} />
+            <img
+              src={creator.thumbnailUrl!}
+              alt={`${creator.displayName ?? "Creator"} — verified creator on baddies`}
+              style={cardMediaLayerStyle}
+              onError={() => setThumbFailed(true)}
+            />
           )
         ) : showAvatarAsMedia ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={creator.avatarUrl!} alt="" style={cardMediaLayerStyle} onError={() => setAvatarFailed(true)} />
+          <img
+            src={creator.avatarUrl!}
+            alt={`${creator.displayName ?? "Creator"} — verified creator on baddies`}
+            style={cardMediaLayerStyle}
+            onError={() => setAvatarFailed(true)}
+          />
         ) : (
           <div style={cardMediaFallbackStyle}>
             <span style={{ fontFamily: "var(--font-display)", fontSize: "2.4rem", color: "var(--accent)" }}>

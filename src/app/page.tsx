@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import Link from "next/link";
 import { useSession, roleHomePath } from "@/components/ui";
 import { CreatorCardRow, type CreatorCardData } from "@/components/cards";
@@ -63,8 +64,14 @@ export default function LandingPage() {
       <section className="hero-plain">
         <div className="hero-plain-content">
           <h1 style={heroTitleStyle}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/baddies-wordmark-white.webp" alt="baddies" style={heroLogoStyle} />
+            {/* SEO Phase 8: the wordmark is the one genuinely static,
+                non-expiring image asset used site-wide (unlike avatar/
+                cover URLs, which are signed and re-signed per read —
+                see this project's SEO plan for why those stay plain
+                <img>) — real dimensions (2000x462) let next/image
+                reserve the correct aspect ratio and avoid any CLS,
+                while `style` still governs the actual rendered size. */}
+            <Image src="/baddies-wordmark-white.webp" alt="baddies" width={2000} height={462} priority style={heroLogoStyle} />
           </h1>
           <p style={heroSubStyle}>
             Africa&apos;s adult content network — where verified South African creators publish
