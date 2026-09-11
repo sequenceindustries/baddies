@@ -107,6 +107,7 @@ describe.skipIf(!dbAvailable)("payment webhook -> partner commission reversal (i
         platforms: [],
         whyJoinBaddies: "",
         confirmsAdult: true,
+        confirmsFemale: true,
         agreesToVerification: true,
       },
     });

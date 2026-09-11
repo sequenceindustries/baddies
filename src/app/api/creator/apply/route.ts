@@ -24,6 +24,13 @@ const ApplySchema = z.object({
     confirmsAdult: z.literal(true, {
           errorMap: () => ({ message: "You must confirm you are 18 or older to apply as a creator." }),
     }),
+    // Self-declared eligibility — baddies creators are female only. See
+    // CreatorProfile.confirmsFemale's own schema comment for the full
+    // reasoning (self-declaration + human admin review, not an
+    // automated check).
+    confirmsFemale: z.literal(true, {
+          errorMap: () => ({ message: "baddies creator accounts are for female creators only — please confirm to continue." }),
+    }),
     agreesToCreatorAgreement: z.literal(true, {
           errorMap: () => ({ message: "You must accept the Creator Agreement to apply." }),
     }),
@@ -65,7 +72,7 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
           return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
-    const { displayName, legalName, bio, avatarUrl, featuredImageUrl } = parsed.data;
+    const { displayName, legalName, bio, avatarUrl, featuredImageUrl, confirmsFemale } = parsed.data;
 
   const legalNameEncrypted = encryptField(legalName);
 
@@ -88,6 +95,7 @@ export async function POST(req: NextRequest) {
                           legalNameEncrypted,
                           appliedAt: new Date(),
                           coverImageUrl: persistedCoverImageUrl,
+                          confirmsFemale,
                 },
         });
 

@@ -10,6 +10,7 @@ interface CreatorApplication {
   status: string;
   appliedAt: string;
   applicantEmail: string;
+  confirmsFemale: boolean;
   identityDetails: { dateOfBirth: string; nationality: string; maskedIdNumber: string } | null;
   identityDocumentUrl: string | null;
   identityAgeReviewUrl: string | null;
@@ -3797,6 +3798,12 @@ function CreatorQueue() {
                     )}
                   </div>
                 )}
+                {/* Self-declared at apply-time (baddies creators are
+                    female only) — shown right alongside the identity/
+                    age/liveness evidence above, the same glance where
+                    an admin already cross-checks a real photo against
+                    what an applicant claims. */}
+                <div style={mutedSmallStyle}>Self-declared female: {app.confirmsFemale ? "Yes ✓" : "Not confirmed"}</div>
                 {app.identityAgeReviewUrl && (
                   <div style={{ marginTop: "0.4rem" }}>
                     <a href={app.identityAgeReviewUrl} target="_blank" rel="noreferrer" style={{ ...filterChipStyle, textDecoration: "none" }}>

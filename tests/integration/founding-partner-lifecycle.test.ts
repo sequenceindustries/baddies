@@ -131,6 +131,7 @@ describe.skipIf(!dbAvailable)("Founding Partner Programme v2 — Phase 6 hardeni
         city: "Cape Town",
         platforms: [{ category: "social", platform: "Instagram", handle: "@lifecycle", link: "" }],
         confirmsAdult: true,
+        confirmsFemale: true,
         agreesToVerification: true,
       },
       { cookie: `baddies_referral=${tokenA}`, "x-forwarded-for": `10.0.1.${Date.now() % 250}` }
@@ -166,6 +167,7 @@ describe.skipIf(!dbAvailable)("Founding Partner Programme v2 — Phase 6 hardeni
         city: "Cape Town",
         platforms: [{ category: "social", platform: "Instagram", handle: "@lifecycle2", link: "" }],
         confirmsAdult: true,
+        confirmsFemale: true,
         agreesToVerification: true,
       },
       { cookie: `baddies_referral=${tokenB}`, "x-forwarded-for": `10.0.2.${Date.now() % 250}` }
@@ -200,6 +202,7 @@ describe.skipIf(!dbAvailable)("Founding Partner Programme v2 — Phase 6 hardeni
         platforms: [],
         whyJoinBaddies: "",
         confirmsAdult: true,
+        confirmsFemale: true,
         agreesToVerification: true,
       },
     });

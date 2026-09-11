@@ -79,6 +79,7 @@ describe.skipIf(!dbAvailable)("resolveCreatorRevenueShare + postRevenueEvent (in
         platforms: [],
         whyJoinBaddies: "",
         confirmsAdult: true,
+        confirmsFemale: true,
         agreesToVerification: true,
       },
     });

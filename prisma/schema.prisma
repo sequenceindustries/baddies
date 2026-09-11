@@ -429,6 +429,18 @@ model CreatorProfile {
   // the moment it ships. See POST /api/creators/:id/message.
   acceptsMessages Boolean @default(true)
 
+  // Self-declared at application time (POST /api/creator/apply and
+  // POST /api/founding/apply both require z.literal(true) here) —
+  // baddies creators are female only. Enforced by human admin review
+  // during the existing verification-approval step, cross-checked
+  // against the identity/age/liveness evidence already collected, not
+  // by any automated/biometric check — matching this app's own
+  // consistent verification philosophy everywhere else. Defaulted
+  // false so every existing row (the seeded dummy creators, any
+  // already-verified real creators) needs no backfill or forced
+  // re-verification.
+  confirmsFemale Boolean @default(false)
+
   appliedAt  DateTime  @default(now())
   approvedAt DateTime?
   approvedBy String? // admin User.id
@@ -1179,6 +1191,11 @@ model FoundingApplication {
 
   confirmsAdult        Boolean
   agreesToVerification Boolean
+  // Mirrors CreatorProfile.confirmsFemale exactly — see that field's
+  // own doc comment. Written here too so the same declaration is on
+  // record on this recruitment-form row, not only on the CreatorProfile
+  // this application's own transaction also creates.
+  confirmsFemale Boolean @default(false)
 
   status     FoundingApplicationStatus @default(APPLIED)
   adminNotes String?

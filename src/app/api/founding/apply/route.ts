@@ -54,6 +54,13 @@ const ApplySchema = z.object({
   confirmsAdult: z.literal(true, {
     errorMap: () => ({ message: "You must confirm you are 18 or older to apply." }),
   }),
+  // Self-declared eligibility — baddies creators are female only. See
+  // CreatorProfile.confirmsFemale's own schema comment for the full
+  // reasoning (self-declaration + human admin review, not an
+  // automated check).
+  confirmsFemale: z.literal(true, {
+    errorMap: () => ({ message: "baddies creator accounts are for female creators only — please confirm to continue." }),
+  }),
   agreesToVerification: z.literal(true, {
     errorMap: () => ({ message: "You must agree to identity verification to apply." }),
   }),
@@ -226,6 +233,13 @@ export async function POST(req: NextRequest) {
         legalNameEncrypted: encryptField(applicationData.fullName),
         appliedAt: new Date(),
         isFoundingBaddie: true,
+        // applicationData already carries this straight through Zod
+        // (ApplySchema's own confirmsFemale field) — set explicitly
+        // here too since this create() doesn't spread applicationData,
+        // unlike the FoundingApplication row below. This is what makes
+        // the declaration visible in the same admin creator-review
+        // queue as the ordinary /apply path.
+        confirmsFemale: applicationData.confirmsFemale,
       },
     });
 

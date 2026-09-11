@@ -207,6 +207,7 @@ function ApplicationForm() {
   const [audienceSize, setAudienceSize] = useState("");
 
   const [confirmsAdult, setConfirmsAdult] = useState(false);
+  const [confirmsFemale, setConfirmsFemale] = useState(false);
   const [agreesToVerification, setAgreesToVerification] = useState(false);
   const [website, setWebsite] = useState(""); // honeypot — see hidden field below
 
@@ -268,8 +269,8 @@ function ApplicationForm() {
       setError("Password must be at least 10 characters.");
       return;
     }
-    if (!confirmsAdult || !agreesToVerification) {
-      setError("Please confirm both checkboxes before submitting.");
+    if (!confirmsAdult || !confirmsFemale || !agreesToVerification) {
+      setError("Please confirm every checkbox before submitting.");
       return;
     }
 
@@ -289,6 +290,7 @@ function ApplicationForm() {
         platforms,
         audienceSize: audienceSize || undefined,
         confirmsAdult,
+        confirmsFemale,
         agreesToVerification,
         website,
       }),
@@ -429,6 +431,16 @@ function ApplicationForm() {
         </FormFieldset>
 
         <FormFieldset legend="Verification">
+          <label style={checkboxRowStyle}>
+            <input
+              type="checkbox"
+              checked={confirmsFemale}
+              onChange={(e) => setConfirmsFemale(e.target.checked)}
+              required
+              style={{ marginTop: "0.15rem" }}
+            />
+            I confirm I am female — baddies is a platform for female creators.
+          </label>
           <label style={checkboxRowStyle}>
             <input
               type="checkbox"

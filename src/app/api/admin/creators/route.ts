@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
       id: true,
       status: true,
       appliedAt: true,
+      confirmsFemale: true,
       user: { select: { email: true } },
       verifications: {
         select: { type: true, status: true, completedAt: true, providerReference: true },
@@ -81,6 +82,7 @@ export async function GET(req: NextRequest) {
         status: app.status,
         appliedAt: app.appliedAt,
         applicantEmail: app.user.email,
+        confirmsFemale: app.confirmsFemale,
         identityDetails: app.identity
           ? {
               dateOfBirth: app.identity.dateOfBirth,

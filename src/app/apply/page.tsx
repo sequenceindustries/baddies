@@ -36,6 +36,7 @@ export default function ApplyPage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(null);
   const [confirmsAdult, setConfirmsAdult] = useState(false);
+  const [confirmsFemale, setConfirmsFemale] = useState(false);
   const [agreesToCreatorAgreement, setAgreesToCreatorAgreement] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -89,6 +90,7 @@ export default function ApplyPage() {
         avatarUrl: avatarUrl || undefined,
         featuredImageUrl: featuredImageUrl || undefined,
         confirmsAdult,
+        confirmsFemale,
         agreesToCreatorAgreement,
       }),
     });
@@ -165,6 +167,17 @@ export default function ApplyPage() {
             onChange={setFeaturedImageUrl}
             shape="rect"
           />
+
+          <label style={checkboxRowStyle}>
+            <input
+              type="checkbox"
+              checked={confirmsFemale}
+              onChange={(e) => setConfirmsFemale(e.target.checked)}
+              required
+              style={{ marginTop: "0.15rem" }}
+            />
+            I confirm I am female — baddies is a platform for female creators.
+          </label>
 
           <label style={checkboxRowStyle}>
             <input

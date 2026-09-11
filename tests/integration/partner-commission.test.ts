@@ -91,6 +91,7 @@ describe.skipIf(!dbAvailable)("Founding Partner commission (integration)", () =>
         platforms: [],
         whyJoinBaddies: "",
         confirmsAdult: true,
+        confirmsFemale: true,
         agreesToVerification: true,
       },
     });

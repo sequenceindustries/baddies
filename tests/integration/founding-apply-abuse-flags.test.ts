@@ -66,6 +66,7 @@ describe.skipIf(!dbAvailable)("POST /api/founding/apply duplicate-email abuse fl
         city: "Cape Town",
         platforms: [{ category: "social", platform: "Instagram", handle: "@repeat", link: "" }],
         confirmsAdult: true,
+        confirmsFemale: true,
         agreesToVerification: true,
       })
     );
