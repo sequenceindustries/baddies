@@ -13,8 +13,17 @@ const STORAGE_KEY = "baddies_age_confirmed";
  * content and no way to interact with the page underneath it.
  * Confirmation is remembered in localStorage so a returning visitor
  * doesn't see this every single page load, only once per browser.
+ *
+ * `isCrawler` (server-detected in layout.tsx via a known search-engine
+ * user-agent, see src/lib/seo/crawler.ts) lets a real crawler straight
+ * through to `children` — this gate otherwise blocks 100% of
+ * server-rendered content on every page, since `confirmed` only ever
+ * resolves inside the useEffect below, which never runs during SSR or
+ * a crawler's non-JS first pass. Every real human visitor is
+ * completely unaffected: the hooks/state below still run exactly as
+ * before, this only adds one extra OR'd condition to the render check.
  */
-export function AgeGate({ children }: { children: React.ReactNode }) {
+export function AgeGate({ children, isCrawler = false }: { children: React.ReactNode; isCrawler?: boolean }) {
   const [confirmed, setConfirmed] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -30,7 +39,7 @@ export function AgeGate({ children }: { children: React.ReactNode }) {
     window.location.href = "https://www.google.com";
   }
 
-  if (confirmed) return <>{children}</>;
+  if (isCrawler || confirmed) return <>{children}</>;
 
   // Also covers the confirmed === null (still checking storage) case —
   // rendering the gate as the default rather than a blank screen means

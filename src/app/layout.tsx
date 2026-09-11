@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { Montserrat } from "next/font/google";
+import { headers } from "next/headers";
 import "./globals.css";
 import { Nav, SessionProvider } from "@/components/ui";
 import { AgeGate } from "@/components/age-gate";
 import { BottomTabBar } from "@/components/bottom-tab-bar";
+import { isKnownCrawlerUserAgent } from "@/lib/seo/crawler";
 
 // Performance audit, P0: this was a `@import url("https://fonts.
 // googleapis.com/...")` inside globals.css — one of the classic render-
@@ -45,10 +47,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   // undefined once the same code re-runs in the browser on hydration,
   // which would flip the rendered links right after paint.
   const comingSoon = process.env.LAUNCH_MODE === "coming_soon";
+  // SEO: lets a known search-engine crawler (Googlebot etc.) straight
+  // past the 18+ AgeGate below, which otherwise blocks 100% of
+  // server-rendered content on every page for every visitor — see
+  // AgeGate's own doc comment and src/lib/seo/crawler.ts. Read here
+  // (a Server Component) rather than in AgeGate itself, since
+  // request headers aren't available inside a client component.
+  const isCrawler = isKnownCrawlerUserAgent(headers().get("user-agent"));
   return (
     <html lang="en" className={montserrat.variable}>
       <body>
-        <AgeGate>
+        <AgeGate isCrawler={isCrawler}>
           {/* Performance audit: one shared session fetch for the whole
               tree instead of every useSession() caller (Nav, every
               page, AccountMenu, etc.) firing its own — see
