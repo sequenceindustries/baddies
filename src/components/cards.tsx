@@ -306,6 +306,10 @@ export function CreatorCardRow({
  * card instead of covering the screen.
  */
 export function MediaLightbox({ mimeType, url, onClose }: { mimeType: string; url: string; onClose: () => void }) {
+  const isImage = !mimeType.startsWith("video/") && !mimeType.startsWith("audio/");
+  const [zoomed, setZoomed] = useState(false);
+  const [origin, setOrigin] = useState("50% 50%");
+
   if (typeof document === "undefined") return null;
   // Every click handler here calls stopPropagation before onClose: this
   // is rendered via createPortal straight onto document.body, but React
@@ -317,6 +321,24 @@ export function MediaLightbox({ mimeType, url, onClose }: { mimeType: string; ur
   function handleClose(e: React.MouseEvent) {
     e.stopPropagation();
     onClose();
+  }
+  // Double-click/double-tap to zoom (the standard image-viewer
+  // convention — Twitter/X, Instagram's own lightbox), zooming toward
+  // wherever was tapped rather than always the center. A second
+  // double-click/tap zooms back out. Only wired up for images — video/
+  // audio already have their own native controls and zooming a video
+  // frame isn't a meaningful gesture.
+  function handleImageDoubleClick(e: React.MouseEvent<HTMLImageElement>) {
+    e.stopPropagation();
+    if (zoomed) {
+      setZoomed(false);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    setOrigin(`${x}% ${y}%`);
+    setZoomed(true);
   }
   // No AnimatePresence *inside* this component — MediaLightbox itself
   // has no internal open/closed state, it's entirely mounted/unmounted
@@ -330,16 +352,31 @@ export function MediaLightbox({ mimeType, url, onClose }: { mimeType: string; ur
       <button onClick={handleClose} style={lightboxCloseStyle} aria-label="Close">
         ✕
       </button>
-      <motion.div style={lightboxContentStyle} onClick={(e) => e.stopPropagation()} {...fadeScale}>
+      <motion.div
+        style={{ ...lightboxContentStyle, overflow: zoomed ? "hidden" : "visible" }}
+        onClick={(e) => e.stopPropagation()}
+        {...fadeScale}
+      >
         {mimeType.startsWith("video/") ? (
           <video src={url} controls autoPlay style={lightboxMediaStyle} />
         ) : mimeType.startsWith("audio/") ? (
           <audio src={url} controls autoPlay style={{ width: "100%" }} />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt="" style={lightboxMediaStyle} />
+          <motion.img
+            src={url}
+            alt=""
+            style={{ ...lightboxMediaStyle, transformOrigin: origin, cursor: zoomed ? "grab" : "zoom-in" }}
+            animate={{ scale: zoomed ? 2.5 : 1 }}
+            transition={transitions.standard}
+            onDoubleClick={handleImageDoubleClick}
+            drag={zoomed}
+            dragElastic={0.2}
+            dragConstraints={{ top: -150, bottom: 150, left: -150, right: 150 }}
+          />
         )}
       </motion.div>
+      {isImage && !zoomed && <p style={lightboxHintStyle}>Double-click to zoom</p>}
     </motion.div>,
     document.body,
   );
@@ -735,6 +772,19 @@ const lightboxCloseStyle: React.CSSProperties = {
   fontSize: "1.1rem",
   cursor: "pointer",
   zIndex: 101,
+};
+
+// A one-time-visible affordance so "double-click to zoom" isn't a
+// hidden gesture nobody discovers — disappears the instant it's used
+// (only rendered while !zoomed).
+const lightboxHintStyle: React.CSSProperties = {
+  position: "fixed",
+  bottom: "1.5rem",
+  left: "50%",
+  transform: "translateX(-50%)",
+  color: "rgba(255, 255, 255, 0.6)",
+  fontSize: "0.78rem",
+  pointerEvents: "none",
 };
 
 // A real drawn heart (rounded twin-lobe top, pointed base) instead of the

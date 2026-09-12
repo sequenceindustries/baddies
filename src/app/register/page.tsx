@@ -14,6 +14,7 @@ import {
   errorBannerStyle,
   LocationField,
   GoogleSignInButton,
+  PasswordInput,
 } from "@/components/ui";
 
 type Intent = "FAN" | "CREATOR";
@@ -113,9 +114,8 @@ export default function RegisterPage() {
           </Field>
 
           <Field label="Password" hint="At least 10 characters.">
-            <input
+            <PasswordInput
               style={inputStyle}
-              type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               minLength={10}

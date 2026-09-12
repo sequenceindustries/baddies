@@ -31,7 +31,7 @@ interface ContentQueueItem {
   participantCount: number;
 }
 
-const TABS = ["Overview", "Members", "Creators", "Applications", "Founding Partners", "Content", "Revenue", "Payouts", "Trust & Safety", "Activity", "Audit Log", "System Health", "Reset Roster", "Wipe Test Content"] as const;
+const TABS = ["Overview", "Members", "Creators", "Fans", "Applications", "Founding Partners", "Content", "Revenue", "Payouts", "Trust & Safety", "Activity", "Audit Log", "System Health", "Reset Roster", "Wipe Test Content"] as const;
 type Tab = (typeof TABS)[number];
 
 type RangeKey = "today" | "7d" | "30d" | "90d" | "all";
@@ -109,6 +109,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Members", tab: "Members" },
       { label: "Creators", tab: "Creators" },
+      { label: "Fans", tab: "Fans" },
       { label: "Applications", tab: "Applications", badgeKey: "applications" },
       { label: "Founding Partners", tab: "Founding Partners" },
     ],
@@ -318,6 +319,7 @@ export default function AdminDashboardPage() {
         )}
         {tab === "Members" && <MembersPanel />}
         {tab === "Creators" && <MembersPanel lockedRole="CREATOR" />}
+        {tab === "Fans" && <MembersPanel lockedRole="FAN" />}
         {tab === "Applications" && (
           <>
             <FoundingApplicationsQueue statusFilter={foundingFilter} onClearFilter={() => setFoundingFilter(null)} />
@@ -767,7 +769,7 @@ interface MemberRow {
  * only for rows that happen to be creators. Both open the same
  * MemberDetailView for a clicked row — no separate Creators UI.
  */
-function MembersPanel({ lockedRole }: { lockedRole?: "CREATOR" }) {
+function MembersPanel({ lockedRole }: { lockedRole?: "CREATOR" | "FAN" }) {
   const [query, setQuery] = useState("");
   const [role, setRole] = useState(lockedRole ?? "");
   const [status, setStatus] = useState("");
@@ -847,9 +849,13 @@ function MembersPanel({ lockedRole }: { lockedRole?: "CREATOR" }) {
     return <MemberDetailView userId={selectedUserId} onBack={() => setSelectedUserId(null)} onChanged={reload} />;
   }
 
+  const nounPlural = lockedRole === "CREATOR" ? "Creators" : lockedRole === "FAN" ? "Fans" : "Members";
+  const nounSingularLower = lockedRole === "CREATOR" ? "creator" : lockedRole === "FAN" ? "fan" : "member";
+  const nounPluralLower = lockedRole === "CREATOR" ? "creators" : lockedRole === "FAN" ? "fans" : "members";
+
   return (
     <section>
-      <h2 style={sectionHeadingStyle}>{lockedRole === "CREATOR" ? "Creators" : "Members"}</h2>
+      <h2 style={sectionHeadingStyle}>{nounPlural}</h2>
 
       <div style={filterCardStyle}>
         <span style={filterCardLabelStyle}>Filter</span>
@@ -884,9 +890,11 @@ function MembersPanel({ lockedRole }: { lockedRole?: "CREATOR" }) {
             <option value="7">New (7d)</option>
             <option value="30">New (30d)</option>
           </select>
-          <label style={filterCheckboxLabelStyle}>
-            <input type="checkbox" checked={founding} onChange={(e) => setFounding(e.target.checked)} /> Founding Baddie
-          </label>
+          {lockedRole !== "FAN" && (
+            <label style={filterCheckboxLabelStyle}>
+              <input type="checkbox" checked={founding} onChange={(e) => setFounding(e.target.checked)} /> Founding Baddie
+            </label>
+          )}
           {(lockedRole === "CREATOR" || role === "CREATOR") && (
             <label style={filterCheckboxLabelStyle}>
               <input type="checkbox" checked={verified} onChange={(e) => setVerified(e.target.checked)} /> Verified only
@@ -903,11 +911,11 @@ function MembersPanel({ lockedRole }: { lockedRole?: "CREATOR" }) {
       {loading ? (
         <p style={{ color: "var(--text-muted)" }}>Loading...</p>
       ) : members.length === 0 ? (
-        <p style={{ color: "var(--text-muted)" }}>No {lockedRole === "CREATOR" ? "creators" : "members"} match.</p>
+        <p style={{ color: "var(--text-muted)" }}>No {nounPluralLower} match.</p>
       ) : (
         <>
           <p style={mutedSmallStyle}>
-            Showing {members.length} {members.length === 1 ? (lockedRole === "CREATOR" ? "creator" : "member") : lockedRole === "CREATOR" ? "creators" : "members"}
+            Showing {members.length} {members.length === 1 ? nounSingularLower : nounPluralLower}
             {cursor ? " (more available)" : ""}.
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
@@ -4749,7 +4757,14 @@ const rowCardStyle: React.CSSProperties = {
 // and pushed the whole row — and with it the page — wider than a phone
 // viewport. `minWidth: 0` is what actually lets a flex child shrink
 // smaller than its content and let that content wrap/truncate instead.
-const rowInfoClickableStyle: React.CSSProperties = { cursor: "pointer", flex: 1, minWidth: 0 };
+// textAlign: "left" is required here, not decorative — this app's own
+// global `main { text-align: center; }` rule (globals.css) otherwise
+// centers every line of a member/creator/content row's metadata text,
+// which reads badly for a data row (per direct request: "left align
+// this content"). Shared by every rowCardStyle consumer (Members/
+// Creators, Trust & Safety, Content queue) — none of those want
+// centered metadata either, so the fix belongs here once, not per tab.
+const rowInfoClickableStyle: React.CSSProperties = { cursor: "pointer", flex: 1, minWidth: 0, textAlign: "left" };
 
 const approveButtonStyle: React.CSSProperties = {
   background: "var(--accent)",

@@ -83,6 +83,7 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
   const pendingTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchedRef = useRef(false);
   const rootRef = useRef<HTMLElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const [inView, setInView] = useState(false);
 
   const media = mediaItems[activeIndex] ?? null;
@@ -142,6 +143,40 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
     if (!locked && inView) fetchMedia();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locked, inView]);
+
+  // Autoplay a video post once it's actually scrolled into view, pause
+  // it once scrolled back out — same feed convention as Twitter/
+  // Instagram's own video autoplay. A genuinely different observer from
+  // the lazy-load one above: that one fires once and disconnects (just
+  // "should we start loading"), this one keeps watching for as long as
+  // the video element exists, since play/pause needs to track the
+  // viewer scrolling past and back, not just the first arrival. Browser
+  // autoplay policy requires the element be muted to autoplay at all —
+  // the viewer can still unmute via the native controls this element
+  // already renders. threshold: 0.6 (mostly on-screen, not just a sliver
+  // at the edge) matches how a feed viewer actually judges "I'm looking
+  // at this one now".
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el || !media?.mimeType.startsWith("video/")) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          el.muted = true;
+          el.play().catch(() => {
+            // Autoplay can still be blocked in some contexts (e.g. low-
+            // power mode) — leaving it paused is a harmless fallback,
+            // the viewer's own controls still work either way.
+          });
+        } else {
+          el.pause();
+        }
+      },
+      { threshold: 0.6 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [media, activeIndex]);
 
   async function toggleLike() {
     setLikeBusy(true);
@@ -315,8 +350,11 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
             {media.mimeType.startsWith("video/") ? (
               <motion.video
                 key={activeIndex}
+                ref={videoRef}
                 src={media.signedUrl}
                 controls
+                muted
+                playsInline
                 style={postMediaElementStyle}
                 drag={isCarousel ? "x" : false}
                 dragDirectionLock

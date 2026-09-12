@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession, displayHeadingStyle, cardStyle, Field, inputStyle, primaryButtonStyle, errorBannerStyle } from "@/components/ui";
+import { useSession, displayHeadingStyle, cardStyle, Field, inputStyle, primaryButtonStyle, errorBannerStyle, PasswordInput } from "@/components/ui";
 import { SegmentedTabs } from "@/components/segmented-tabs";
 
 type SettingsTab = "account" | "password" | "sessions";
@@ -215,18 +215,16 @@ function ChangePasswordPanel() {
       <form onSubmit={handleSubmit}>
         {error && <div style={errorBannerStyle}>{error}</div>}
         <Field label="Current password">
-          <input
+          <PasswordInput
             style={inputStyle}
-            type="password"
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
             required
           />
         </Field>
         <Field label="New password" hint="At least 10 characters.">
-          <input
+          <PasswordInput
             style={inputStyle}
-            type="password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             minLength={10}
@@ -234,9 +232,8 @@ function ChangePasswordPanel() {
           />
         </Field>
         <Field label="Confirm new password">
-          <input
+          <PasswordInput
             style={inputStyle}
-            type="password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             minLength={10}

@@ -46,6 +46,7 @@ export function GridThumbnail({
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const tileRef = useRef<HTMLButtonElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const fetchedRef = useRef(false);
 
   useEffect(() => {
@@ -75,6 +76,26 @@ export function GridThumbnail({
       })
       .catch(() => setFailed(true));
   }, [inView, item.contentId, item.lock.locked]);
+
+  // Same scroll-triggered autoplay/pause as PostCard's own feed video
+  // (see that component's comment) — a genuinely different, continuously-
+  // watching observer from the one-shot lazy-load one above.
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el || !media?.mimeType.startsWith("video/")) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          el.play().catch(() => {});
+        } else {
+          el.pause();
+        }
+      },
+      { threshold: 0.6 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [media]);
 
   const backdrop = item.creator.coverImageUrl ?? item.creator.avatarUrl;
 
@@ -107,7 +128,7 @@ export function GridThumbnail({
         </>
       ) : media ? (
         media.mimeType.startsWith("video/") ? (
-          <motion.video src={media.signedUrl} muted style={tileMediaStyle} variants={tileMediaVariants} />
+          <motion.video ref={videoRef} src={media.signedUrl} muted playsInline loop style={tileMediaStyle} variants={tileMediaVariants} />
         ) : media.mimeType.startsWith("audio/") ? (
           <div style={tileAudioGlyphStyle}>♪</div>
         ) : (

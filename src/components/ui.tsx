@@ -362,28 +362,16 @@ function NavLinks({
             applying flips role to CREATOR the same way it does for a
             plain FAN (see /api/partner/dashboard's comment).
 
-            Home/Discover (the fan-facing feed + grid) are additionally
-            surfaced to CREATOR and ADMIN too, per explicit follow-up
-            request — and per a later follow-up ("for all, landing page
-            should be feed"), the feed is now everyone's actual default
-            landing page too (roleHomePath, below), not just a
-            reachable-via-nav extra. Only FAN gets "My subscriptions" —
-            that's a fan-specific concern, not part of this feed-access
-            widening. PARTNER now gets Home/Discover too, per direct
-            follow-up ("partner dashboard page doesn't have feed") —
-            a partner had no nav link to the feed at all despite
-            Home/Discover already being everyone else's default; their
-            own dashboard stays the actual landing page (roleHomePath
-            below is untouched), this just makes the feed reachable.
-            Partner Dashboard itself moved from leading the list to
-            trailing it, after "Become a creator", per direct follow-up
-            ("rearrange this: Home / Discover / Become a creator /
-            Partner Dashboard") — everyone's shared links (Home,
-            Discover, the creator-application CTA) now read first, with
-            a partner's own business-specific tool last rather than
-            pushed in front of them. */}
+            "Timeline" (was "Home", renamed per direct request — still
+            /feed, the fan-facing feed) is surfaced to every role
+            including CREATOR/ADMIN/PARTNER, and is still everyone's
+            actual default landing page (roleHomePath, below). Only FAN
+            gets "My subscriptions". No "Discover" link here anymore
+            (removed per direct request) — /discovery itself is
+            untouched and still reachable via the feed's own search
+            icon, this only removed the persistent nav entry. */}
         <Link href="/feed" style={navLinkStyle("/feed", linkStyle)}>
-          Home
+          Timeline
         </Link>
         {user.role === "ADMIN" && (
           <Link href="/admin" style={navLinkStyle("/admin", linkStyle)}>
@@ -395,9 +383,6 @@ function NavLinks({
             My subscriptions
           </Link>
         )}
-        <Link href="/discovery" style={navLinkStyle("/discovery", linkStyle)}>
-          Discover
-        </Link>
         {(user.role === "FAN" || user.role === "PARTNER") && !user.creatorProfile && (
           <Link href="/apply" style={navLinkStyle("/apply", primaryLinkStyle)}>
             Become a creator
@@ -407,9 +392,6 @@ function NavLinks({
           <Link href="/partner-dashboard" style={navLinkStyle("/partner-dashboard", linkStyle)}>
             Partner Dashboard
           </Link>
-        )}
-        {user.creatorProfile?.status === "VERIFIED" && (
-          <VerifiedBadge isFoundingPartner={Boolean(user.foundingPartner)} isFoundingBaddie={user.creatorProfile.isFoundingBaddie} />
         )}
         {layout === "row" ? (
           <AccountMenu user={user} onLogout={onLogout} />
@@ -1342,6 +1324,99 @@ export const inputStyle: React.CSSProperties = {
   color: "var(--text)",
   fontSize: "0.95rem",
 };
+
+/**
+ * A password `<input>` with a show/hide toggle icon — every password
+ * field in the app (register, login, settings' change-password ×3,
+ * founding-baddies, partner-invite) used a plain `type="password"`
+ * input with no way to check what you typed. Same visual slot as those
+ * (accepts `style` so callers keep passing `inputStyle`, same `value`/
+ * `onChange`/`required`/`minLength` surface as a plain input — a
+ * drop-in replacement, not a new API to learn), just wrapped so the
+ * eye icon can sit inside the field's own right edge. `autoComplete`
+ * passthrough matters for a password manager to correctly offer
+ * "generate/fill" on this exact field.
+ */
+export function PasswordInput({
+  style,
+  autoComplete,
+  ...inputProps
+}: React.InputHTMLAttributes<HTMLInputElement>) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        {...inputProps}
+        type={visible ? "text" : "password"}
+        autoComplete={autoComplete}
+        style={{ ...style, paddingRight: "2.6rem" }}
+      />
+      <button
+        type="button"
+        onClick={() => setVisible((v) => !v)}
+        style={passwordToggleButtonStyle}
+        aria-label={visible ? "Hide password" : "Show password"}
+        // Password fields sit inside a form whose Enter key should
+        // submit it, not activate this button — tabIndex -1 keeps it
+        // out of the normal tab order too, since it's a convenience
+        // toggle, not a field of its own.
+        tabIndex={-1}
+      >
+        {visible ? <EyeOffIcon /> : <EyeIcon />}
+      </button>
+    </div>
+  );
+}
+
+const passwordToggleButtonStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "50%",
+  right: "0.6rem",
+  transform: "translateY(-50%)",
+  background: "none",
+  border: "none",
+  padding: "0.2rem",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "var(--text-muted)",
+  cursor: "pointer",
+};
+
+function EyeIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M2 12s3.5-7 10-7c2.1 0 3.9.6 5.4 1.5M22 12s-3.5 7-10 7c-2.1 0-3.9-.6-5.4-1.5M4 4l16 16"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9.9 9.9a3 3 0 0 0 4.2 4.2"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2MB — the cap on the ORIGINAL file picked; downscaleImage below shrinks it further before it ever leaves the browser.
 

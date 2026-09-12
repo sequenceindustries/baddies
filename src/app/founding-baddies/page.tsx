@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { NOT_SOUTH_AFRICA_MESSAGE } from "@/lib/security/geo";
-import { LocationField } from "@/components/ui";
+import { LocationField, PasswordInput } from "@/components/ui";
 
 /**
  * The Founding Baddies recruitment campaign — landing page + application
@@ -377,9 +377,8 @@ function ApplicationForm() {
               />
             </FormField>
             <FormField label="Password" hint="At least 10 characters — this creates your Baddies account.">
-              <input
+              <PasswordInput
                 style={inputStyle}
-                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 minLength={10}

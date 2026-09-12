@@ -11,6 +11,7 @@ import {
   checkboxRowStyle,
   primaryButtonStyle,
   errorBannerStyle,
+  PasswordInput,
 } from "@/components/ui";
 
 interface StatusResponse {
@@ -154,8 +155,7 @@ export default function PartnerInvitePage() {
           </Field>
 
           <Field label="Password" hint="At least 10 characters.">
-            <input
-              type="password"
+            <PasswordInput
               style={inputStyle}
               value={password}
               onChange={(e) => setPassword(e.target.value)}

@@ -13,6 +13,7 @@ import {
   errorBannerStyle,
   roleHomePath,
   GoogleSignInButton,
+  PasswordInput,
   type SessionUser,
 } from "@/components/ui";
 
@@ -120,9 +121,8 @@ export function LoginForm({ comingSoon }: { comingSoon: boolean }) {
           </Field>
 
           <Field label="Password">
-            <input
+            <PasswordInput
               style={inputStyle}
-              type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
