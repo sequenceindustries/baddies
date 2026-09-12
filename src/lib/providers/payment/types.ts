@@ -67,6 +67,37 @@ export interface CreatePayoutResult {
   status: string;
 }
 
+/**
+ * Monetisation redesign — the prepaid, no-recurring-billing checkout
+ * model this app now uses for every subscription purchase/renewal
+ * (SOPSPAY and most adult-friendly processors are hosted-checkout,
+ * one-time-payment based, not provider-native recurring subscriptions
+ * — see the plan's own "no assumed auto-recurring billing" requirement).
+ * `createSubscription`/`cancelSubscription` above stay in the interface
+ * for a provider that DOES model true subscriptions, but the checkout
+ * routes (src/app/api/checkout/{subscribe,vip-pass}/route.ts) drive
+ * every purchase through this method instead — baddies creates a
+ * PendingOrder, the provider returns a hosted-checkout redirect, and
+ * ONLY the webhook (once it independently verifies the payment)
+ * activates the entitlement. successUrl/cancelUrl are informational —
+ * a browser landing on successUrl must never be trusted to grant
+ * access; see src/app/api/webhooks/payment/route.ts.
+ */
+export interface CreateHostedCheckoutSessionInput {
+  pendingOrderId: string;
+  providerCustomerId: string;
+  amountUsd: number;
+  currency: string; // "USD" today — see this app's own USD-only decision for this build
+  successUrl: string;
+  cancelUrl: string;
+  metadata: Record<string, string>; // e.g. { pendingOrderId, orderType, creatorProfileId?, durationMonths }
+}
+
+export interface CreateHostedCheckoutSessionResult {
+  providerCheckoutId: string;
+  redirectUrl: string;
+}
+
 /** Normalized webhook event, after signature verification and provider-specific parsing. */
 export type PaymentWebhookEventType =
   | "payment.succeeded"
@@ -98,6 +129,9 @@ export interface PaymentProvider {
   createOneTimePayment(input: CreateOneTimePaymentInput): Promise<CreateOneTimePaymentResult>;
   refund(input: RefundInput): Promise<RefundResult>;
   createPayout(input: CreatePayoutInput): Promise<CreatePayoutResult>;
+  createHostedCheckoutSession(
+    input: CreateHostedCheckoutSessionInput
+  ): Promise<CreateHostedCheckoutSessionResult>;
 
   /**
    * Verifies the raw webhook signature and parses it into a normalized

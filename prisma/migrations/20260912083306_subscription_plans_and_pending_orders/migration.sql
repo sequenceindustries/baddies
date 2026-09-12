@@ -157,6 +157,34 @@ CREATE INDEX "pending_orders_status_idx" ON "pending_orders"("status");
 -- CreateIndex
 CREATE UNIQUE INDEX "webhook_events_provider_providerEventId_key" ON "webhook_events"("provider", "providerEventId");
 
+-- Defensive cleanup, discovered when this migration first failed to
+-- apply against production with a real FK violation: at least one
+-- `subscriptions` row's creatorProfileId does not exist in
+-- creator_profiles at all. Nothing ever prevented this before this
+-- migration (no FK existed on this column), so it's pre-existing dead
+-- data, not something this migration causes. Deleting it is safe: it
+-- points at a creator profile that no longer exists, so every real
+-- entitlement/content query (which always joins through a live
+-- CreatorProfile) already treated it as unreachable — this can never
+-- have been live, meaningful access for a real fan. A no-op wherever
+-- no such row exists (this dev database included). Logged via
+-- RAISE NOTICE so the exact count is visible in deploy logs.
+DO $$
+DECLARE
+  orphaned_count integer;
+BEGIN
+  SELECT count(*) INTO orphaned_count
+  FROM subscriptions s
+  LEFT JOIN creator_profiles cp ON cp.id = s."creatorProfileId"
+  WHERE cp.id IS NULL;
+
+  IF orphaned_count > 0 THEN
+    RAISE NOTICE 'Deleting % orphaned subscription row(s) whose creatorProfileId has no matching creator_profiles row, before adding the FK constraint', orphaned_count;
+    DELETE FROM subscriptions s
+    WHERE NOT EXISTS (SELECT 1 FROM creator_profiles cp WHERE cp.id = s."creatorProfileId");
+  END IF;
+END $$;
+
 -- AddForeignKey
 -- Genuine fix: subscriptions.creatorProfileId had NO foreign key
 -- constraint at all before this migration. RESTRICT (not CASCADE) —

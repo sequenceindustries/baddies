@@ -34,6 +34,32 @@ export async function setPlatformSetting(
   });
 }
 
+/**
+ * Monetisation redesign — the prepaid-package bundle-discount curve, a
+ * JSON map of durationMonths -> discount fraction off the base 1-month
+ * price (e.g. {"3": 0.10} = 10% off the 3-month package vs. paying for
+ * 3 separate months). Read here rather than hardcoded so the business
+ * can retune bundle economics without a redeploy — see
+ * BUSINESS_CONFIG_KEYS.PRICING_BUNDLE_DISCOUNT_CURVE's own comment.
+ */
+export async function getBundleDiscountCurve(): Promise<Record<string, number>> {
+  const raw = await getPlatformSetting(BUSINESS_CONFIG_KEYS.PRICING_BUNDLE_DISCOUNT_CURVE);
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") return parsed as Record<string, number>;
+  } catch {
+    // fall through to the hardcoded fallback below
+  }
+  console.warn("[settings] pricing.bundle_discount_curve is not valid JSON; using zero-discount fallback.");
+  return { "1": 0, "3": 0, "6": 0, "12": 0 };
+}
+
+export async function getRecommendedDurationMonths(): Promise<number> {
+  const raw = await getPlatformSetting(BUSINESS_CONFIG_KEYS.PRICING_RECOMMENDED_DURATION_MONTHS);
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 3;
+}
+
 export interface BusinessConfigSnapshot {
   vvipDefaultPriceUsd: number;
   vipPassPriceUsd: number;

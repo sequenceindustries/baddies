@@ -3,6 +3,8 @@ import type {
   AttachPaymentMethodInput,
   CreateCustomerInput,
   CreateCustomerResult,
+  CreateHostedCheckoutSessionInput,
+  CreateHostedCheckoutSessionResult,
   CreateOneTimePaymentInput,
   CreateOneTimePaymentResult,
   CreatePayoutInput,
@@ -54,6 +56,24 @@ export class StubPaymentProvider implements PaymentProvider {
 
   async createPayout(_input: CreatePayoutInput): Promise<CreatePayoutResult> {
     return { providerPayoutId: `stub_po_${nanoid(12)}`, status: "paid" };
+  }
+
+  async createHostedCheckoutSession(
+    input: CreateHostedCheckoutSessionInput
+  ): Promise<CreateHostedCheckoutSessionResult> {
+    // No real hosted page exists in stub mode — redirect to a local,
+    // dev-only confirmation page that lets a developer/tester simulate
+    // the provider's own outcome (success/failure) and, on success,
+    // fires the exact same webhook shape a real processor's redirect
+    // would eventually trigger. Relative URL — works unchanged whether
+    // this route is called from localhost or a deployed stub
+    // environment. Never wired to a real payment page; PAYMENT_PROVIDER
+    // =stub is blocked in any environment reachable by real users (see
+    // this class's own top-level comment).
+    return {
+      providerCheckoutId: `stub_chk_${nanoid(12)}`,
+      redirectUrl: `/checkout/stub-confirm?orderId=${input.pendingOrderId}`,
+    };
   }
 
   verifyAndParseWebhook(rawBody: string, _signatureHeader: string): PaymentWebhookEvent {
