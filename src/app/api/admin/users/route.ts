@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
   const creatorProfileIds = page.map((u) => u.creatorProfile?.id).filter((id): id is string => Boolean(id));
   const emails = page.map((u) => u.email);
 
-  const [lastSessions, foundingMatches, contentCounts, subscriberCounts, revenueSums, purchaseSums, tipSums] = await Promise.all([
+  const [lastSessions, foundingMatches, contentCounts, subscriberCounts, revenueSums, purchaseSums, tipSums, partnerRows] = await Promise.all([
     userIds.length
       ? db.$queryRaw<{ userId: string; lastSessionAt: Date }[]>(
           Prisma.sql`SELECT DISTINCT ON ("userId") "userId", "createdAt" AS "lastSessionAt" FROM sessions WHERE "userId" IN (${Prisma.join(userIds)}) AND "revokedAt" IS NULL ORDER BY "userId", "createdAt" DESC`
@@ -114,7 +114,15 @@ export async function GET(req: NextRequest) {
       : Promise.resolve([]),
     userIds.length ? db.purchase.groupBy({ by: ["fanId"], where: { fanId: { in: userIds } }, _sum: { priceUsd: true } }) : Promise.resolve([]),
     userIds.length ? db.tip.groupBy({ by: ["fanId"], where: { fanId: { in: userIds } }, _sum: { amountUsd: true } }) : Promise.resolve([]),
+    // Used by the Creators tab to group rows into Regular/Founding
+    // Baddies/Founding Partners — a real, distinct status from
+    // `foundingBaddie` above (that one's a FoundingApplication email
+    // match; this one's the actual FoundingPartner row a much smaller
+    // set of accounts hold, see prisma/schema.prisma's own 50-cap
+    // comment on that model).
+    userIds.length ? db.foundingPartner.findMany({ where: { userId: { in: userIds } }, select: { userId: true } }) : Promise.resolve([]),
   ]);
+  const foundingPartnerUserIds = new Set(partnerRows.map((p) => p.userId));
 
   const lastSessionByUser = new Map(lastSessions.map((s) => [s.userId, s.lastSessionAt]));
   const foundingEmailSet = new Set(foundingMatches);
@@ -136,6 +144,7 @@ export async function GET(req: NextRequest) {
       createdAt: u.createdAt,
       lastSessionAt: lastSessionByUser.get(u.id) ?? null,
       foundingBaddie: foundingEmailSet.has(u.email.toLowerCase()),
+      isFoundingPartner: foundingPartnerUserIds.has(u.id),
       creatorStats: u.creatorProfile
         ? {
             contentCount: contentByCreator.get(u.creatorProfile.id) ?? 0,

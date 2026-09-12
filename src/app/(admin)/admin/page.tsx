@@ -757,6 +757,7 @@ interface MemberRow {
   createdAt: string;
   lastSessionAt: string | null;
   foundingBaddie: boolean;
+  isFoundingPartner: boolean;
   creatorStats: { contentCount: number; activeSubscribers: number; revenueUsd: string } | null;
   fanStats: { purchasesUsd: string; tipsUsd: string } | null;
 }
@@ -918,46 +919,15 @@ function MembersPanel({ lockedRole }: { lockedRole?: "CREATOR" | "FAN" }) {
             Showing {members.length} {members.length === 1 ? nounSingularLower : nounPluralLower}
             {cursor ? " (more available)" : ""}.
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-            {members.map((m) => (
-              <div key={m.userId} style={rowCardStyle}>
-                <div style={rowInfoClickableStyle} onClick={() => setSelectedUserId(m.userId)} role="button">
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 600, fontSize: "0.9rem" }}>
-                    {m.displayName ?? m.email}
-                    <span style={roleBadgeStyle(m.role)}>{humanizeKey(m.role)}</span>
-                    {m.foundingBaddie && <span style={foundingBadgeStyle}>Founding Baddie</span>}
-                  </div>
-                  <div style={mutedSmallStyle}>
-                    {m.email} · {m.isActive ? "active" : "inactive"}
-                    {m.creatorProfileStatus ? ` · creator: ${humanizeKey(m.creatorProfileStatus)}` : ""} · joined{" "}
-                    {new Date(m.createdAt).toLocaleDateString()}
-                    {m.lastSessionAt ? ` · last session ${new Date(m.lastSessionAt).toLocaleDateString()}` : " · never signed in"}
-                  </div>
-                  {m.creatorStats && (
-                    <div style={mutedSmallStyle}>
-                      {m.creatorStats.contentCount} content · {m.creatorStats.activeSubscribers} subscribers ·{" "}
-                      {money(m.creatorStats.revenueUsd)} earned
-                    </div>
-                  )}
-                  {m.fanStats && (Number(m.fanStats.purchasesUsd) > 0 || Number(m.fanStats.tipsUsd) > 0) && (
-                    <div style={mutedSmallStyle}>
-                      {money(m.fanStats.purchasesUsd)} purchases · {money(m.fanStats.tipsUsd)} tips
-                    </div>
-                  )}
-                </div>
-                {m.role !== "ADMIN" && m.isActive && (
-                  <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
-                    <button onClick={() => act(m.userId, "suspend")} disabled={busyId === m.userId} style={rejectButtonStyle}>
-                      Suspend
-                    </button>
-                    <button onClick={() => act(m.userId, "ban")} disabled={busyId === m.userId} style={rejectButtonStyle}>
-                      Ban
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          {lockedRole === "CREATOR" ? (
+            <CreatorGroups members={members} busyId={busyId} onSelect={setSelectedUserId} onAct={act} />
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+              {members.map((m) => (
+                <MemberRowCard key={m.userId} m={m} busyId={busyId} onSelect={setSelectedUserId} onAct={act} />
+              ))}
+            </div>
+          )}
           {cursor && (
             <button onClick={loadMore} disabled={loadingMore} style={{ ...approveButtonStyle, marginTop: "1rem" }}>
               {loadingMore ? "Loading..." : "Load more"}
@@ -966,6 +936,115 @@ function MembersPanel({ lockedRole }: { lockedRole?: "CREATOR" | "FAN" }) {
         </>
       )}
     </section>
+  );
+}
+
+/** One member/creator row — extracted from MembersPanel's own JSX so
+ * both the flat Members/Fans list and CreatorGroups' three grouped
+ * sections below render identical rows from one definition. */
+function MemberRowCard({
+  m,
+  busyId,
+  onSelect,
+  onAct,
+}: {
+  m: MemberRow;
+  busyId: string | null;
+  onSelect: (userId: string) => void;
+  onAct: (userId: string, action: "suspend" | "ban") => void;
+}) {
+  return (
+    <div style={rowCardStyle}>
+      <div style={rowInfoClickableStyle} onClick={() => onSelect(m.userId)} role="button">
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 600, fontSize: "0.9rem" }}>
+          {m.displayName ?? m.email}
+          <span style={roleBadgeStyle(m.role)}>{humanizeKey(m.role)}</span>
+          {m.foundingBaddie && <span style={foundingBadgeStyle}>Founding Baddie</span>}
+        </div>
+        <div style={mutedSmallStyle}>
+          {m.email} · {m.isActive ? "active" : "inactive"}
+          {m.creatorProfileStatus ? ` · creator: ${humanizeKey(m.creatorProfileStatus)}` : ""} · joined{" "}
+          {new Date(m.createdAt).toLocaleDateString()}
+          {m.lastSessionAt ? ` · last session ${new Date(m.lastSessionAt).toLocaleDateString()}` : " · never signed in"}
+        </div>
+        {m.creatorStats && (
+          <div style={mutedSmallStyle}>
+            {m.creatorStats.contentCount} content · {m.creatorStats.activeSubscribers} subscribers ·{" "}
+            {money(m.creatorStats.revenueUsd)} earned
+          </div>
+        )}
+        {m.fanStats && (Number(m.fanStats.purchasesUsd) > 0 || Number(m.fanStats.tipsUsd) > 0) && (
+          <div style={mutedSmallStyle}>
+            {money(m.fanStats.purchasesUsd)} purchases · {money(m.fanStats.tipsUsd)} tips
+          </div>
+        )}
+      </div>
+      {m.role !== "ADMIN" && m.isActive && (
+        <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
+          <button onClick={() => onAct(m.userId, "suspend")} disabled={busyId === m.userId} style={rejectButtonStyle}>
+            Suspend
+          </button>
+          <button onClick={() => onAct(m.userId, "ban")} disabled={busyId === m.userId} style={rejectButtonStyle}>
+            Ban
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Creators tab only — groups the same flat `members` list into three
+ * categories per direct request ("put creators together under
+ * categories: Regular, Founding Baddies, Founding Partners") instead
+ * of one undifferentiated list. Mutually exclusive despite a creator
+ * being able to hold both statuses at once (a Founding Partner who
+ * also applied as a creator — see MembersPanel's own doc comment on
+ * NavLinks for that overlap): Founding Partner takes priority since
+ * it's the smaller, higher-commitment cohort (50-cap program) — a
+ * partner never also gets listed under Founding Baddies even if their
+ * email also matches a FoundingApplication row.
+ */
+function CreatorGroups({
+  members,
+  busyId,
+  onSelect,
+  onAct,
+}: {
+  members: MemberRow[];
+  busyId: string | null;
+  onSelect: (userId: string) => void;
+  onAct: (userId: string, action: "suspend" | "ban") => void;
+}) {
+  const partners = members.filter((m) => m.isFoundingPartner);
+  const baddies = members.filter((m) => !m.isFoundingPartner && m.foundingBaddie);
+  const regular = members.filter((m) => !m.isFoundingPartner && !m.foundingBaddie);
+
+  const groups: { label: string; rows: MemberRow[] }[] = [
+    { label: "Regular", rows: regular },
+    { label: "Founding Baddies", rows: baddies },
+    { label: "Founding Partners", rows: partners },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
+      {groups.map((group) => (
+        <div key={group.label}>
+          <h3 style={{ ...sectionHeadingStyle, fontSize: "1rem", marginBottom: "0.75rem" }}>
+            {group.label} <span style={mutedSmallStyle}>({group.rows.length})</span>
+          </h3>
+          {group.rows.length === 0 ? (
+            <p style={mutedSmallStyle}>None on this page.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+              {group.rows.map((m) => (
+                <MemberRowCard key={m.userId} m={m} busyId={busyId} onSelect={onSelect} onAct={onAct} />
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
 
