@@ -279,57 +279,66 @@ export function CreatorProfileClient({
 }
 
 /**
- * Subscribe to this creator's Exclusive tier — calls the stub-backed
- * /api/checkout/subscribe route (see its own doc comment for why the
- * stub path completes synchronously instead of waiting on a payment
- * webhook). No real money moves; this is the flow real vendor
- * integration would slot into once one is selected. The platform-wide
- * VIP Pass has its own entry point (the banner on /feed) — this
- * button is Exclusive-only, per the profile page's own scope.
+ * Subscribe to this creator's Exclusive tier — calls
+ * /api/checkout/subscribe, which now (monetisation redesign) only
+ * creates a PendingOrder and hands back a hosted-checkout redirect; no
+ * Subscription/entitlement exists until the payment webhook
+ * independently confirms it (see that route's own doc comment). This
+ * button defaults to the platform's recommended 3-month package —
+ * see /fan-subscriptions for the full 1/3/6/12-month plan picker and
+ * bundle-savings comparison (Phase 7 of the monetisation plan); this
+ * is the quick, single-tap path from a creator's own profile. The
+ * platform-wide VIP Pass has its own entry point (the banner on
+ * /feed) — this button is Exclusive-only, per the profile page's own
+ * scope.
  */
+const SUBSCRIBE_DEFAULT_DURATION_MONTHS = 3;
+
 function SubscribeButton({ creatorProfileId, vvipPriceUsd }: { creatorProfileId: string; vvipPriceUsd: number }) {
-  const [subscribed, setSubscribed] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function subscribeVvip() {
-    setBusy(true);
+    setRedirecting(true);
     setError(null);
     const res = await fetch("/api/checkout/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ creatorProfileId }),
+      body: JSON.stringify({ creatorProfileId, durationMonths: SUBSCRIBE_DEFAULT_DURATION_MONTHS }),
     });
-    setBusy(false);
     if (!res.ok) {
+      setRedirecting(false);
       const body = await res.json().catch(() => null);
-      setError(body?.error ?? "Subscription failed.");
+      setError(body?.error ?? "Couldn't start checkout.");
       return;
     }
-    setSubscribed(true);
+    const body = (await res.json()) as { redirectUrl: string };
+    window.location.href = body.redirectUrl;
   }
 
   return (
     <div style={{ display: "inline-flex", flexDirection: "column", gap: "0.3rem" }}>
       <motion.button
         onClick={subscribeVvip}
-        disabled={busy || subscribed}
-        style={checkoutButtonStyle(subscribed)}
-        whileHover={busy || subscribed ? undefined : { scale: 1.04 }}
-        whileTap={busy || subscribed ? undefined : { scale: 0.96 }}
+        disabled={redirecting}
+        style={checkoutButtonStyle(false)}
+        whileHover={redirecting ? undefined : { scale: 1.04 }}
+        whileTap={redirecting ? undefined : { scale: 0.96 }}
         transition={transitions.micro}
         layout
       >
         <AnimatePresence mode="wait" initial={false}>
           <motion.span
-            key={subscribed ? "subscribed" : busy ? "busy" : "idle"}
+            key={redirecting ? "redirecting" : "idle"}
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={transitions.micro}
             style={{ display: "inline-block" }}
           >
-            {subscribed ? "✓ Subscribed" : busy ? "···" : `Subscribe $${vvipPriceUsd.toFixed(2)}/mo`}
+            {redirecting
+              ? "···"
+              : `Subscribe from $${vvipPriceUsd.toFixed(2)}/mo`}
           </motion.span>
         </AnimatePresence>
       </motion.button>

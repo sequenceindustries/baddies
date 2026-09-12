@@ -122,47 +122,55 @@ export default function FeedPage() {
 
 /**
  * Promotes the platform-wide VIP Pass (see prisma/schema.prisma's
- * ContentAccessLevel comment) — one price, unlocks VIP-tier content from
- * every participating creator. Only rendered once we know the fan
- * doesn't already have an active one (vipPassActive === false, not just
- * falsy/loading).
+ * ContentAccessLevel comment) — one price per package duration, unlocks
+ * VIP-tier content from every participating creator. Only rendered once
+ * we know the fan doesn't already have an active one (vipPassActive ===
+ * false, not just falsy/loading).
+ *
+ * Defaults to the platform's recommended 3-month package — see
+ * /fan-subscriptions for the full 1/3/6/12-month plan picker (Phase 7
+ * of the monetisation plan). /api/checkout/vip-pass now only creates a
+ * PendingOrder and hands back a hosted-checkout redirect; no
+ * entitlement exists until the payment webhook independently confirms
+ * it (see that route's own doc comment) — this banner redirects there
+ * rather than marking itself "done" immediately.
  */
+const VIP_PASS_DEFAULT_DURATION_MONTHS = 3;
+
 function VipPassBanner() {
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function getVipPass() {
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/checkout/vip-pass", { method: "POST" });
-    setBusy(false);
+    const res = await fetch("/api/checkout/vip-pass", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ durationMonths: VIP_PASS_DEFAULT_DURATION_MONTHS }),
+    });
     if (!res.ok) {
+      setBusy(false);
       const body = await res.json().catch(() => null);
-      setError(body?.error ?? "Couldn't get VIP pass.");
+      setError(body?.error ?? "Couldn't start checkout.");
       return;
     }
-    setDone(true);
+    const body = (await res.json()) as { redirectUrl: string };
+    window.location.href = body.redirectUrl;
   }
 
   return (
     <div style={bannerStyle}>
       <div>
-        <div style={{ fontWeight: 600 }}>
-          {done ? "✓ VIP Pass active" : "Get the platform VIP Pass"}
-        </div>
+        <div style={{ fontWeight: 600 }}>Get the platform VIP Pass</div>
         <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "0.2rem" }}>
-          {done
-            ? "You now have VIP-tier content from every participating creator."
-            : "One price unlocks VIP-tier content from every participating creator."}
+          One price unlocks VIP-tier content from every participating creator.
         </div>
         {error && <div style={{ fontSize: "0.8rem", color: "var(--danger)", marginTop: "0.4rem" }}>{error}</div>}
       </div>
-      {!done && (
-        <button onClick={getVipPass} disabled={busy} style={bannerButtonStyle}>
-          {busy ? "..." : "Get VIP Pass"}
-        </button>
-      )}
+      <button onClick={getVipPass} disabled={busy} style={bannerButtonStyle}>
+        {busy ? "..." : "Get VIP Pass"}
+      </button>
     </div>
   );
 }

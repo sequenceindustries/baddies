@@ -3,38 +3,38 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
 import { getPaymentProvider } from "@/lib/providers/payment";
-import { resolveCreatorPricing } from "@/lib/creator/pricing";
-import { postRevenueEvent, recomputeWalletBalances } from "@/lib/ledger/service";
-import { markTrialConvertedIfActive } from "@/lib/entitlements/trial";
-import { createNotification } from "@/lib/creator-notifications/create-notification";
+import { resolveCreatorPricing, resolveCreatorPackagePrice } from "@/lib/creator/pricing";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
 export const dynamic = "force-dynamic";
 
 /**
- * Dummy checkout — subscribe to a creator's VVIP tier (their own price,
- * set via PATCH /api/creator/settings, or the platform default). There's
- * only one creator-level subscription tier now — see prisma/schema.prisma's
- * ContentAccessLevel comment for the full Free/VIP/VVIP model. For the
- * separate platform-wide VIP pass, see POST /api/checkout/vip-pass.
+ * Buy (or renew) a creator's Exclusive (VVIP) subscription for a
+ * chosen prepaid package duration (1/3/6/12 months).
  *
- * No real payment vendor is selected yet (build brief §21), so this route
- * only ever runs against PAYMENT_PROVIDER=stub. Per the architecture, real
- * providers must never have the client-visible request mark a payment
- * "succeeded" — only the processor's webhook is authoritative (see
- * src/app/api/webhooks/payment/route.ts). The stub provider is
- * deterministic and synchronous, so — exactly like the stub verification
- * provider's instant-complete path in
- * src/app/api/creator/verification/start/route.ts — this route skips the
- * network round trip and applies the "webhook" outcome inline instead of
- * self-calling the HTTP webhook. Swapping in a real provider means this
- * route should stop writing the Subscription/ledger rows directly and
- * instead only call provider.createSubscription() + redirect to its
- * hosted checkout, leaving the writes to the webhook handler.
+ * Monetisation redesign — this route no longer writes a Subscription
+ * or LedgerEntry row itself (that used to happen synchronously here,
+ * against the stub provider, before any real payment vendor existed —
+ * see this route's own prior doc comment). It now only creates a
+ * PendingOrder and hands back a hosted-checkout redirect; ONLY
+ * src/app/api/webhooks/payment/route.ts, once it has independently
+ * verified the payment, creates/extends the Subscription and posts the
+ * ledger entry. Never trust this request/response pair to mean
+ * "payment succeeded" — see that route's own doc comment.
+ *
+ * Renewal: a fan with an existing subscription (active, expired, or
+ * even one that was cancelled) can buy again at any time — this is the
+ * ENTIRE renewal mechanism in a prepaid, no-auto-billing model. If
+ * their current period hasn't ended yet, the webhook extends
+ * currentPeriodEnd from where it left off rather than from today (see
+ * that route's own comment) — so buying ahead of expiry never wastes
+ * paid time.
  */
 const SubscribeSchema = z.object({
   creatorProfileId: z.string().min(1),
+  // Must match SUBSCRIPTION_DURATIONS_MONTHS in src/lib/creator/pricing.ts.
+  durationMonths: z.union([z.literal(1), z.literal(3), z.literal(6), z.literal(12)]),
 });
 
 export async function POST(req: NextRequest) {
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { creatorProfileId } = parsed.data;
+  const { creatorProfileId, durationMonths } = parsed.data;
 
   const creator = await db.creatorProfile.findUnique({ where: { id: creatorProfileId } });
   if (!creator || creator.status !== "VERIFIED") {
@@ -58,21 +58,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "You cannot subscribe to your own creator profile." }, { status: 400 });
   }
 
-  const existing = await db.subscription.findFirst({
-    where: { fanId: user.id, creatorProfileId, status: "ACTIVE", currentPeriodEnd: { gte: new Date() } },
-  });
-  if (existing) {
-    return NextResponse.json({ error: "You already have an active subscription to this creator." }, { status: 409 });
-  }
-
-  const pricing = await resolveCreatorPricing(creator);
-  const priceUsd = pricing.vvipPriceUsd;
-
-  const creatorWallet = await db.wallet.upsert({
-    where: { userId: creator.userId },
-    create: { userId: creator.userId },
-    update: {},
-  });
+  const basePricing = await resolveCreatorPricing(creator);
+  const amountUsd = await resolveCreatorPackagePrice(creatorProfileId, basePricing.vvipPriceUsd, durationMonths);
 
   if (process.env.PAYMENT_PROVIDER !== "stub") {
     return NextResponse.json(
@@ -82,61 +69,47 @@ export async function POST(req: NextRequest) {
   }
 
   const provider = getPaymentProvider();
-  const providerCustomer = await provider.createCustomer({ userId: user.id, email: user.email });
-  const providerSub = await provider.createSubscription({
-    providerCustomerId: providerCustomer.providerCustomerId,
-    providerPriceId: `stub_price_vvip_${creatorProfileId}`,
-    metadata: { subscriptionType: "VVIP", creatorProfileId },
-  });
-
-  const currentPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-  const subscription = await db.subscription.create({
+  const order = await db.pendingOrder.create({
     data: {
-      fanId: user.id,
+      customerId: user.id,
+      orderType: "EXCLUSIVE_SUBSCRIPTION",
       creatorProfileId,
-      status: "ACTIVE",
-      priceUsdAtPurchase: priceUsd,
-      currentPeriodEnd,
-      paymentProviderSubscriptionId: providerSub.providerSubscriptionId,
+      durationMonths,
+      amountUsd,
+      currency: "USD",
+      status: "PENDING",
+      providerName: provider.name,
     },
   });
 
-  await postRevenueEvent({
-    walletId: creatorWallet.id,
-    creatorProfileId,
-    type: "SUBSCRIPTION",
-    grossAmountUsd: priceUsd,
-    referenceType: "subscription",
-    referenceId: subscription.id,
-    description: "VVIP subscription (stub checkout)",
-  });
-  await recomputeWalletBalances(creatorWallet.id);
-
-  // No upsert/duplicate concern here (unlike like/follow) — an active-
-  // subscription check already 409'd above, so this create only ever
-  // runs for a genuinely new subscription. NOTE: once a real payment
-  // vendor is wired up, per this route's own doc comment, these writes
-  // (and this call) move into src/app/api/webhooks/payment/route.ts —
-  // must not stay duplicated in both places when that happens.
-  await createNotification({
-    userId: creator.userId,
-    type: "creator.subscribed",
-    payload: { actorUserId: user.id, creatorProfileId, subscriptionId: subscription.id },
+  const providerCustomer = await provider.createCustomer({ userId: user.id, email: user.email });
+  const origin = req.nextUrl.origin;
+  const checkout = await provider.createHostedCheckoutSession({
+    pendingOrderId: order.id,
+    providerCustomerId: providerCustomer.providerCustomerId,
+    amountUsd,
+    currency: "USD",
+    successUrl: `${origin}/creators/${creatorProfileId}?checkout=success`,
+    cancelUrl: `${origin}/creators/${creatorProfileId}?checkout=cancelled`,
+    metadata: {
+      pendingOrderId: order.id,
+      orderType: "EXCLUSIVE_SUBSCRIPTION",
+      creatorProfileId,
+      durationMonths: String(durationMonths),
+    },
   });
 
-  // MASTER REQUIREMENTS §11 — subscribing to a creator while on an
-  // active trial is a genuine acquisition win too, not just buying the
-  // VIP pass itself. A no-op if this fan never had a trial.
-  await markTrialConvertedIfActive(user.id);
+  await db.pendingOrder.update({
+    where: { id: order.id },
+    data: {
+      status: "AWAITING_PAYMENT",
+      providerCheckoutId: checkout.providerCheckoutId,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+    },
+  });
 
   return NextResponse.json(
-    {
-      subscriptionId: subscription.id,
-      status: subscription.status,
-      currentPeriodEnd: subscription.currentPeriodEnd,
-      priceUsd,
-    },
+    { pendingOrderId: order.id, redirectUrl: checkout.redirectUrl, amountUsd, durationMonths },
     { status: 201 }
   );
 }

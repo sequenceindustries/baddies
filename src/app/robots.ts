@@ -67,6 +67,11 @@ export default function robots(): MetadataRoute.Robots {
         "/subscriptions",
         "/apply",
         "/feed",
+        // Dev-only stub-payment-provider confirmation page (monetisation
+        // redesign) — hard-blocked server-side outside
+        // PAYMENT_PROVIDER=stub, but disallowed here too on the same
+        // belt-and-suspenders logic as the rest of this list.
+        "/checkout",
       ],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,

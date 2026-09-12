@@ -1,40 +1,50 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
 import { getPaymentProvider } from "@/lib/providers/payment";
-import { getBusinessConfig } from "@/lib/config/settings";
-import { markTrialConvertedIfActive } from "@/lib/entitlements/trial";
+import { resolveVipPassPackagePrice } from "@/lib/creator/pricing";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
 export const dynamic = "force-dynamic";
 
 /**
- * Dummy checkout — buy the platform-wide VIP pass (UnlimitedSubscription;
- * model name kept to limit the rename's blast radius). One price, unlocks
- * VIP-tier content from every creator who's opted in
- * (CreatorProfile.unlimitedOptedIn) — see src/lib/entitlements/content.ts.
+ * Buy (or renew) the platform-wide VIP Pass for a chosen prepaid
+ * package duration (1/3/6/12 months). One price per duration, set
+ * platform-wide (VipPassPlan) — never per-creator, unlocks VIP-tier
+ * content from every creator who's opted in
+ * (CreatorProfile.unlimitedOptedIn).
  *
- * Unlike the per-creator VVIP checkout, this deliberately posts NO ledger
- * revenue event at purchase time: the money isn't owed to any single
- * creator yet. Disbursing it to participating creators is the allocation
- * engine's job (src/lib/entitlements/unlimited.ts#computeUnlimitedAllocations
- * + postUnlimitedAllocationEvent) — which nothing currently invokes on a
- * schedule. That's a pre-existing, explicitly flagged Sprint 5 gap, not
- * something this route should paper over by inventing a platform wallet.
+ * Same pending-order/webhook-authoritative architecture as
+ * POST /api/checkout/subscribe — see that route's own doc comment.
+ * This route creates a PendingOrder and hands back a hosted-checkout
+ * redirect only; the webhook creates/extends the UnlimitedSubscription.
+ *
+ * Unlike the per-creator Exclusive checkout, no ledger revenue event is
+ * posted here or in the webhook for a VIP_PASS order: the money isn't
+ * owed to any single creator at purchase time. Disbursing it to
+ * participating creators is the VIP Creator Pool allocation engine's
+ * job (src/lib/entitlements/unlimited.ts#computeUnlimitedAllocations +
+ * postUnlimitedAllocationEvent) — wired up in a later phase, not
+ * invented here as a platform-wallet workaround.
  */
-export async function POST() {
+const VipPassSchema = z.object({
+  durationMonths: z.union([z.literal(1), z.literal(3), z.literal(6), z.literal(12)]),
+});
+
+export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
 
-  const existing = await db.unlimitedSubscription.findFirst({
-    where: { fanId: user.id, status: "ACTIVE", currentPeriodEnd: { gte: new Date() } },
-  });
-  if (existing) {
-    return NextResponse.json({ error: "You already have an active VIP pass." }, { status: 409 });
+  const json = await req.json().catch(() => null);
+  const parsed = VipPassSchema.safeParse(json);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
+  const { durationMonths } = parsed.data;
 
   if (process.env.PAYMENT_PROVIDER !== "stub") {
     return NextResponse.json(
@@ -43,41 +53,44 @@ export async function POST() {
     );
   }
 
-  const config = await getBusinessConfig();
-  const priceUsd = config.vipPassPriceUsd;
+  const amountUsd = await resolveVipPassPackagePrice(durationMonths);
 
   const provider = getPaymentProvider();
-  const providerCustomer = await provider.createCustomer({ userId: user.id, email: user.email });
-  const providerSub = await provider.createSubscription({
-    providerCustomerId: providerCustomer.providerCustomerId,
-    providerPriceId: "stub_price_vip_pass",
-    metadata: { subscriptionType: "VIP_PASS" },
-  });
-
-  const currentPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-  const subscription = await db.unlimitedSubscription.create({
+  const order = await db.pendingOrder.create({
     data: {
-      fanId: user.id,
-      status: "ACTIVE",
-      priceUsdAtPurchase: priceUsd,
-      currentPeriodEnd,
-      paymentProviderSubscriptionId: providerSub.providerSubscriptionId,
+      customerId: user.id,
+      orderType: "VIP_PASS",
+      durationMonths,
+      amountUsd,
+      currency: "USD",
+      status: "PENDING",
+      providerName: provider.name,
     },
   });
 
-  // MASTER REQUIREMENTS §11 — buying the VIP pass while on an active
-  // trial is a genuine acquisition win the spec wants tracked. A no-op
-  // if this fan never had a trial.
-  await markTrialConvertedIfActive(user.id);
+  const providerCustomer = await provider.createCustomer({ userId: user.id, email: user.email });
+  const origin = req.nextUrl.origin;
+  const checkout = await provider.createHostedCheckoutSession({
+    pendingOrderId: order.id,
+    providerCustomerId: providerCustomer.providerCustomerId,
+    amountUsd,
+    currency: "USD",
+    successUrl: `${origin}/fan-subscriptions?checkout=success`,
+    cancelUrl: `${origin}/fan-subscriptions?checkout=cancelled`,
+    metadata: { pendingOrderId: order.id, orderType: "VIP_PASS", durationMonths: String(durationMonths) },
+  });
+
+  await db.pendingOrder.update({
+    where: { id: order.id },
+    data: {
+      status: "AWAITING_PAYMENT",
+      providerCheckoutId: checkout.providerCheckoutId,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+    },
+  });
 
   return NextResponse.json(
-    {
-      subscriptionId: subscription.id,
-      status: subscription.status,
-      currentPeriodEnd: subscription.currentPeriodEnd,
-      priceUsd,
-    },
+    { pendingOrderId: order.id, redirectUrl: checkout.redirectUrl, amountUsd, durationMonths },
     { status: 201 }
   );
 }
