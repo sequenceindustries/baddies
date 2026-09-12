@@ -31,7 +31,7 @@ interface ContentQueueItem {
   participantCount: number;
 }
 
-const TABS = ["Overview", "Members", "Creators", "Fans", "Applications", "Founding Partners", "Content", "Revenue", "Payouts", "Trust & Safety", "Activity", "Audit Log", "System Health", "Reset Roster", "Wipe Test Content"] as const;
+const TABS = ["Overview", "Members", "Creators", "Fans", "Applications", "Founding Partners", "Content", "Revenue", "Payouts", "Trust & Safety", "Activity", "Audit Log", "System Health", "Reset Roster", "Wipe Test Content", "Delete Fan Accounts"] as const;
 type Tab = (typeof TABS)[number];
 
 type RangeKey = "today" | "7d" | "30d" | "90d" | "all";
@@ -110,8 +110,8 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Members", tab: "Members" },
       { label: "Creators", tab: "Creators" },
       { label: "Fans", tab: "Fans" },
-      { label: "Applications", tab: "Applications", badgeKey: "applications" },
       { label: "Founding Partners", tab: "Founding Partners" },
+      { label: "Applications", tab: "Applications", badgeKey: "applications" },
     ],
   },
   { label: "Content", color: "#e0a626", items: [{ label: "Content", tab: "Content", badgeKey: "content" }] },
@@ -136,6 +136,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "System Health", tab: "System Health" },
       { label: "Reset Roster", tab: "Reset Roster" },
       { label: "Wipe Test Content", tab: "Wipe Test Content" },
+      { label: "Delete Fan Accounts", tab: "Delete Fan Accounts" },
     ],
   },
 ];
@@ -346,6 +347,7 @@ export default function AdminDashboardPage() {
         {tab === "System Health" && <SystemHealthPanel />}
         {tab === "Reset Roster" && <ResetRosterPanel />}
         {tab === "Wipe Test Content" && <WipeTestContentPanel />}
+        {tab === "Delete Fan Accounts" && <DeleteFanAccountsPanel />}
       </main>
     </div>
   );
@@ -3168,6 +3170,112 @@ function WipeTestContentPanel() {
           <span style={mutedSmallStyle}>
             Replaced {result.mediaAssetsReplaced} image file(s) across {result.contentAffected} post(s) from{" "}
             {result.creatorsAffected} creator account(s).
+          </span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+interface DeleteFanAccountsResult {
+  deleted: { usersRemoved: number };
+  preservedEmail: string;
+}
+
+const DELETE_FANS_CONFIRM_PHRASE = "DELETE FAN ACCOUNTS";
+const PRESERVED_FAN_EMAIL_DISPLAY = "fan-test@example.test";
+
+/**
+ * Per direct request ("delete fan accounts except for fan test") —
+ * irreversibly deletes every FAN-role account except the one preserved
+ * fixture email (see POST /api/admin/system/delete-fan-accounts's own
+ * doc comment for the exact FK-safety model: every fan-side relation
+ * cascades except LedgerEntry/Payout, which are cleared explicitly
+ * first). Same "type the exact phrase" pattern as Reset Roster/Wipe
+ * Test Content.
+ */
+function DeleteFanAccountsPanel() {
+  const [phrase, setPhrase] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<DeleteFanAccountsResult | null>(null);
+
+  const canSubmit = phrase === DELETE_FANS_CONFIRM_PHRASE && !busy;
+
+  async function submit() {
+    if (!canSubmit) return;
+    if (
+      !window.confirm(
+        `This permanently deletes every fan account except ${PRESERVED_FAN_EMAIL_DISPLAY}. Continue?`
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch("/api/admin/system/delete-fan-accounts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: phrase }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? "Delete failed.");
+      setResult(body);
+      setPhrase("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section>
+      <h2 style={sectionHeadingStyle}>Delete Fan Accounts</h2>
+      <p style={mutedSmallStyle}>
+        Permanently deletes every account with the Fan role except <code>{PRESERVED_FAN_EMAIL_DISPLAY}</code> — that
+        one is always kept. Everything belonging to a deleted fan (subscriptions, purchases, tips, likes, follows,
+        messages sent, sessions) goes with it. This cannot be undone.
+      </p>
+
+      <div style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch", gap: "0.75rem", marginTop: "1rem" }}>
+        <label style={{ fontSize: "0.82rem", fontWeight: 600 }}>
+          Type <code>{DELETE_FANS_CONFIRM_PHRASE}</code> to enable the button
+        </label>
+        <input
+          type="text"
+          value={phrase}
+          onChange={(e) => setPhrase(e.target.value)}
+          placeholder={DELETE_FANS_CONFIRM_PHRASE}
+          style={{ ...memberSearchInputStyle, flex: "none" }}
+          disabled={busy}
+        />
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!canSubmit}
+          style={{
+            ...rejectButtonStyle,
+            background: canSubmit ? "var(--danger)" : "transparent",
+            color: canSubmit ? "#fff" : "var(--text-muted)",
+            borderColor: canSubmit ? "var(--danger)" : "var(--border)",
+            cursor: canSubmit ? "pointer" : "not-allowed",
+            opacity: busy ? 0.7 : 1,
+          }}
+        >
+          {busy ? "Deleting..." : "Delete fan accounts"}
+        </button>
+      </div>
+
+      {error && <p style={{ color: "var(--danger)", marginTop: "0.75rem" }}>{error}</p>}
+
+      {result && (
+        <div style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch", gap: "0.4rem", marginTop: "1rem" }}>
+          <span style={{ fontWeight: 600, color: "var(--success)" }}>Done.</span>
+          <span style={mutedSmallStyle}>
+            Deleted {result.deleted.usersRemoved} fan account(s). Kept {result.preservedEmail}.
           </span>
         </div>
       )}
