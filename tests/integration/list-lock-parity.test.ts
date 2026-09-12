@@ -37,6 +37,14 @@ describe.skipIf(!dbAvailable)("list-lock vs. canAccessContent parity (integratio
       await db.content.deleteMany({ where: { id: contentId } });
     }
     for (const userId of cleanupCreatorUserIds) {
+      // Subscription.creatorProfileId is now a real onDelete: Restrict
+      // FK (monetisation redesign) — a CreatorProfile with real
+      // subscription history can no longer be deleted out from under
+      // it, so this test's own subscription rows must go first.
+      const creator = await db.creatorProfile.findUnique({ where: { userId }, select: { id: true } });
+      if (creator) {
+        await db.subscription.deleteMany({ where: { creatorProfileId: creator.id } });
+      }
       await db.creatorProfile.deleteMany({ where: { userId } });
       await db.user.deleteMany({ where: { id: userId } });
     }

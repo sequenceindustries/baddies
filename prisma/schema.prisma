@@ -308,6 +308,7 @@ model User {
   foundingApplication    FoundingApplication?
   blocksInitiated        Block[]                 @relation("BlockBlocker")
   blocksReceived         Block[]                 @relation("BlockBlocked")
+  pendingOrders          PendingOrder[]
 
   @@index([role])
   @@map("users")
@@ -427,7 +428,7 @@ model CreatorProfile {
   // message any verified creator) — defaults true so this opt-out
   // toggle doesn't silently break messaging for every existing creator
   // the moment it ships. See POST /api/creators/:id/message.
-  acceptsMessages Boolean @default(true)
+  acceptsMessages        Boolean @default(true)
 
   // Self-declared at application time (POST /api/creator/apply and
   // POST /api/founding/apply both require z.literal(true) here) —
@@ -441,6 +442,17 @@ model CreatorProfile {
   // re-verification.
   confirmsFemale Boolean @default(false)
 
+  // Creator Activity Policy (monetisation redesign) — last time this
+  // creator did something that counts as active (publish, login; see
+  // markCreatorActive in src/lib/creator/activity.ts). Null for a
+  // brand-new/legacy creator, treated as "unknown, not yet inactive"
+  // rather than "inactive" by isCreatorActive() until a real signal
+  // arrives. Lazily read, never cron-updated — same no-job-queue
+  // convention as FanTrial/Story. This is a FUTURE-eligibility signal
+  // only (see computeUnlimitedAllocations' eligibility filter) — it
+  // never reduces or reclaims money already earned.
+  lastActiveAt DateTime?
+
   appliedAt  DateTime  @default(now())
   approvedAt DateTime?
   approvedBy String? // admin User.id
@@ -448,14 +460,17 @@ model CreatorProfile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  verifications    VerificationSession[]
-  content          Content[]
-  stories          Story[]
-  ledgerEntries    LedgerEntry[]
-  followers        Follow[]
-  categories       CreatorCategory[]
-  identity         CreatorIdentity?
-  identityDocument CreatorIdentityDocument?
+  verifications     VerificationSession[]
+  content           Content[]
+  stories           Story[]
+  ledgerEntries     LedgerEntry[]
+  followers         Follow[]
+  categories        CreatorCategory[]
+  identity          CreatorIdentity?
+  identityDocument  CreatorIdentityDocument?
+  subscriptions     Subscription[]
+  subscriptionPlans CreatorSubscriptionPlan[]
+  pendingOrders     PendingOrder[]
 
   @@index([status])
   // Performance audit: GET /api/discovery/new-creators and the feed's
@@ -705,8 +720,8 @@ model MediaAsset {
   // (+ optional DISPLAY) pair. Defaults to 0, which is correct for every
   // pre-carousel row: a single-item post is effectively a 1-item
   // carousel already at position 0.
-  position  Int      @default(0)
-  createdAt DateTime @default(now())
+  position        Int            @default(0)
+  createdAt       DateTime       @default(now())
 
   @@index([contentId])
   @@index([contentId, position])
@@ -786,30 +801,65 @@ model Story {
 // ENTITLEMENTS & SUBSCRIPTIONS
 // =========================================================================
 
-// A fan's VVIP subscription to one specific creator — single tier, no
-// tier field: previously ENTRY/VIP, collapsed to one creator-level tier
-// (see ContentAccessLevel's comment for the full tier model).
+// A fan's VVIP (Exclusive) subscription to one specific creator — single
+// tier, no tier field: previously ENTRY/VIP, collapsed to one creator-
+// level tier (see ContentAccessLevel's comment for the full tier model).
+//
+// Monetisation redesign (prepaid periods): a purchase/renewal is always
+// a fresh, user-initiated payment for a fixed durationMonths package
+// (1/3/6/12, see CreatorSubscriptionPlan) — there is no auto-recurring
+// billing, so there is deliberately no `autoRenew` field. `cancelledAt`
+// is the sole "won't renew" signal; `status` is NOT flipped to
+// CANCELLED on cancel anymore (see the cancel route's own comment) so
+// access rides out to currentPeriodEnd exactly like a non-cancelled
+// subscription would — canAccessContent's existing
+// `status === ACTIVE && currentPeriodEnd >= now` check already does
+// the right thing once status isn't prematurely flipped. `status` is
+// still opportunistically, lazily flipped to EXPIRED for display once
+// currentPeriodEnd has passed (see isSubscriptionEntitled) — display
+// only, never load-bearing for entitlement or the ledger.
 model Subscription {
   id               String             @id @default(cuid())
   fanId            String
   fan              User               @relation("FanSubscriptions", fields: [fanId], references: [id], onDelete: Cascade)
   creatorProfileId String
+  // Restrict, not Cascade: a creator profile must never be deletable
+  // while it has real, paid subscription/ledger history attached — see
+  // "preserve historical subscription/payment records" in the
+  // monetisation spec. This is a genuine fix — no relation existed
+  // here at all before (creatorProfileId was a bare, unenforced
+  // column).
+  creatorProfile   CreatorProfile     @relation(fields: [creatorProfileId], references: [id], onDelete: Restrict)
   status           SubscriptionStatus @default(ACTIVE)
 
+  // The full package price paid at purchase/renewal time (e.g. the
+  // whole 3-month bundle, not a monthly-equivalent) — what the ledger's
+  // postRevenueEvent actually ledgers as one SUBSCRIPTION entry.
   priceUsdAtPurchase Decimal @db.Decimal(10, 2)
+  // 1 | 3 | 6 | 12 — the purchased package length. Nullable only for
+  // legacy rows created before this column existed (which behave as
+  // the old flat 30-day/1-month model); every new purchase sets it.
+  durationMonths     Int?
 
-  startedAt        DateTime  @default(now())
-  currentPeriodEnd DateTime
-  cancelledAt      DateTime?
-  gracePeriodEnd   DateTime?
+  startedAt             DateTime  @default(now())
+  currentPeriodEnd      DateTime
+  cancelledAt           DateTime?
+  gracePeriodEnd        DateTime?
+  // Set once the 7-day-before-expiry reminder has been sent for the
+  // CURRENT period, so the reminder cron (Phase 5) never double-sends;
+  // cleared implicitly by each renewal creating its own tracked period
+  // via a fresh row's currentPeriodEnd extension, not by editing this
+  // field directly.
+  renewalReminderSentAt DateTime?
 
-  paymentProviderSubscriptionId String?
+  paymentProviderSubscriptionId String? @unique
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([fanId, creatorProfileId])
   @@index([status])
+  @@index([currentPeriodEnd])
   @@map("subscriptions")
 }
 
@@ -820,19 +870,147 @@ model UnlimitedSubscription {
   status SubscriptionStatus @default(ACTIVE)
 
   priceUsdAtPurchase Decimal @db.Decimal(10, 2)
+  // See Subscription.durationMonths' own comment — same meaning here.
+  durationMonths     Int?
 
-  startedAt        DateTime  @default(now())
-  currentPeriodEnd DateTime
-  cancelledAt      DateTime?
+  startedAt             DateTime  @default(now())
+  currentPeriodEnd      DateTime
+  cancelledAt           DateTime?
+  renewalReminderSentAt DateTime?
 
-  paymentProviderSubscriptionId String?
+  paymentProviderSubscriptionId String? @unique
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([fanId])
   @@index([status])
+  @@index([currentPeriodEnd])
   @@map("unlimited_subscriptions")
+}
+
+// A creator's own price for a given Exclusive package duration —
+// overrides the synthesized default (base 1-month price ×
+// PlatformSetting's bundle-discount curve, see resolveCreatorPricing)
+// for that duration only. A creator only needs a row here for a
+// duration they've explicitly customized; every other duration keeps
+// resolving from the synthesized default, so a creator who never
+// touches plans needs zero rows and nothing breaks.
+model CreatorSubscriptionPlan {
+  id               String         @id @default(cuid())
+  creatorProfileId String
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+  durationMonths   Int // 1 | 3 | 6 | 12
+  priceUsd         Decimal        @db.Decimal(10, 2)
+  isActive         Boolean        @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([creatorProfileId, durationMonths])
+  @@map("creator_subscription_plans")
+}
+
+// The platform-wide VIP Pass's price per package duration. Seeded for
+// 1/3/6/12 months (see prisma/seed.ts) from
+// BUSINESS_CONFIG_KEYS.VIP_PASS_PRICE_USD × the bundle-discount curve —
+// unlike CreatorSubscriptionPlan this is never per-creator, matching
+// VIP being a single platform-wide membership.
+model VipPassPlan {
+  id             String  @id @default(cuid())
+  durationMonths Int     @unique
+  priceUsd       Decimal @db.Decimal(10, 2)
+  isActive       Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("vip_pass_plans")
+}
+
+enum OrderType {
+  EXCLUSIVE_SUBSCRIPTION
+  VIP_PASS
+}
+
+enum PendingOrderStatus {
+  PENDING // created, no provider call made yet
+  AWAITING_PAYMENT // provider hosted-checkout session created, waiting on the fan
+  COMPLETED // webhook verified payment and activated the entitlement
+  FAILED // provider reported failure, or amount/currency mismatch on webhook
+  EXPIRED // fan never completed checkout within expiresAt
+  CANCELLED // fan abandoned/cancelled before paying
+}
+
+// The "pending order" concept both checkout routes' own doc comments
+// already called for once a real payment vendor exists: baddies →
+// (this row) → payment provider → hosted checkout → webhook
+// confirmation → Subscription/UnlimitedSubscription + LedgerEntry.
+// Created by POST /api/checkout/subscribe or .../vip-pass BEFORE any
+// provider call; the checkout route itself never writes a Subscription
+// or LedgerEntry row anymore (see src/app/api/webhooks/payment/route.ts) —
+// only the webhook, once it has independently verified the payment,
+// does that. providerCheckoutId/providerPaymentId are both unique so a
+// webhook can always resolve back to exactly one order, and so the
+// same provider identifier can never be attached to two orders.
+model PendingOrder {
+  id               String          @id @default(cuid())
+  customerId       String // fan's User.id
+  customer         User            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  orderType        OrderType
+  creatorProfileId String? // set for EXCLUSIVE_SUBSCRIPTION, null for VIP_PASS
+  creatorProfile   CreatorProfile? @relation(fields: [creatorProfileId], references: [id], onDelete: Restrict)
+  durationMonths   Int
+
+  amountUsd Decimal @db.Decimal(10, 2)
+  currency  String  @default("USD")
+
+  status PendingOrderStatus @default(PENDING)
+
+  providerName       String // e.g. "stub" — matches PaymentProvider.name
+  providerCheckoutId String? @unique
+  providerPaymentId  String? @unique
+
+  // The Subscription or UnlimitedSubscription row this order ultimately
+  // produced, once COMPLETED — set by the webhook handler, informational/
+  // traceability only (never read to grant access; entitlement always
+  // comes from the Subscription/UnlimitedSubscription row itself).
+  resultingSubscriptionId String?
+
+  expiresAt DateTime? // hosted-checkout session expiry, if the provider gives one
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+  @@map("pending_orders")
+}
+
+// Webhook-delivery idempotency ledger — every inbound payment-provider
+// webhook is recorded here BEFORE being processed, keyed on the
+// provider's own event id, so a redelivered/duplicate webhook (which
+// every real processor's docs warn can happen) is detected and skipped
+// rather than double-activating an entitlement or double-posting a
+// LedgerEntry. Nothing here is ever deleted — this is itself a small
+// audit trail of every webhook this app has ever received.
+model WebhookEvent {
+  id              String    @id @default(cuid())
+  provider        String // e.g. "stub" — matches PaymentProvider.name
+  providerEventId String
+  eventType       String
+  payload         Json
+  receivedAt      DateTime  @default(now())
+  // Set only once processing has fully succeeded (entitlement + ledger
+  // written) — a thrown error mid-processing leaves this null so a
+  // legitimate provider retry still gets applied; only a SECOND
+  // delivery of an event already marked processed is treated as a
+  // true duplicate and skipped.
+  processedAt     DateTime?
+  processingError String?
+
+  @@unique([provider, providerEventId])
+  @@map("webhook_events")
 }
 
 // MASTER REQUIREMENTS §11 — one 24-hour trial per fan, ever (prevents
@@ -991,6 +1169,14 @@ model Wallet {
   cachedPendingBalanceUsd   Decimal   @default(0) @db.Decimal(12, 2)
   cachedAvailableBalanceUsd Decimal   @default(0) @db.Decimal(12, 2)
   cachedPaidBalanceUsd      Decimal   @default(0) @db.Decimal(12, 2)
+  // Progressive-accrual "scheduled" bucket (monetisation redesign) —
+  // the not-yet-recognized future-months portion of a multi-month
+  // subscription's creatorShareAmount (see recomputeWalletBalances).
+  // Tracked as its own field for auditability, but per direct product
+  // decision the dashboard folds this into the displayed "Pending"
+  // figure alongside cachedPendingBalanceUsd rather than showing 3
+  // buckets — see src/app/wallet/page.tsx.
+  cachedScheduledBalanceUsd Decimal   @default(0) @db.Decimal(12, 2)
   balanceRecomputedAt       DateTime?
 
   createdAt DateTime @default(now())
@@ -1042,6 +1228,18 @@ model LedgerEntry {
   referenceId   String? // FK-ish pointer to the source record
 
   description String?
+
+  // Progressive earnings accrual (monetisation redesign) — set only on
+  // a SUBSCRIPTION entry for a multi-month package; every other entry
+  // type (TIP, MESSAGE, PAYOUT, PARTNER_COMMISSION, ...) leaves both
+  // null and is completely unaffected. recomputeWalletBalances splits
+  // creatorShareAmount into durationMonths equal installments and
+  // recognizes installment i once now >= recognitionStartAt + i months
+  // — see that function's own comment for the full formula. A
+  // durationMonths=1 entry (or null, for legacy rows) recognizes its
+  // full amount immediately, exactly matching pre-redesign behavior.
+  recognitionStartAt DateTime?
+  durationMonths     Int?
 
   createdAt DateTime @default(now())
 
@@ -1195,7 +1393,7 @@ model FoundingApplication {
   // own doc comment. Written here too so the same declaration is on
   // record on this recruitment-form row, not only on the CreatorProfile
   // this application's own transaction also creates.
-  confirmsFemale Boolean @default(false)
+  confirmsFemale       Boolean @default(false)
 
   status     FoundingApplicationStatus @default(APPLIED)
   adminNotes String?

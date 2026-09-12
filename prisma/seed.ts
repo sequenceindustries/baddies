@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { DEFAULT_BUSINESS_CONFIG } from "../src/lib/config/business";
+import { DEFAULT_BUSINESS_CONFIG, BUSINESS_CONFIG_KEYS } from "../src/lib/config/business";
 import { AGREEMENTS } from "./agreements";
 import { REVENUE_SHARE_RULES } from "./revenue-rules";
 import { DUMMY_CREATORS, seedDummyCreators } from "../src/lib/founding/dummy-creators";
@@ -31,6 +31,9 @@ async function main() {
       update: {}, // do not clobber values an admin may have already changed
     });
   }
+
+  console.log("Seeding VIP pass plans (1/3/6/12 months)...");
+  await seedVipPassPlans();
 
   console.log("Seeding agreement content...");
   for (const agreement of AGREEMENTS) {
@@ -136,6 +139,42 @@ async function cleanupStrayCreators() {
     }
     await db.user.delete({ where: { id: user.id } });
     console.log(`  Removed ${user.email}`);
+  }
+}
+
+/**
+ * Seeds VipPassPlan rows for the 4 supported package durations, priced
+ * off BUSINESS_CONFIG_KEYS.VIP_PASS_PRICE_USD (the base 1-month price)
+ * x PRICING_BUNDLE_DISCOUNT_CURVE — same synthesis logic
+ * resolveCreatorPricing() uses for a creator's own Exclusive plans, so
+ * the platform-wide VIP Pass and per-creator Exclusive pricing are
+ * computed the same way. Never overwrites a price an admin has already
+ * changed via the (future) admin pricing UI — `update: {}` on an
+ * existing row, matching this file's own established upsert-but-never-
+ * clobber convention (see the revenue-share-rule/agreement seeding
+ * above).
+ */
+async function seedVipPassPlans() {
+  const basePriceRow = await db.platformSetting.findUnique({
+    where: { key: BUSINESS_CONFIG_KEYS.VIP_PASS_PRICE_USD },
+  });
+  const basePrice = Number(basePriceRow?.value ?? DEFAULT_BUSINESS_CONFIG[BUSINESS_CONFIG_KEYS.VIP_PASS_PRICE_USD]);
+
+  const curveRow = await db.platformSetting.findUnique({
+    where: { key: BUSINESS_CONFIG_KEYS.PRICING_BUNDLE_DISCOUNT_CURVE },
+  });
+  const curve: Record<string, number> = JSON.parse(
+    curveRow?.value ?? DEFAULT_BUSINESS_CONFIG[BUSINESS_CONFIG_KEYS.PRICING_BUNDLE_DISCOUNT_CURVE]
+  );
+
+  for (const durationMonths of [1, 3, 6, 12]) {
+    const discount = curve[String(durationMonths)] ?? 0;
+    const priceUsd = Math.round(basePrice * durationMonths * (1 - discount) * 100) / 100;
+    await db.vipPassPlan.upsert({
+      where: { durationMonths },
+      create: { durationMonths, priceUsd },
+      update: {},
+    });
   }
 }
 
