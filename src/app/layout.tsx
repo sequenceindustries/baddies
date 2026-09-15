@@ -9,6 +9,7 @@ import { RouteTransition } from "@/components/route-transition";
 import { StructuredData } from "@/components/structured-data";
 import { isKnownCrawlerUserAgent } from "@/lib/seo/crawler";
 import { SITE_URL } from "@/lib/seo/site-url";
+import Script from "next/script";
 
 // Performance audit, P0: this was a `@import url("https://fonts.
 // googleapis.com/...")` inside globals.css — one of the classic render-
@@ -84,6 +85,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={montserrat.variable}>
       <body>
+        <Script
+    src="https://www.googletagmanager.com/gtag/js?id=G-TZ7LP4HMWG"
+    strategy="afterInteractive"
+  />
+  <Script id="google-analytics" strategy="afterInteractive">
+    {`
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-TZ7LP4HMWG');
+    `}
+  </Script>
         <StructuredData />
         <AgeGate isCrawler={isCrawler}>
           {/* Performance audit: one shared session fetch for the whole
