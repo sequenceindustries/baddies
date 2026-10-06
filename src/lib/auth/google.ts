@@ -13,8 +13,10 @@
  * stubs).
  */
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+// Trimmed: a value pasted into a hosting dashboard easily picks up a
+// trailing space/newline, which Google rejects as "invalid_client".
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID?.trim() || undefined;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET?.trim() || undefined;
 
 export function isGoogleAuthConfigured(): boolean {
   return Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
