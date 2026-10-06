@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db/client";
+import { stubPaymentsBlocked } from "@/lib/providers/payment";
 
 // Always dynamic: reads/writes live data and must never be statically
 // prerendered or cached at build time.
@@ -23,7 +24,7 @@ export const dynamic = "force-dynamic";
  * StubPaymentProvider's own top-level comment).
  */
 function assertStubMode() {
-  return process.env.PAYMENT_PROVIDER === "stub";
+  return process.env.PAYMENT_PROVIDER === "stub" && !stubPaymentsBlocked();
 }
 
 export async function GET(req: NextRequest) {

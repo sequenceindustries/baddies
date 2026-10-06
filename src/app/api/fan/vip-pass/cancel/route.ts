@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
-import { getPaymentProvider } from "@/lib/providers/payment";
+import { getPaymentProvider, stubPaymentsBlocked } from "@/lib/providers/payment";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -27,7 +27,7 @@ export async function POST() {
     return NextResponse.json({ error: "No active VIP pass to cancel." }, { status: 404 });
   }
 
-  if (vipPass.paymentProviderSubscriptionId) {
+  if (vipPass.paymentProviderSubscriptionId && !stubPaymentsBlocked()) {
     const provider = getPaymentProvider();
     await provider.cancelSubscription(vipPass.paymentProviderSubscriptionId);
   }

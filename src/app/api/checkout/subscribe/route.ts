@@ -3,7 +3,7 @@ import { publicOrigin } from "@/lib/seo/site-url";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
-import { getPaymentProvider } from "@/lib/providers/payment";
+import { getPaymentProvider, paymentsAvailable, PAYMENTS_UNAVAILABLE_MESSAGE } from "@/lib/providers/payment";
 import { resolveCreatorPricing, resolveCreatorPackagePrice } from "@/lib/creator/pricing";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
@@ -62,11 +62,8 @@ export async function POST(req: NextRequest) {
   const basePricing = await resolveCreatorPricing(creator);
   const amountUsd = await resolveCreatorPackagePrice(creatorProfileId, basePricing.vvipPriceUsd, durationMonths);
 
-  if (process.env.PAYMENT_PROVIDER !== "stub") {
-    return NextResponse.json(
-      { error: "Real payment processing isn't wired up yet — no vendor has been selected (see build brief §21)." },
-      { status: 501 }
-    );
+  if (!paymentsAvailable()) {
+    return NextResponse.json({ error: PAYMENTS_UNAVAILABLE_MESSAGE }, { status: 503 });
   }
 
   const provider = getPaymentProvider();

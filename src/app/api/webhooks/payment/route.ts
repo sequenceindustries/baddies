@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
-import { getPaymentProvider } from "@/lib/providers/payment";
+import { getPaymentProvider, stubPaymentsBlocked } from "@/lib/providers/payment";
 import { db } from "@/lib/db/client";
 import {
   postRevenueEvent,
@@ -38,6 +38,12 @@ const RECOGNITION_MONTH_MS = 30 * 24 * 60 * 60 * 1000; // matches src/lib/ledger
  * treated as a true duplicate.
  */
 export async function POST(req: NextRequest) {
+  // No real processor configured in production — there is nothing that
+  // could legitimately call this, and the stub would accept unsigned
+  // bodies.
+  if (stubPaymentsBlocked()) {
+    return NextResponse.json({ error: "Not available." }, { status: 404 });
+  }
   const rawBody = await req.text();
   const signature = req.headers.get("x-payment-signature") ?? "";
 

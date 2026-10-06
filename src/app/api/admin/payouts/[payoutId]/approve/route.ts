@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
-import { getPaymentProvider } from "@/lib/providers/payment";
+import { getPaymentProvider, paymentsAvailable } from "@/lib/providers/payment";
 import { postPayoutEvent, recomputeWalletBalances } from "@/lib/ledger/service";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
@@ -45,7 +45,7 @@ export async function POST(
     return NextResponse.json({ error: `Payout is not pending (status: ${payout.status}).` }, { status: 409 });
   }
 
-  if (process.env.PAYMENT_PROVIDER !== "stub") {
+  if (!paymentsAvailable()) {
     return NextResponse.json(
       { error: "Real payout processing isn't wired up yet — no vendor has been selected (see build brief §21)." },
       { status: 501 }
