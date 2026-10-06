@@ -86,6 +86,7 @@ export interface CreatePayoutResult {
 export interface CreateHostedCheckoutSessionInput {
   pendingOrderId: string;
   providerCustomerId: string;
+  customerEmail?: string; // required by SOPSPAY's create-payment call
   amountUsd: number;
   currency: string; // "USD" today — see this app's own USD-only decision for this build
   successUrl: string;

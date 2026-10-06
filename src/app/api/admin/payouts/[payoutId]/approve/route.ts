@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
-import { getPaymentProvider, paymentsAvailable } from "@/lib/providers/payment";
+import { getPaymentProvider, providerPayoutsAvailable } from "@/lib/providers/payment";
 import { postPayoutEvent, recomputeWalletBalances } from "@/lib/ledger/service";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
@@ -10,7 +10,9 @@ import { postPayoutEvent, recomputeWalletBalances } from "@/lib/ledger/service";
 export const dynamic = "force-dynamic";
 
 /**
- * Approves a payout request. Like the dummy checkout routes (see
+ * Approves a payout request. Without a provider payout API (production
+ * today) this records a manual, off-platform payout — see the branch
+ * below. With the stub, like the dummy checkout routes (see
  * src/app/api/checkout/subscribe/route.ts for the rationale), this
  * completes synchronously against the stub PaymentProvider — calls
  * provider.createPayout(), posts the PAYOUT ledger entry immediately, and
@@ -45,11 +47,48 @@ export async function POST(
     return NextResponse.json({ error: `Payout is not pending (status: ${payout.status}).` }, { status: 409 });
   }
 
-  if (!paymentsAvailable()) {
-    return NextResponse.json(
-      { error: "Real payout processing isn't wired up yet — no vendor has been selected (see build brief §21)." },
-      { status: 501 }
-    );
+  // No provider payout API (SOPSPAY settles to the company wallet; the
+  // stub is refused in production): the admin pays the creator outside
+  // baddies and records that here with a reference, which marks the
+  // payout PAID and posts the PAYOUT ledger debit — so the same balance
+  // can never be requested and paid twice.
+  if (!providerPayoutsAvailable()) {
+    const body = (await req.json().catch(() => null)) as { manualReference?: unknown } | null;
+    const manualReference = typeof body?.manualReference === "string" ? body.manualReference.trim() : "";
+    if (manualReference.length < 3 || manualReference.length > 200) {
+      return NextResponse.json(
+        {
+          error: "Pay the creator directly, then confirm with the payment reference (EFT reference or transaction hash).",
+          manualRequired: true,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Guarded on REQUESTED so a double click can't debit the ledger twice.
+    const claimed = await db.payout.updateMany({
+      where: { id: payout.id, status: "REQUESTED" },
+      data: { status: "PAID", processedAt: new Date(), paymentProviderPayoutId: `manual:${manualReference}` },
+    });
+    if (claimed.count === 0) {
+      return NextResponse.json({ error: "Payout was already processed." }, { status: 409 });
+    }
+
+    await postPayoutEvent({ walletId: payout.walletId, payoutId: payout.id, amountUsd: Number(payout.amountUsd) });
+    await recomputeWalletBalances(payout.walletId);
+
+    await db.auditLog.create({
+      data: {
+        actorId: admin.id,
+        action: "payout.approve",
+        targetType: "payout",
+        targetId: payout.id,
+        metadata: { mode: "manual", reference: manualReference },
+        ipAddress: req.headers.get("x-forwarded-for") ?? undefined,
+      },
+    });
+
+    return NextResponse.json({ payoutId: payout.id, status: "PAID" });
   }
 
   const provider = getPaymentProvider();

@@ -1,5 +1,6 @@
 import type { PaymentProvider } from "./types";
 import { StubPaymentProvider } from "./stub";
+import { SopspayPaymentProvider, sopspayCredentials } from "./sopspay";
 
 export * from "./types";
 
@@ -26,6 +27,17 @@ export function stubPaymentsBlocked(): boolean {
 
 /** True when checkout can actually take money (or stub-pay outside production). */
 export function paymentsAvailable(): boolean {
+  const providerName = process.env.PAYMENT_PROVIDER ?? "stub";
+  if (providerName === "sopspay") return sopspayCredentials() !== null;
+  return providerName === "stub" && !stubPaymentsBlocked();
+}
+
+/**
+ * Whether an admin-approved payout can be sent through the provider.
+ * Only the stub simulates it — SOPSPAY settles to the company wallet and
+ * has no payout API, so real creator payouts happen outside it.
+ */
+export function providerPayoutsAvailable(): boolean {
   return (process.env.PAYMENT_PROVIDER ?? "stub") === "stub" && !stubPaymentsBlocked();
 }
 
@@ -40,6 +52,8 @@ export function getPaymentProvider(): PaymentProvider {
   switch (providerName) {
     case "stub":
       return new StubPaymentProvider();
+    case "sopspay":
+      return new SopspayPaymentProvider();
     default:
       throw new Error(
         `Unknown PAYMENT_PROVIDER "${providerName}". Register an implementation in src/lib/providers/payment/index.ts.`

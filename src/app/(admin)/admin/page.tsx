@@ -1410,15 +1410,29 @@ function PayoutQueue() {
 
   useEffect(reload, []);
 
-  async function approve(id: string) {
+  async function approve(id: string, manualReference?: string) {
     setBusyId(id);
-    const res = await fetch(`/api/admin/payouts/${id}/approve`, { method: "POST" });
+    const res = await fetch(`/api/admin/payouts/${id}/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(manualReference ? { manualReference } : {}),
+    });
     setBusyId(null);
-    if (res.ok) reload();
-    else {
-      const body = await res.json().catch(() => null);
-      alert(body?.error ?? "Approve failed.");
+    if (res.ok) {
+      reload();
+      return;
     }
+    const body = await res.json().catch(() => null);
+    // Payouts are paid outside baddies (no provider payout API) — the
+    // admin confirms with the reference of the payment they made.
+    if (body?.manualRequired && !manualReference) {
+      const reference = window.prompt(
+        "Payouts are sent outside baddies. Once you've paid this creator, enter the payment reference (EFT reference or transaction hash):"
+      );
+      if (reference?.trim()) await approve(id, reference.trim());
+      return;
+    }
+    alert(body?.error ?? "Approve failed.");
   }
 
   return (

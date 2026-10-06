@@ -45,7 +45,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not available." }, { status: 404 });
   }
   const rawBody = await req.text();
-  const signature = req.headers.get("x-payment-signature") ?? "";
+  // SOPSPAY signs with X-Sopspay-Signature (older kits: X-Rampex-/
+  // X-Webhook-Signature); the stub's own caller uses X-Payment-Signature.
+  const signature =
+    req.headers.get("x-sopspay-signature") ??
+    req.headers.get("x-rampex-signature") ??
+    req.headers.get("x-webhook-signature") ??
+    req.headers.get("x-payment-signature") ??
+    "";
 
   const provider = getPaymentProvider();
 

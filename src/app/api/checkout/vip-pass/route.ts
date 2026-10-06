@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
   const checkout = await provider.createHostedCheckoutSession({
     pendingOrderId: order.id,
     providerCustomerId: providerCustomer.providerCustomerId,
+    customerEmail: user.email,
     amountUsd,
     currency: "USD",
     successUrl: `${origin}/fan-subscriptions?checkout=success`,
