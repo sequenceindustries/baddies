@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicOrigin } from "@/lib/seo/site-url";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest) {
   });
 
   const providerCustomer = await provider.createCustomer({ userId: user.id, email: user.email });
-  const origin = req.nextUrl.origin;
+  const origin = publicOrigin();
   const checkout = await provider.createHostedCheckoutSession({
     pendingOrderId: order.id,
     providerCustomerId: providerCustomer.providerCustomerId,

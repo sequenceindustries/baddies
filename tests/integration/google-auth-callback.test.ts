@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { hashPassword, verifyPassword } from "@/lib/auth/session";
+import { publicOrigin } from "@/lib/seo/site-url";
 
 /**
  * Integration test (real Postgres) for GET /api/auth/google/callback.
@@ -72,6 +73,8 @@ describe.skipIf(!dbAvailable)("Google sign-in callback (integration)", () => {
     const res = await googleCallback(callbackRequest(`code=abc&state=${STATE}`));
 
     expect(res.status).toBe(307);
+    // Built from APP_URL, never the request's own (proxy-internal) origin.
+    expect(new URL(res.headers.get("location")!).origin).toBe(publicOrigin());
     expect(new URL(res.headers.get("location")!).pathname).toBe("/");
     expect(sessionCookie(res)).toBeDefined();
 
@@ -166,7 +169,7 @@ describe.skipIf(!dbAvailable)("Google sign-in callback (integration)", () => {
     );
 
     const location = new URL(res.headers.get("location")!);
-    expect(location.host).toBe("localhost:3000");
+    expect(location.origin).toBe(publicOrigin());
     expect(location.pathname).toBe("/");
   });
 });

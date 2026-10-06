@@ -4,6 +4,7 @@ import { db } from "@/lib/db/client";
 import type { Prisma, UserRole } from "@prisma/client";
 import { createSession, hashPassword } from "@/lib/auth/session";
 import { exchangeGoogleCode, isGoogleAuthConfigured, safeReturnTo } from "@/lib/auth/google";
+import { publicOrigin } from "@/lib/seo/site-url";
 import { getPlatformSetting } from "@/lib/config/settings";
 import { BUSINESS_CONFIG_KEYS } from "@/lib/config/business";
 
@@ -13,8 +14,8 @@ export const dynamic = "force-dynamic";
 const STATE_COOKIE = "google_oauth_state";
 const RETURN_TO_COOKIE = "google_oauth_return_to";
 
-function failure(req: NextRequest, reason: string): NextResponse {
-  const url = new URL("/login", req.nextUrl.origin);
+function failure(reason: string): NextResponse {
+  const url = new URL("/login", publicOrigin());
   url.searchParams.set("error", reason);
   const response = NextResponse.redirect(url);
   response.cookies.delete(STATE_COOKIE);
@@ -36,13 +37,13 @@ function failure(req: NextRequest, reason: string): NextResponse {
  */
 export async function GET(req: NextRequest) {
   if (!isGoogleAuthConfigured()) {
-    return failure(req, "google_not_configured");
+    return failure("google_not_configured");
   }
 
   // The visitor backed out of (or Google refused) the consent screen —
   // Google redirects back with ?error=access_denied and no code.
   if (req.nextUrl.searchParams.get("error")) {
-    return failure(req, "google_cancelled");
+    return failure("google_cancelled");
   }
 
   const code = req.nextUrl.searchParams.get("code");
@@ -51,7 +52,7 @@ export async function GET(req: NextRequest) {
   const returnTo = req.cookies.get(RETURN_TO_COOKIE)?.value;
 
   if (!code || !state || !expectedState || state !== expectedState) {
-    return failure(req, "google_state_mismatch");
+    return failure("google_state_mismatch");
   }
 
   let profile;
@@ -59,11 +60,11 @@ export async function GET(req: NextRequest) {
     profile = await exchangeGoogleCode(code);
   } catch (err) {
     console.error("[google-callback] token exchange/verification failed", err);
-    return failure(req, "google_exchange_failed");
+    return failure("google_exchange_failed");
   }
 
   if (!profile.emailVerified) {
-    return failure(req, "google_email_unverified");
+    return failure("google_email_unverified");
   }
 
   let userId: string;
@@ -77,7 +78,7 @@ export async function GET(req: NextRequest) {
     // Same gate as POST /api/auth/login — a suspended/banned account
     // must not get back in through a second door.
     if (!existing.isActive) {
-      return failure(req, "account_inactive");
+      return failure("account_inactive");
     }
     if (!existing.emailVerified) {
       // Google has just proven this person owns the address, which the
@@ -149,7 +150,7 @@ export async function GET(req: NextRequest) {
   });
 
   const destination = safeReturnTo(returnTo) ?? "/";
-  const response = NextResponse.redirect(new URL(destination, req.nextUrl.origin));
+  const response = NextResponse.redirect(new URL(destination, publicOrigin()));
   response.cookies.set(process.env.SESSION_COOKIE_NAME ?? "baddies_session", token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
