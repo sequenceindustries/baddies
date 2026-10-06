@@ -20,10 +20,9 @@ describe("user email verification token", () => {
 
   it("rejects a validly-signed token with the wrong purpose claim", async () => {
     const secret = new TextEncoder().encode(process.env.AUTH_SECRET);
-    // Specifically the Founding Baddies email-verification purpose —
-    // confirms the two token types can't be swapped for each other,
-    // even though they share the exact same signing shape.
-    const wrongPurposeToken = await new SignJWT({ userId: "user_def", purpose: "founding_email_verify" })
+    // Confirms a token minted for another purpose can't be swapped in,
+    // even though it shares the exact same signing shape.
+    const wrongPurposeToken = await new SignJWT({ userId: "user_def", purpose: "some_other_purpose" })
       .setProtectedHeader({ alg: "HS256" })
       .setIssuedAt()
       .setExpirationTime("1h")

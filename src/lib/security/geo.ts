@@ -30,7 +30,7 @@ export function isSouthAfrica(country: string | null): boolean {
 /**
  * Which of the resolution paths in getRequestLocation() actually produced
  * the result — recorded on the Location model (see prisma/schema.prisma)
- * as part of the MASTER REQUIREMENTS §1 audit trail for every founding
+ * as part of the MASTER REQUIREMENTS §1 audit trail for every creator
  * application, accepted or rejected.
  */
 export type LocationDetectionSignal =

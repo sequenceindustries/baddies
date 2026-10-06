@@ -25,9 +25,7 @@ export type Permission =
   | "settings:write"
   | "audit:view"
   | "dashboard:view" // admin-only: aggregate stats + the member directory
-  | "banking:view" // admin-only: creator/Founding Baddie banking details (masked in the UI regardless — see src/lib/security/mask.ts)
-  | "founding_partner:manage" // admin-only: invite/revoke/resend partners, correct referral attribution
-  | "system:reset_founding_roster" // admin-only, separate from founding_partner:manage — irreversibly deletes every real partner/creator/application and reseeds the 5-account demo roster (see src/app/api/admin/system/reset-founding-roster/route.ts)
+  | "banking:view" // admin-only: creator banking details (masked in the UI regardless — see src/lib/security/mask.ts)
   | "system:wipe_test_content" // admin-only — overwrites the posted image bytes of every non-dummy creator's IMAGE content with the brand wordmark, without deleting the accounts (see src/app/api/admin/system/wipe-test-content/route.ts)
   | "system:delete_fan_accounts"; // admin-only — irreversibly deletes every FAN-role account except the one preserved test fixture (see src/app/api/admin/system/delete-fan-accounts/route.ts)
 
@@ -55,22 +53,12 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "audit:view",
     "dashboard:view",
     "banking:view",
-    "founding_partner:manage",
-    "system:reset_founding_roster",
     "system:wipe_test_content",
     "system:delete_fan_accounts",
   ],
-  // A partner's own dashboard routes authorize by row ownership (this
-  // FoundingPartner.userId === the current user's id) directly, not
-  // through this permission table. "creator:apply" is the one real
-  // exception: a Founding Partner can also apply as a creator (the same
-  // account holds both a FoundingPartner row and, once approved, a
-  // CreatorProfile — see /api/creator/apply, which flips role to
-  // CREATOR the same way it does for a FAN applicant). Once that
-  // happens the account's role becomes CREATOR and picks up the normal
-  // CREATOR permissions below; PARTNER-ness itself is tracked by the
-  // FoundingPartner row's own existence from then on, not by this role
-  // field — see /api/partner/dashboard's own comment.
+  // Legacy role from the retired Founding Partners programme — kept in
+  // the enum so existing rows stay valid; such an account behaves like
+  // a FAN that can apply as a creator.
   PARTNER: ["creator:apply"],
 };
 

@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic";
 const BodySchema = z.object({ token: z.string().min(1) });
 
 /**
- * Public, unauthenticated — the token itself is the credential, same as
- * the Founding Baddies version (src/app/api/founding/verify-email/route.ts).
+ * Public, unauthenticated — the token itself is the credential, so the
+ * link works from any device/browser, signed in or not.
  * Atomic from the start via updateMany + a WHERE guard (not a plain
  * update()) — Phase 2 discovered this needed to be race-safe (a double-
  * click, two tabs, or React StrictMode's dev-mode double effect-fire)

@@ -180,12 +180,17 @@ a[href]:hover {
    hamburger button carries no inline `display` at all, so plain cascade
    order is enough for it. .nav-mobile-menu only ever mounts while its
    button is toggled open, but the min-width rule guards the edge case of
-   resizing back to desktop without a route change first. */
+   resizing back to desktop without a route change first.
+   900px, not the 680px phone breakpoint used elsewhere: the desktop row
+   keeps its links truly centered between the brand and the account
+   controls, and the widest real link set (a fan's three links plus the
+   account menu) needs roughly that much room to do so without crowding.
+   In between, the hamburger menu carries the same links. */
 .nav-hamburger {
     display: none;
 }
 
-@media (max-width: 680px) {
+@media (max-width: 900px) {
     .nav-links-desktop {
         display: none !important;
     }
@@ -195,7 +200,7 @@ a[href]:hover {
     }
 }
 
-@media (min-width: 681px) {
+@media (min-width: 901px) {
     .nav-mobile-menu {
         display: none !important;
     }

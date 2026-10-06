@@ -5,7 +5,6 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { motion } from "motion/react";
 import { transitions } from "@/lib/motion/tokens";
 import { useSession, displayHeadingStyle, SignInGate, AnimatedNumber, SkeletonBlock } from "@/components/ui";
-import { FOUNDING_STATUSES } from "@/lib/founding/status";
 
 interface CreatorApplication {
   creatorProfileId: string;
@@ -31,7 +30,7 @@ interface ContentQueueItem {
   participantCount: number;
 }
 
-const TABS = ["Overview", "Members", "Creators", "Fans", "Applications", "Founding Partners", "Content", "Revenue", "Payouts", "Trust & Safety", "Activity", "Audit Log", "System Health", "Reset Roster", "Wipe Test Content", "Delete Fan Accounts"] as const;
+const TABS = ["Overview", "Members", "Creators", "Fans", "Applications", "Content", "Revenue", "Payouts", "Trust & Safety", "Activity", "Audit Log", "System Health", "Wipe Test Content", "Delete Fan Accounts"] as const;
 type Tab = (typeof TABS)[number];
 
 type RangeKey = "today" | "7d" | "30d" | "90d" | "all";
@@ -61,20 +60,9 @@ interface CommandCentreData {
     content: { value: number; newInRange: number; deltaPct: number | null };
     openIssues: number;
   };
-  foundingBaddies: {
-    target: number;
-    current: number;
-    percent: number | null;
-    funnel: Record<string, number>;
-    conversion: { appliedToVerified: number | null; verifiedToApproved: number | null; approvedToLive: number | null };
-    newInRange: number;
-    awaitingReview: number;
-    onboarding: number;
-    readyForLaunch: number;
-  };
   actionRequired: { id: string; label: string; count: number; linkTab: Tab | null }[];
   badges: { applications: number; content: number; payouts: number; trustSafety: number };
-  charts: { newUsers: DayCount[]; newCreators: DayCount[]; newApplications: DayCount[]; newContent: DayCount[] };
+  charts: { newUsers: DayCount[]; newCreators: DayCount[]; newContent: DayCount[] };
   recentActivity: { id: string; kind: string; label: string; actor: string | null; timestamp: string }[];
 }
 
@@ -82,8 +70,7 @@ interface CommandCentreData {
 // calls for — but only the tabs that actually exist this phase are
 // clickable (no `tab` field). The rest render as a visibly disabled
 // "soon" pill rather than linking to a page that isn't built yet
-// (Creators/Founding Baddies get their own page in a later phase; today
-// they live inside Applications — Revenue and System Health likewise).
+// (Revenue and System Health likewise got their own pages later).
 interface NavLeaf {
   label: string;
   tab?: Tab;
@@ -110,7 +97,6 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Members", tab: "Members" },
       { label: "Creators", tab: "Creators" },
       { label: "Fans", tab: "Fans" },
-      { label: "Founding Partners", tab: "Founding Partners" },
       { label: "Applications", tab: "Applications", badgeKey: "applications" },
     ],
   },
@@ -134,7 +120,6 @@ const NAV_GROUPS: NavGroup[] = [
     color: "#94a3b8",
     items: [
       { label: "System Health", tab: "System Health" },
-      { label: "Reset Roster", tab: "Reset Roster" },
       { label: "Wipe Test Content", tab: "Wipe Test Content" },
       { label: "Delete Fan Accounts", tab: "Delete Fan Accounts" },
     ],
@@ -186,9 +171,7 @@ function NavGroups({ tab, onSelect, badges }: { tab: Tab; onSelect: (t: Tab) => 
 /**
  * Tabbed rather than one long scroll — grouped nav (People/Content/
  * Business/Insights/System) with a real Command Centre Overview up
- * front: KPIs, the Founding Baddies funnel (the current priority — see
- * this session's plan file), Action Required, growth charts, and recent
- * activity, all from one GET /api/admin/command-centre call. Every
+ * front: KPIs, Action Required, growth charts, and recent activity, all from one GET /api/admin/command-centre call. Every
  * number there is a real query — a metric with nothing behind it reads
  * as 0 or "—", never an invented figure.
  */
@@ -208,7 +191,6 @@ export default function AdminDashboardPage() {
   const [ccData, setCcData] = useState<CommandCentreData | null>(null);
   const [ccLoading, setCcLoading] = useState(true);
   const [ccError, setCcError] = useState<string | null>(null);
-  const [foundingFilter, setFoundingFilter] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user || user.role !== "ADMIN") return;
@@ -238,11 +220,6 @@ export default function AdminDashboardPage() {
       cancelled = true;
     };
   }, [range, user]);
-
-  function goToFoundingStage(status: string) {
-    setFoundingFilter(status);
-    setTab("Applications");
-  }
 
   if (loading) return <main style={mainStyle} />;
 
@@ -315,19 +292,12 @@ export default function AdminDashboardPage() {
             range={range}
             onRangeChange={setRange}
             onNavigate={setTab}
-            onDrillFounding={goToFoundingStage}
           />
         )}
         {tab === "Members" && <MembersPanel />}
         {tab === "Creators" && <MembersPanel lockedRole="CREATOR" />}
         {tab === "Fans" && <MembersPanel lockedRole="FAN" />}
-        {tab === "Applications" && (
-          <>
-            <FoundingApplicationsQueue statusFilter={foundingFilter} onClearFilter={() => setFoundingFilter(null)} />
-            <CreatorQueue />
-          </>
-        )}
-        {tab === "Founding Partners" && <FoundingPartnersPanel />}
+        {tab === "Applications" && <CreatorQueue />}
         {tab === "Content" && (
           <>
             <ContentQueue />
@@ -345,7 +315,6 @@ export default function AdminDashboardPage() {
         {tab === "Activity" && <ActivityPanel data={ccData} loading={ccLoading} error={ccError} />}
         {tab === "Audit Log" && <AuditLogPanel />}
         {tab === "System Health" && <SystemHealthPanel />}
-        {tab === "Reset Roster" && <ResetRosterPanel />}
         {tab === "Wipe Test Content" && <WipeTestContentPanel />}
         {tab === "Delete Fan Accounts" && <DeleteFanAccountsPanel />}
       </main>
@@ -372,7 +341,6 @@ function humanizeKey(key: string): string {
 // Single source of truth for the pipeline's status list — see its own
 // doc comment. Used both for the funnel bar chart below and the status
 // dropdown further down (previously two separately hand-kept copies).
-const FOUNDING_FUNNEL_STAGES = FOUNDING_STATUSES;
 
 function OverviewPanel({
   data,
@@ -381,7 +349,6 @@ function OverviewPanel({
   range,
   onRangeChange,
   onNavigate,
-  onDrillFounding,
 }: {
   data: CommandCentreData | null;
   loading: boolean;
@@ -389,7 +356,6 @@ function OverviewPanel({
   range: RangeKey;
   onRangeChange: (r: RangeKey) => void;
   onNavigate: (tab: Tab) => void;
-  onDrillFounding: (status: string) => void;
 }) {
   return (
     <section>
@@ -418,7 +384,7 @@ function OverviewPanel({
           {/* What needs YOUR attention, first — before any general
               health metrics. Its own heading carries the same total
               openIssues used to show as a disconnected 6th KPI card
-              below (openModerationCases + pendingFoundingReview +
+              below (openModerationCases +
               pendingCreatorReview + pendingPayouts, see command-centre/
               route.ts) — that was the same number shown twice, in two
               unconnected places, at two different levels of detail.
@@ -468,14 +434,11 @@ function OverviewPanel({
             </div>
           </section>
 
-          <FoundingBaddiesSection data={data.foundingBaddies} onDrill={onDrillFounding} />
-
           <section style={{ marginBottom: "2.5rem" }}>
             <h2 style={sectionHeadingStyle}>Growth</h2>
             <div style={chartGridStyle}>
               <GrowthChart title="New users" data={data.charts.newUsers} />
               <GrowthChart title="New creators" data={data.charts.newCreators} />
-              <GrowthChart title="Founding Baddie applications" data={data.charts.newApplications} />
               <GrowthChart title="New content" data={data.charts.newContent} />
             </div>
             {/* No revenue chart — nothing to chart yet (see the Revenue
@@ -559,65 +522,6 @@ function KpiValue({ value }: { value: string }) {
         `${prefix}${n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}${suffix}`
       }
     />
-  );
-}
-
-function FoundingBaddiesSection({
-  data,
-  onDrill,
-}: {
-  data: CommandCentreData["foundingBaddies"];
-  onDrill: (status: string) => void;
-}) {
-  const maxCount = Math.max(1, ...FOUNDING_FUNNEL_STAGES.map((s) => data.funnel[s] ?? 0));
-  const pct = data.percent ?? 0;
-
-  return (
-    <section style={{ marginBottom: "2.5rem" }}>
-      <h2 style={sectionHeadingStyle}>Founding Baddies Command Centre</h2>
-
-      <div style={foundingProgressWrapStyle}>
-        <div style={foundingProgressBarOuterStyle}>
-          <div style={{ ...foundingProgressBarInnerStyle, width: `${Math.min(100, pct)}%` }} />
-        </div>
-        <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>
-          {data.current} / {data.target}{" "}
-          <span style={{ color: "var(--accent)" }}>{data.percent !== null ? `${data.percent}%` : "—"}</span>
-          <span style={{ ...mutedSmallStyle, display: "inline" }}> toward target</span>
-        </div>
-      </div>
-
-      <div style={funnelWrapStyle}>
-        {FOUNDING_FUNNEL_STAGES.map((stage) => {
-          const count = data.funnel[stage] ?? 0;
-          return (
-            <div key={stage} style={funnelRowStyle} onClick={() => onDrill(stage)} role="button">
-              <span style={funnelLabelStyle}>{humanizeKey(stage)}</span>
-              <div style={funnelBarOuterStyle}>
-                <div
-                  style={{
-                    ...funnelBarInnerStyle,
-                    width: `${(count / maxCount) * 100}%`,
-                    background: stage === "REJECTED" ? "#f0685c" : "#3b82f6",
-                  }}
-                />
-              </div>
-              <span style={funnelCountStyle}>{count}</span>
-            </div>
-          );
-        })}
-      </div>
-
-      <StatGroup title="Recruitment funnel">
-        <Stat label="Applied → Verified" value={data.conversion.appliedToVerified !== null ? `${data.conversion.appliedToVerified}%` : "—"} />
-        <Stat label="Verified → Approved" value={data.conversion.verifiedToApproved !== null ? `${data.conversion.verifiedToApproved}%` : "—"} />
-        <Stat label="Approved → Live" value={data.conversion.approvedToLive !== null ? `${data.conversion.approvedToLive}%` : "—"} />
-        <Stat label="New applications" value={data.newInRange} />
-        <Stat label="Awaiting review" value={data.awaitingReview} alert={data.awaitingReview > 0} />
-        <Stat label="Onboarding" value={data.onboarding} />
-        <Stat label="Ready for launch" value={data.readyForLaunch} />
-      </StatGroup>
-    </section>
   );
 }
 
@@ -758,8 +662,6 @@ interface MemberRow {
   creatorProfileStatus: string | null;
   createdAt: string;
   lastSessionAt: string | null;
-  foundingBaddie: boolean;
-  isFoundingPartner: boolean;
   creatorStats: { contentCount: number; activeSubscribers: number; revenueUsd: string } | null;
   fanStats: { purchasesUsd: string; tipsUsd: string } | null;
 }
@@ -776,7 +678,6 @@ function MembersPanel({ lockedRole }: { lockedRole?: "CREATOR" | "FAN" }) {
   const [query, setQuery] = useState("");
   const [role, setRole] = useState(lockedRole ?? "");
   const [status, setStatus] = useState("");
-  const [founding, setFounding] = useState(false);
   const [verified, setVerified] = useState(false);
   const [newDays, setNewDays] = useState("");
   const [members, setMembers] = useState<MemberRow[]>([]);
@@ -793,7 +694,6 @@ function MembersPanel({ lockedRole }: { lockedRole?: "CREATOR" | "FAN" }) {
     if (lockedRole) params.set("role", lockedRole);
     else if (role) params.set("role", role);
     if (status) params.set("status", status);
-    if (founding) params.set("founding", "true");
     if (verified) params.set("verified", "true");
     if (newDays) params.set("newDays", newDays);
     if (cursorValue) params.set("cursor", cursorValue);
@@ -893,11 +793,6 @@ function MembersPanel({ lockedRole }: { lockedRole?: "CREATOR" | "FAN" }) {
             <option value="7">New (7d)</option>
             <option value="30">New (30d)</option>
           </select>
-          {lockedRole !== "FAN" && (
-            <label style={filterCheckboxLabelStyle}>
-              <input type="checkbox" checked={founding} onChange={(e) => setFounding(e.target.checked)} /> Founding Baddie
-            </label>
-          )}
           {(lockedRole === "CREATOR" || role === "CREATOR") && (
             <label style={filterCheckboxLabelStyle}>
               <input type="checkbox" checked={verified} onChange={(e) => setVerified(e.target.checked)} /> Verified only
@@ -921,15 +816,11 @@ function MembersPanel({ lockedRole }: { lockedRole?: "CREATOR" | "FAN" }) {
             Showing {members.length} {members.length === 1 ? nounSingularLower : nounPluralLower}
             {cursor ? " (more available)" : ""}.
           </p>
-          {lockedRole === "CREATOR" ? (
-            <CreatorGroups members={members} busyId={busyId} onSelect={setSelectedUserId} onAct={act} />
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-              {members.map((m) => (
-                <MemberRowCard key={m.userId} m={m} busyId={busyId} onSelect={setSelectedUserId} onAct={act} />
-              ))}
-            </div>
-          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+            {members.map((m) => (
+              <MemberRowCard key={m.userId} m={m} busyId={busyId} onSelect={setSelectedUserId} onAct={act} />
+            ))}
+          </div>
           {cursor && (
             <button onClick={loadMore} disabled={loadingMore} style={{ ...approveButtonStyle, marginTop: "1rem" }}>
               {loadingMore ? "Loading..." : "Load more"}
@@ -961,7 +852,6 @@ function MemberRowCard({
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 600, fontSize: "0.9rem" }}>
           {m.displayName ?? m.email}
           <span style={roleBadgeStyle(m.role)}>{humanizeKey(m.role)}</span>
-          {m.foundingBaddie && <span style={foundingBadgeStyle}>Founding Baddie</span>}
         </div>
         <div style={mutedSmallStyle}>
           {m.email} · {m.isActive ? "active" : "inactive"}
@@ -995,61 +885,6 @@ function MemberRowCard({
   );
 }
 
-/**
- * Creators tab only — groups the same flat `members` list into three
- * categories per direct request ("put creators together under
- * categories: Regular, Founding Baddies, Founding Partners") instead
- * of one undifferentiated list. Mutually exclusive despite a creator
- * being able to hold both statuses at once (a Founding Partner who
- * also applied as a creator — see MembersPanel's own doc comment on
- * NavLinks for that overlap): Founding Partner takes priority since
- * it's the smaller, higher-commitment cohort (50-cap program) — a
- * partner never also gets listed under Founding Baddies even if their
- * email also matches a FoundingApplication row.
- */
-function CreatorGroups({
-  members,
-  busyId,
-  onSelect,
-  onAct,
-}: {
-  members: MemberRow[];
-  busyId: string | null;
-  onSelect: (userId: string) => void;
-  onAct: (userId: string, action: "suspend" | "ban") => void;
-}) {
-  const partners = members.filter((m) => m.isFoundingPartner);
-  const baddies = members.filter((m) => !m.isFoundingPartner && m.foundingBaddie);
-  const regular = members.filter((m) => !m.isFoundingPartner && !m.foundingBaddie);
-
-  const groups: { label: string; rows: MemberRow[] }[] = [
-    { label: "Regular", rows: regular },
-    { label: "Founding Baddies", rows: baddies },
-    { label: "Founding Partners", rows: partners },
-  ];
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
-      {groups.map((group) => (
-        <div key={group.label}>
-          <h3 style={{ ...sectionHeadingStyle, fontSize: "1rem", marginBottom: "0.75rem" }}>
-            {group.label} <span style={mutedSmallStyle}>({group.rows.length})</span>
-          </h3>
-          {group.rows.length === 0 ? (
-            <p style={mutedSmallStyle}>None on this page.</p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-              {group.rows.map((m) => (
-                <MemberRowCard key={m.userId} m={m} busyId={busyId} onSelect={onSelect} onAct={onAct} />
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 interface MemberDetailData {
   userId: string;
   email: string;
@@ -1066,7 +901,6 @@ interface MemberDetailData {
   emailVerifiedAt: string | null;
   createdAt: string;
   lastSession: { at: string; ipAddress: string | null } | null;
-  foundingApplication: { id: string; status: string; appliedAt: string } | null;
   creatorProfile: {
     status: string;
     appliedAt: string;
@@ -1180,7 +1014,6 @@ function MemberDetailView({ userId, onBack, onChanged }: { userId: string; onBac
             <div>
               <h2 style={{ ...sectionHeadingStyle, margin: "0 0 0.3rem" }}>
                 {data.displayName ?? data.email}
-                {data.foundingApplication && <span style={foundingBadgeStyle}>Founding Baddie</span>}
               </h2>
               <div style={mutedSmallStyle}>
                 {data.email} · {humanizeKey(data.role)} · {data.isActive ? "active" : "inactive"} · joined{" "}
@@ -1216,12 +1049,6 @@ function MemberDetailView({ userId, onBack, onChanged }: { userId: string; onBac
 
           {tab === "Overview" && (
             <>
-              {data.foundingApplication && (
-                <StatGroup title="Founding Baddie application">
-                  <Stat label="Status" value={humanizeKey(data.foundingApplication.status)} />
-                  <Stat label="Applied" value={new Date(data.foundingApplication.appliedAt).toLocaleDateString()} />
-                </StatGroup>
-              )}
 
               {data.creatorProfile && (
                 <>
@@ -1405,695 +1232,6 @@ function MemberDetailView({ userId, onBack, onChanged }: { userId: string; onBac
                 </div>
               )}
             </>
-          )}
-        </>
-      )}
-    </section>
-  );
-}
-
-interface PlatformEntryView {
-  category: "social" | "creator";
-  platform: string;
-  handle: string;
-  link: string;
-  // Only ever set on applications submitted before this field was
-  // removed from the form (see /founding-baddies/page.tsx) — kept
-  // optional so those older rows still render correctly.
-  followers?: string;
-}
-
-interface FoundingApplicationRow {
-  id: string;
-  fullName: string;
-  stageName: string;
-  email: string;
-  phone: string;
-  country: string;
-  city: string;
-  platforms: PlatformEntryView[];
-  audienceSize: string | null;
-  monetisationExperience: string | null;
-  creatingSince: string | null;
-  currentlyMonetising: boolean | null;
-  whyJoinBaddies: string;
-  status: string;
-  adminNotes: string | null;
-  createdAt: string;
-  // MASTER REQUIREMENTS sub-statuses (§5, §7) — read-only in Phase 1, see
-  // GET /api/admin/founding-applications. Mostly null/empty until Phase 2
-  // builds real capture (identity/contact/banking) — Location is the
-  // exception, always populated from the moment of application (both
-  // accept and reject paths write one, see src/app/api/founding/apply).
-  identity: { status: string } | null;
-  contact: { emailVerified: boolean; whatsappVerified: boolean } | null;
-  location: {
-    status: string;
-    detectedCountry: string | null;
-    detectionSignal: string;
-    detectionTimestamp: string;
-    rejectionReason: string | null;
-  } | null;
-  banking: {
-    status: string;
-    bankName: string;
-    accountHolderName: string;
-    maskedAccountNumber: string;
-    accountType: string;
-    branchCode: string;
-  } | null;
-  // Phase 2: real uploads, signed per-request (see GET
-  // /api/admin/founding-applications) — never a stored/public URL.
-  identityDocuments: { id: string; type: string; status: string; uploadedAt: string; signedUrl: string }[];
-  // Phase 3: acceptance records only (who accepted which version, when)
-  // — not gated on banking:view, see that route's own comment.
-  agreements: { type: string; version: string; acceptedAt: string }[];
-}
-
-/**
- * Founding Baddies campaign applications (§ Founding Baddies Sprint,
- * Phase 5) — top of the Applications tab since recruiting the first
- * cohort is this sprint's whole point. One generic status dropdown per
- * row (FOUNDING_STATUSES) rather than approve/reject buttons — there
- * are 9 real pipeline stages here, not a binary decision.
- *
- * statusFilter/onClearFilter let the Command Centre's funnel drill
- * through to "just this stage" — filtered client-side (the queue
- * already loads every application, no need for a server round trip
- * for what's ultimately a small list at this stage of the business).
- */
-function FoundingApplicationsQueue({
-  statusFilter,
-  onClearFilter,
-}: {
-  statusFilter?: string | null;
-  onClearFilter?: () => void;
-}) {
-  const [applications, setApplications] = useState<FoundingApplicationRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  function reload() {
-    setLoading(true);
-    fetch("/api/admin/founding-applications")
-      .then((r) => (r.ok ? r.json() : { applications: [] }))
-      .then((body) => setApplications(body.applications ?? []))
-      .finally(() => setLoading(false));
-  }
-
-  useEffect(reload, []);
-
-  const visibleApplications = statusFilter ? applications.filter((a) => a.status === statusFilter) : applications;
-
-  async function changeStatus(id: string, status: string) {
-    setBusyId(id);
-    const res = await fetch(`/api/admin/founding-applications/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    setBusyId(null);
-    if (res.ok) reload();
-    else {
-      const body = await res.json().catch(() => null);
-      alert(body?.error ?? "Update failed.");
-    }
-  }
-
-  // Phase 4: the full identity/contact/location/banking/agreements/
-  // activity picture (grown too large for an inline row expand across
-  // Phases 1–3) moved to its own detail view — see
-  // FoundingApplicationDetailView below, same selectedId-swap pattern
-  // MembersPanel already uses for MemberDetailView.
-  if (selectedId) {
-    return (
-      <FoundingApplicationDetailView
-        id={selectedId}
-        onBack={() => setSelectedId(null)}
-        onChanged={reload}
-        changeStatus={changeStatus}
-        busy={busyId === selectedId}
-      />
-    );
-  }
-
-  return (
-    <section style={{ marginBottom: "3rem" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
-        <h2 style={{ ...sectionHeadingStyle, margin: 0 }}>Founding baddies applications</h2>
-        {statusFilter && (
-          <button onClick={onClearFilter} style={filterChipStyle}>
-            {humanizeKey(statusFilter)} × clear
-          </button>
-        )}
-      </div>
-      {loading ? (
-        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
-      ) : visibleApplications.length === 0 ? (
-        <p style={{ color: "var(--text-muted)" }}>{statusFilter ? "None at this stage." : "No applications yet."}</p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          {visibleApplications.map((app) => (
-            <div
-              key={app.id}
-              style={{ ...rowCardStyle, cursor: "pointer" }}
-              onClick={() => setSelectedId(app.id)}
-            >
-              <div>
-                <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>
-                  {app.stageName} · {app.fullName}
-                </div>
-                <div style={mutedSmallStyle}>
-                  {app.email} · {app.city}, {app.country} · applied {new Date(app.createdAt).toLocaleDateString()}
-                </div>
-                <div style={mutedSmallStyle}>
-                  {app.platforms.length} platform{app.platforms.length === 1 ? "" : "s"} · Identity:{" "}
-                  {app.identity ? humanizeKey(app.identity.status) : "Not submitted"} · Banking:{" "}
-                  {app.banking ? humanizeKey(app.banking.status) : "Not submitted"} · Agreements:{" "}
-                  {app.agreements.length}/4
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
-                <select
-                  value={app.status}
-                  disabled={busyId === app.id}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => changeStatus(app.id, e.target.value)}
-                  style={statusSelectStyle}
-                >
-                  {FOUNDING_STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s.replace(/_/g, " ")}
-                    </option>
-                  ))}
-                </select>
-                <span style={{ ...filterChipStyle, textDecoration: "none" }}>View full profile →</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-interface FoundingApplicationDetail {
-  id: string;
-  fullName: string;
-  stageName: string;
-  email: string;
-  phone: string;
-  country: string;
-  city: string;
-  platforms: PlatformEntryView[];
-  audienceSize: string | null;
-  monetisationExperience: string | null;
-  creatingSince: string | null;
-  currentlyMonetising: boolean | null;
-  status: string;
-  adminNotes: string | null;
-  createdAt: string;
-  identity: {
-    legalName: string;
-    dateOfBirth: string;
-    nationality: string;
-    maskedIdNumber: string;
-    status: string;
-    submittedAt: string | null;
-    reviewedAt: string | null;
-    failureReason: string | null;
-  } | null;
-  contact: {
-    emailVerified: boolean;
-    emailVerifiedAt: string | null;
-    whatsappVerified: boolean;
-    whatsappVerifiedAt: string | null;
-  } | null;
-  location: {
-    status: string;
-    detectedCountry: string | null;
-    detectionSignal: string;
-    detectionTimestamp: string;
-    rejectionReason: string | null;
-  } | null;
-  banking: {
-    status: string;
-    bankName: string;
-    accountHolderName: string;
-    maskedAccountNumber: string;
-    accountType: string;
-    branchCode: string;
-    externalVerificationRef: string | null;
-    verifiedAt: string | null;
-  } | null;
-  identityDocuments: { id: string; type: string; status: string; uploadedAt: string; signedUrl: string }[];
-  agreements: { type: string; version: string; title: string; bodyText: string; acceptedAt: string }[];
-  linkedAccount: {
-    userId: string;
-    contentCount: number;
-    activeSubscribers: number;
-    revenueUsd: string;
-    creatorProfileId: string;
-  } | null;
-  activity: { id: string; action: string; actorEmail: string; createdAt: string }[];
-  referralAttribution: {
-    foundingPartnerId: string;
-    partnerEmail: string;
-    attributedAt: string;
-    correctedBy: string | null;
-    correctedAt: string | null;
-    correctionReason: string | null;
-  } | null;
-}
-
-const CREATOR_DETAIL_TABS = [
-  "Overview",
-  "Identity",
-  "Verification",
-  "Contact",
-  "Location",
-  "Creator Profile",
-  "Content",
-  "Subscribers",
-  "Revenue",
-  "Banking",
-  "Agreements",
-  "Activity",
-] as const;
-type CreatorDetailTab = (typeof CREATOR_DETAIL_TABS)[number];
-
-/**
- * MASTER REQUIREMENTS §15 "Admin Creator Detail" — a FoundingApplication
- * detail view, not CreatorProfile, because every identity/contact/
- * location/banking/agreement field only ever gets written to a
- * FoundingApplication (see the plan file's own reasoning: no FK exists
- * either direction between it and User/CreatorProfile, and nothing
- * populates those five entities for a real account today). Content/
- * Subscribers/Revenue are the one exception — sourced from a real
- * linked account when one exists (matched by email at fetch time, see
- * the GET route), with an honest empty state otherwise.
- *
- * First tab-strip UI in this file — both prior detail views
- * (MemberDetailView, ModerationCaseDetailView) are single-scroll. Kept
- * deliberately as plain local state + buttons, not a reusable
- * component, since this is the only place that needs it.
- */
-function FoundingApplicationDetailView({
-  id,
-  onBack,
-  onChanged,
-  changeStatus,
-  busy,
-}: {
-  id: string;
-  onBack: () => void;
-  onChanged: () => void;
-  changeStatus: (id: string, status: string) => Promise<void>;
-  busy: boolean;
-}) {
-  const [data, setData] = useState<FoundingApplicationDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<CreatorDetailTab>("Overview");
-  const [busyAction, setBusyAction] = useState(false);
-  const [partners, setPartners] = useState<{ id: string; email: string }[]>([]);
-  const [attributionChoice, setAttributionChoice] = useState("");
-
-  function reload() {
-    setLoading(true);
-    fetch(`/api/admin/founding-applications/${id}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((body: FoundingApplicationDetail | null) => {
-        setData(body);
-        setAttributionChoice(body?.referralAttribution?.foundingPartnerId ?? "");
-      })
-      .finally(() => setLoading(false));
-  }
-
-  useEffect(reload, [id]);
-  useEffect(() => {
-    fetch("/api/admin/partners")
-      .then((r) => (r.ok ? r.json() : { partners: [] }))
-      .then((body) => setPartners((body.partners ?? []).map((p: { id: string; email: string }) => ({ id: p.id, email: p.email }))));
-  }, []);
-
-  async function correctAttribution() {
-    const reason = window.prompt("Reason for this attribution change (required):");
-    if (!reason) return;
-    setBusyAction(true);
-    const res = await fetch(`/api/admin/founding-applications/${id}/correct-attribution`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ foundingPartnerId: attributionChoice || null, reason }),
-    });
-    setBusyAction(false);
-    if (res.ok) reload();
-    else {
-      const body = await res.json().catch(() => null);
-      alert(body?.error ?? "Couldn't update attribution.");
-    }
-  }
-
-  async function confirmWhatsapp() {
-    setBusyAction(true);
-    const res = await fetch(`/api/admin/founding-applications/${id}/confirm-whatsapp`, { method: "POST" });
-    setBusyAction(false);
-    if (res.ok) {
-      reload();
-      onChanged();
-    } else {
-      const body = await res.json().catch(() => null);
-      alert(body?.error ?? "Couldn't confirm WhatsApp.");
-    }
-  }
-
-  async function reviewIdentity(status: "VERIFIED" | "FAILED") {
-    const failureReason =
-      status === "FAILED" ? window.prompt("Reason (shown to no one but admins, optional):") ?? undefined : undefined;
-    setBusyAction(true);
-    const res = await fetch(`/api/admin/founding-applications/${id}/identity-review`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, failureReason }),
-    });
-    setBusyAction(false);
-    if (res.ok) {
-      reload();
-      onChanged();
-    } else {
-      const body = await res.json().catch(() => null);
-      alert(body?.error ?? "Couldn't submit identity review.");
-    }
-  }
-
-  async function reviewBanking(status: "EXTERNALLY_VERIFIED" | "FAILED" | "NEEDS_CORRECTION") {
-    const adminNotes =
-      status !== "EXTERNALLY_VERIFIED"
-        ? window.prompt("Notes (shown to no one but admins, optional):") ?? undefined
-        : undefined;
-    setBusyAction(true);
-    const res = await fetch(`/api/admin/founding-applications/${id}/banking-review`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, adminNotes }),
-    });
-    setBusyAction(false);
-    if (res.ok) {
-      reload();
-      onChanged();
-    } else {
-      const body = await res.json().catch(() => null);
-      alert(body?.error ?? "Couldn't submit banking review.");
-    }
-  }
-
-  async function handleStatusChange(newStatus: string) {
-    await changeStatus(id, newStatus);
-    reload();
-  }
-
-  return (
-    <section style={{ marginBottom: "3rem" }}>
-      <button onClick={onBack} style={{ ...tabButtonStyle, marginBottom: "1.25rem" }}>
-        ← Back to list
-      </button>
-
-      {loading || !data ? (
-        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
-      ) : (
-        <>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", marginBottom: "1.25rem" }}>
-            <div>
-              <h2 style={{ ...sectionHeadingStyle, margin: 0 }}>
-                {data.stageName} · {data.fullName}
-              </h2>
-              <div style={mutedSmallStyle}>
-                {data.email} · {data.city}, {data.country} · applied {new Date(data.createdAt).toLocaleDateString()}
-              </div>
-            </div>
-            <select
-              value={data.status}
-              disabled={busy}
-              onChange={(e) => handleStatusChange(e.target.value)}
-              style={statusSelectStyle}
-            >
-              {FOUNDING_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s.replace(/_/g, " ")}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "1.5rem" }}>
-            {CREATOR_DETAIL_TABS.map((t) => (
-              <button key={t} onClick={() => setTab(t)} style={t === tab ? tabButtonActiveStyle : tabButtonStyle}>
-                {t}
-              </button>
-            ))}
-          </div>
-
-          {tab === "Overview" && (
-            <StatGroup title="Overview">
-              <Stat label="Pipeline stage" value={humanizeKey(data.status)} />
-              <Stat label="Identity" value={data.identity ? humanizeKey(data.identity.status) : "Not submitted"} alert={data.identity?.status === "SUBMITTED"} />
-              <Stat label="Email" value={data.contact?.emailVerified ? "Verified" : "Unverified"} />
-              <Stat label="WhatsApp" value={data.contact?.whatsappVerified ? "Verified" : "Unverified"} alert={data.contact !== null && !data.contact.whatsappVerified && data.contact.emailVerified} />
-              <Stat label="Banking" value={data.banking ? humanizeKey(data.banking.status) : "Not submitted"} alert={data.banking?.status === "SUBMITTED"} />
-              <Stat label="Agreements" value={`${data.agreements.length}/4 accepted`} />
-              <Stat label="Registered account" value={data.linkedAccount ? "Yes" : "Not yet"} />
-              <Stat
-                label="Referred by"
-                value={data.referralAttribution ? data.referralAttribution.partnerEmail : "No referral"}
-              />
-              {data.referralAttribution?.correctedBy && (
-                <Stat label="Attribution corrected" value={data.referralAttribution.correctionReason ?? "—"} />
-              )}
-              <div style={{ marginTop: "0.8rem", display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-                <select
-                  value={attributionChoice}
-                  onChange={(e) => setAttributionChoice(e.target.value)}
-                  style={statusSelectStyle}
-                >
-                  <option value="">No referral</option>
-                  {partners.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.email}
-                    </option>
-                  ))}
-                </select>
-                <button onClick={correctAttribution} disabled={busyAction} style={approveButtonStyle}>
-                  Save attribution correction
-                </button>
-              </div>
-            </StatGroup>
-          )}
-
-          {tab === "Identity" && (
-            <StatGroup title="Identity">
-              {!data.identity ? (
-                <p style={{ color: "var(--text-muted)" }}>Not submitted yet.</p>
-              ) : (
-                <>
-                  <Stat label="Legal name" value={data.identity.legalName} />
-                  <Stat label="Date of birth" value={new Date(data.identity.dateOfBirth).toLocaleDateString()} />
-                  <Stat label="Nationality" value={data.identity.nationality} />
-                  <Stat label="ID / passport number" value={data.identity.maskedIdNumber} />
-                  <Stat label="Status" value={humanizeKey(data.identity.status)} />
-                  {data.identity.failureReason && <Stat label="Failure reason" value={data.identity.failureReason} />}
-                </>
-              )}
-              {data.identityDocuments.length > 0 && (
-                <div style={{ marginTop: "0.8rem", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                  {data.identityDocuments.map((d) => (
-                    <a key={d.id} href={d.signedUrl} target="_blank" rel="noreferrer" style={{ ...filterChipStyle, textDecoration: "none" }}>
-                      View {humanizeKey(d.type)} ↗
-                    </a>
-                  ))}
-                </div>
-              )}
-              {data.identity?.status === "SUBMITTED" && (
-                <div style={{ marginTop: "0.8rem", display: "flex", gap: "0.5rem" }}>
-                  <button onClick={() => reviewIdentity("VERIFIED")} disabled={busyAction} style={approveButtonStyle}>
-                    Verify identity
-                  </button>
-                  <button onClick={() => reviewIdentity("FAILED")} disabled={busyAction} style={rejectButtonStyle}>
-                    Fail identity
-                  </button>
-                </div>
-              )}
-            </StatGroup>
-          )}
-
-          {tab === "Verification" && (
-            <StatGroup title="Verification checklist">
-              <Stat label="Location" value={data.location?.status === "SOUTH_AFRICA" ? "✓ South Africa" : "○ " + (data.location ? humanizeKey(data.location.status) : "Pending")} />
-              <Stat label="Identity" value={data.identity?.status === "VERIFIED" ? "✓ Verified" : "○ " + (data.identity ? humanizeKey(data.identity.status) : "Not submitted")} />
-              <Stat label="Email" value={data.contact?.emailVerified ? "✓ Verified" : "○ Unverified"} />
-              <Stat label="WhatsApp" value={data.contact?.whatsappVerified ? "✓ Verified" : "○ Unverified"} />
-              <Stat label="Banking" value={data.banking?.status === "EXTERNALLY_VERIFIED" ? "✓ Verified" : "○ " + (data.banking ? humanizeKey(data.banking.status) : "Not submitted")} />
-            </StatGroup>
-          )}
-
-          {tab === "Contact" && (
-            <StatGroup title="Contact">
-              <Stat label="Email" value={data.contact?.emailVerified ? "Verified" : "Unverified"} />
-              {data.contact?.emailVerifiedAt && <Stat label="Email verified at" value={new Date(data.contact.emailVerifiedAt).toLocaleString()} />}
-              <Stat label="WhatsApp" value={data.contact?.whatsappVerified ? "Verified" : "Unverified"} />
-              {data.contact?.whatsappVerifiedAt && <Stat label="WhatsApp verified at" value={new Date(data.contact.whatsappVerifiedAt).toLocaleString()} />}
-              {data.contact && !data.contact.whatsappVerified && (
-                <div style={{ marginTop: "0.6rem" }}>
-                  <button onClick={confirmWhatsapp} disabled={busyAction} style={approveButtonStyle}>
-                    Confirm WhatsApp
-                  </button>
-                </div>
-              )}
-            </StatGroup>
-          )}
-
-          {tab === "Location" && (
-            <StatGroup title="Location">
-              {!data.location ? (
-                <p style={{ color: "var(--text-muted)" }}>Pending.</p>
-              ) : (
-                <>
-                  <Stat label="Status" value={humanizeKey(data.location.status)} />
-                  <Stat label="Detected country" value={data.location.detectedCountry ?? "Unknown"} />
-                  <Stat label="Detection signal" value={humanizeKey(data.location.detectionSignal)} />
-                  <Stat label="Detected at" value={new Date(data.location.detectionTimestamp).toLocaleString()} />
-                  {data.location.rejectionReason && <Stat label="Rejection reason" value={data.location.rejectionReason} />}
-                </>
-              )}
-            </StatGroup>
-          )}
-
-          {tab === "Creator Profile" && (
-            <StatGroup title="Creator profile">
-              <Stat label="Stage name" value={data.stageName} />
-              {data.audienceSize && <Stat label="Audience size" value={data.audienceSize} />}
-              {data.creatingSince && <Stat label="Creating since" value={data.creatingSince} />}
-              {data.currentlyMonetising !== null && <Stat label="Currently monetising" value={data.currentlyMonetising ? "Yes" : "Not yet"} />}
-              {data.monetisationExperience && <Stat label="Monetisation experience" value={data.monetisationExperience} />}
-              <div style={{ marginTop: "0.6rem" }}>
-                {data.platforms.map((p, i) => (
-                  <div key={i} style={mutedSmallStyle}>
-                    {p.category === "creator" ? "Creator platform" : "Social"} · {p.platform}
-                    {p.handle ? ` · @${p.handle}` : ""}
-                    {p.followers ? ` · ${p.followers} followers` : ""}
-                    {p.link ? (
-                      <>
-                        {" · "}
-                        <a href={p.link} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
-                          link
-                        </a>
-                      </>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </StatGroup>
-          )}
-
-          {tab === "Content" && (
-            <StatGroup title="Content">
-              {data.linkedAccount ? (
-                <Stat label="Content items" value={data.linkedAccount.contentCount} />
-              ) : (
-                <p style={{ color: "var(--text-muted)" }}>Not yet a registered creator — no account exists to have content.</p>
-              )}
-            </StatGroup>
-          )}
-
-          {tab === "Subscribers" && (
-            <StatGroup title="Subscribers">
-              {data.linkedAccount ? (
-                <Stat label="Active subscribers" value={data.linkedAccount.activeSubscribers} />
-              ) : (
-                <p style={{ color: "var(--text-muted)" }}>Not yet a registered creator — no account exists to have subscribers.</p>
-              )}
-            </StatGroup>
-          )}
-
-          {tab === "Revenue" && (
-            <StatGroup title="Revenue">
-              {data.linkedAccount ? (
-                <Stat label="Creator share, all-time" value={`$${data.linkedAccount.revenueUsd}`} />
-              ) : (
-                <p style={{ color: "var(--text-muted)" }}>Not yet a registered creator — no account exists to have revenue.</p>
-              )}
-            </StatGroup>
-          )}
-
-          {tab === "Banking" && (
-            <StatGroup title="Banking">
-              {!data.banking ? (
-                <p style={{ color: "var(--text-muted)" }}>Not submitted yet.</p>
-              ) : (
-                <>
-                  <Stat label="Bank" value={data.banking.bankName} />
-                  <Stat label="Account holder" value={data.banking.accountHolderName} />
-                  <Stat label="Account number" value={data.banking.maskedAccountNumber} />
-                  <Stat label="Account type" value={humanizeKey(data.banking.accountType)} />
-                  <Stat label="Branch code" value={data.banking.branchCode} />
-                  <Stat label="Status" value={humanizeKey(data.banking.status)} />
-                  {data.banking.externalVerificationRef && <Stat label="External reference" value={data.banking.externalVerificationRef} />}
-                  {data.banking.verifiedAt && <Stat label="Verified at" value={new Date(data.banking.verifiedAt).toLocaleString()} />}
-                </>
-              )}
-              {data.banking?.status === "SUBMITTED" && (
-                <div style={{ marginTop: "0.8rem", display: "flex", gap: "0.5rem" }}>
-                  <button onClick={() => reviewBanking("EXTERNALLY_VERIFIED")} disabled={busyAction} style={approveButtonStyle}>
-                    Mark verified
-                  </button>
-                  <button onClick={() => reviewBanking("NEEDS_CORRECTION")} disabled={busyAction} style={rejectButtonStyle}>
-                    Needs correction
-                  </button>
-                  <button onClick={() => reviewBanking("FAILED")} disabled={busyAction} style={rejectButtonStyle}>
-                    Fail
-                  </button>
-                </div>
-              )}
-            </StatGroup>
-          )}
-
-          {tab === "Agreements" && (
-            <StatGroup title="Agreements">
-              {data.agreements.length === 0 ? (
-                <p style={{ color: "var(--text-muted)" }}>None accepted yet.</p>
-              ) : (
-                data.agreements.map((a) => (
-                  <div key={a.type} style={{ marginBottom: "1rem" }}>
-                    <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>
-                      {a.title} ({a.version})
-                    </div>
-                    <div style={mutedSmallStyle}>Accepted {new Date(a.acceptedAt).toLocaleString()}</div>
-                    <details style={{ marginTop: "0.4rem" }}>
-                      <summary style={{ cursor: "pointer", fontSize: "0.85rem", color: "var(--accent)" }}>View full text</summary>
-                      <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", whiteSpace: "pre-wrap", marginTop: "0.4rem" }}>
-                        {a.bodyText}
-                      </p>
-                    </details>
-                  </div>
-                ))
-              )}
-            </StatGroup>
-          )}
-
-          {tab === "Activity" && (
-            <StatGroup title="Activity / audit history">
-              {data.activity.length === 0 ? (
-                <p style={{ color: "var(--text-muted)" }}>No recorded activity yet.</p>
-              ) : (
-                data.activity.map((a) => (
-                  <div key={a.id} style={auditRowStyle}>
-                    <span>{humanizeKey(a.action)}</span>
-                    <span style={mutedSmallStyle}>
-                      {a.actorEmail} · {new Date(a.createdAt).toLocaleString()}
-                    </span>
-                  </div>
-                ))
-              )}
-            </StatGroup>
           )}
         </>
       )}
@@ -2655,6 +1793,7 @@ function TrustAndSafetyPanel() {
           )}
         </>
       )}
+      <AbuseFlagsSection />
     </section>
   );
 }
@@ -2846,12 +1985,13 @@ function AuditLogPanel() {
 interface SystemHealthData {
   database: { connected: boolean; latencyMs: number | null; error: string | null };
   runtime: { nodeVersion: string; appVersion: string; uptimeSeconds: number; nodeEnv: string };
-  launchMode: string;
   providers: {
     payment: { name: string; isStub: boolean };
     storage: { name: string; isStub: boolean };
     verification: { name: string; isStub: boolean };
+    notification: { name: string; isStub: boolean };
   };
+  googleSignInConfigured: boolean;
   notImplemented: { label: string; reason: string }[];
 }
 
@@ -2919,7 +2059,6 @@ function SystemHealthPanel() {
               caption={data.database.connected ? `${data.database.latencyMs}ms latency` : data.database.error ?? undefined}
               alert={!data.database.connected}
             />
-            <KpiCard label="Launch mode" value={data.launchMode === "coming_soon" ? "Coming soon" : "Live"} />
             <KpiCard label="Uptime" value={formatUptime(data.runtime.uptimeSeconds)} caption={data.runtime.nodeEnv} />
             <KpiCard label="App version" value={data.runtime.appVersion} caption={data.runtime.nodeVersion} />
           </div>
@@ -2928,6 +2067,8 @@ function SystemHealthPanel() {
             <Stat label="Payment" value={data.providers.payment.name} alert={data.providers.payment.isStub} />
             <Stat label="Storage" value={data.providers.storage.name} alert={data.providers.storage.isStub} />
             <Stat label="Verification" value={data.providers.verification.name} alert={data.providers.verification.isStub} />
+            <Stat label="Email" value={data.providers.notification.name} alert={data.providers.notification.isStub} />
+            <Stat label="Google sign-in" value={data.googleSignInConfigured ? "Configured" : "Not configured"} alert={!data.googleSignInConfigured} />
           </StatGroup>
           {(data.providers.payment.isStub || data.providers.storage.isStub || data.providers.verification.isStub) && (
             <p style={mutedSmallStyle}>
@@ -2953,121 +2094,6 @@ function SystemHealthPanel() {
   );
 }
 
-interface ResetRosterResult {
-  deleted: {
-    usersRemoved: number;
-    partnersRemoved: number;
-    creatorsRemoved: number;
-    applicationsRemoved: number;
-  };
-  reseeded: boolean;
-  reseedError: string | null;
-  seededCreatorCount: number;
-}
-
-const RESET_CONFIRM_PHRASE = "RESET FOUNDING ROSTER";
-
-/**
- * The one genuinely irreversible admin action in this app — see
- * POST /api/admin/system/reset-founding-roster's own doc comment for the
- * full deletion order and safety model (everything in one transaction;
- * rolls back whole, never partial, if anything blocks it). This panel's
- * only job is to make triggering it deliberate: typing the exact phrase
- * is required before the button even enables, matching the server's own
- * check — a slipped click alone can never fire this.
- */
-function ResetRosterPanel() {
-  const [phrase, setPhrase] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<ResetRosterResult | null>(null);
-
-  const canSubmit = phrase === RESET_CONFIRM_PHRASE && !busy;
-
-  async function submit() {
-    if (!canSubmit) return;
-    if (!window.confirm("This permanently deletes every real partner, application, and creator account. Continue?")) {
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    setResult(null);
-    try {
-      const res = await fetch("/api/admin/system/reset-founding-roster", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirm: phrase }),
-      });
-      const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(body?.error ?? "Reset failed.");
-      setResult(body);
-      setPhrase("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Reset failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section>
-      <h2 style={sectionHeadingStyle}>Reset Roster</h2>
-      <p style={mutedSmallStyle}>
-        Permanently deletes every real Founding Partner, every Founding Baddie application, and every creator
-        account (including the current dummy roster) — then reseeds exactly 5 demo creator accounts. This cannot be
-        undone. Financial history (ledger entries, payouts) tied to any removed account is deleted as part of this,
-        not archived.
-      </p>
-
-      <div style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch", gap: "0.75rem", marginTop: "1rem" }}>
-        <label style={{ fontSize: "0.82rem", fontWeight: 600 }}>
-          Type <code>{RESET_CONFIRM_PHRASE}</code> to enable the reset button
-        </label>
-        <input
-          type="text"
-          value={phrase}
-          onChange={(e) => setPhrase(e.target.value)}
-          placeholder={RESET_CONFIRM_PHRASE}
-          style={{ ...memberSearchInputStyle, flex: "none" }}
-          disabled={busy}
-        />
-        <button
-          type="button"
-          onClick={submit}
-          disabled={!canSubmit}
-          style={{
-            ...rejectButtonStyle,
-            background: canSubmit ? "var(--danger)" : "transparent",
-            color: canSubmit ? "#fff" : "var(--text-muted)",
-            borderColor: canSubmit ? "var(--danger)" : "var(--border)",
-            cursor: canSubmit ? "pointer" : "not-allowed",
-            opacity: busy ? 0.7 : 1,
-          }}
-        >
-          {busy ? "Resetting..." : "Permanently reset roster"}
-        </button>
-      </div>
-
-      {error && <p style={{ color: "var(--danger)", marginTop: "0.75rem" }}>{error}</p>}
-
-      {result && (
-        <div style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch", gap: "0.4rem", marginTop: "1rem" }}>
-          <span style={{ fontWeight: 600, color: "var(--success)" }}>Reset complete.</span>
-          <span style={mutedSmallStyle}>
-            Removed {result.deleted.usersRemoved} account(s) — {result.deleted.partnersRemoved} partner(s),{" "}
-            {result.deleted.creatorsRemoved} creator(s) — and {result.deleted.applicationsRemoved} application(s).
-          </span>
-          <span style={mutedSmallStyle}>
-            {result.reseeded
-              ? `Reseeded ${result.seededCreatorCount} demo creator accounts.`
-              : `Reseed did not fully complete: ${result.reseedError}. Safe to trigger this reset again — the reseed step is idempotent.`}
-          </span>
-        </div>
-      )}
-    </section>
-  );
-}
-
 interface WipeTestContentResult {
   contentAffected: number;
   mediaAssetsReplaced: number;
@@ -3077,14 +2103,13 @@ interface WipeTestContentResult {
 const WIPE_CONFIRM_PHRASE = "WIPE TEST CONTENT";
 
 /**
- * The lighter-weight sibling of ResetRosterPanel: replaces every stray
+ * Replaces every stray
  * (non-official-demo) creator's posted photo with the brand wordmark, in
  * place, without deleting their accounts — see
  * POST /api/admin/system/wipe-test-content's own doc comment for exact
  * scope (IMAGE content only; the 5 official DUMMY_CREATORS are never
- * touched). Same "type the exact phrase" second-step pattern as the
- * roster reset, for the same reason: this overwrites real stored bytes
- * with no undo.
+ * touched). "Type the exact phrase" second-step confirmation: this
+ * overwrites real stored bytes with no undo.
  */
 function WipeTestContentPanel() {
   const [phrase, setPhrase] = useState("");
@@ -3283,658 +2308,12 @@ function DeleteFanAccountsPanel() {
   );
 }
 
-interface PartnerInvitationRow {
-  id: string;
-  name: string;
-  email: string | null;
-  code: string;
-  status: string;
-  invitedByEmail: string;
-  expiresAt: string | null;
-  acceptedAt: string | null;
-  revokedAt: string | null;
-  resentAt: string | null;
-  resendCount: number;
-  createdAt: string;
-  foundingPartnerId: string | null;
-}
-
-interface PartnerLedgerEntryRow {
-  id: string;
-  type: string;
-  grossAmount: string;
-  creatorShareAmount: string | null;
-  platformShareAmount: string | null;
-  createdAt: string;
-}
-
-interface ReferredCreatorRow {
-  foundingApplicationId: string;
-  stageName: string;
-  email: string;
-  status: string;
-  correctedBy: string | null;
-  correctionReason: string | null;
-}
-
-interface FoundingPartnerRow {
-  id: string;
-  email: string;
-  referralCode: string;
-  status: string;
-  activatedAt: string;
-  joinedPositionNumber: number | null;
-  referredCreators: ReferredCreatorRow[];
-  ledgerEntryCount: number;
-  ledgerEntries: PartnerLedgerEntryRow[];
-  agreement: { version: string; acceptedAt: string } | null;
-  commissionSummary: { lifetimeUsd: number; pendingUsd: number; payableUsd: number; paidUsd: number };
-  earningPeriods: { active: number; expired: number };
-}
-
-/**
- * The private Founding Partner programme: invitation CRUD (create/revoke/
- * resend), the partner roster with embedded referral + reward detail, and
- * suspend/reactivate. Not paginated anywhere — the whole programme is
- * capped at 50 partners (Founding Partner Programme v2), so both lists
- * stay small by construction. Same reload()/busyId queue pattern as every
- * other admin panel in this file. Also renders the v2 Referrals,
- * Commission Management, and Reporting sub-sections below the roster.
- */
-function FoundingPartnersPanel() {
-  const [invitations, setInvitations] = useState<PartnerInvitationRow[]>([]);
-  const [partners, setPartners] = useState<FoundingPartnerRow[]>([]);
-  const [positionsFilled, setPositionsFilled] = useState(0);
-  const [positionsLimit, setPositionsLimit] = useState(50);
-  const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  // Optional — see PartnerInvitation's own schema comment on why email
-  // can't be required here (admin won't have one for everyone).
-  const [email, setEmail] = useState("");
-  const [expiresInDays, setExpiresInDays] = useState("14");
-  const [inviting, setInviting] = useState(false);
-  // Surfaces the real, working invite link after sending/resending —
-  // never solely dependent on an invite email existing/landing (see the
-  // invitations routes' own comment: no address at all, a sandboxed
-  // provider, a typo, a spam filter can all mean no email ever arrives).
-  // Copyable so it can go out via DM, WhatsApp, anywhere.
-  const [inviteLinkInfo, setInviteLinkInfo] = useState<
-    { name: string; code: string; url: string; emailSent: boolean; hadEmail: boolean } | null
-  >(null);
-  const [linkCopied, setLinkCopied] = useState(false);
-
-  function reload() {
-    setLoading(true);
-    Promise.all([
-      fetch("/api/admin/partners/invitations").then((r) => (r.ok ? r.json() : { invitations: [] })),
-      fetch("/api/admin/partners").then((r) => (r.ok ? r.json() : { partners: [] })),
-    ])
-      .then(([invBody, partnerBody]) => {
-        setInvitations(invBody.invitations ?? []);
-        setPartners(partnerBody.partners ?? []);
-        setPositionsFilled(partnerBody.positionsFilled ?? 0);
-        setPositionsLimit(partnerBody.positionsLimit ?? 50);
-      })
-      .finally(() => setLoading(false));
-  }
-
-  useEffect(reload, []);
-
-  async function sendInvite(e: React.FormEvent) {
-    e.preventDefault();
-    setInviting(true);
-    const sentToName = name;
-    const res = await fetch("/api/admin/partners/invitations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        email: email || undefined,
-        expiresInDays: expiresInDays ? Number(expiresInDays) : undefined,
-      }),
-    });
-    setInviting(false);
-    if (res.ok) {
-      const body = await res.json().catch(() => null);
-      if (body?.inviteUrl) {
-        setInviteLinkInfo({
-          name: sentToName,
-          code: body.code,
-          url: body.inviteUrl,
-          emailSent: Boolean(body.emailSent),
-          hadEmail: Boolean(email),
-        });
-        setLinkCopied(false);
-      }
-      setName("");
-      setEmail("");
-      reload();
-    } else {
-      const body = await res.json().catch(() => null);
-      alert(body?.error && typeof body.error === "string" ? body.error : "Couldn't send invitation.");
-    }
-  }
-
-  async function revokeInvite(id: string) {
-    setBusyId(id);
-    const res = await fetch(`/api/admin/partners/invitations/${id}/revoke`, { method: "POST" });
-    setBusyId(null);
-    if (res.ok) reload();
-    else {
-      const body = await res.json().catch(() => null);
-      alert(body?.error ?? "Revoke failed.");
-    }
-  }
-
-  async function resendInvite(id: string) {
-    setBusyId(id);
-    const invitation = invitations.find((inv) => inv.id === id);
-    const res = await fetch(`/api/admin/partners/invitations/${id}/resend`, { method: "POST" });
-    setBusyId(null);
-    if (res.ok) {
-      const body = await res.json().catch(() => null);
-      if (body?.inviteUrl) {
-        setInviteLinkInfo({
-          name: invitation?.name ?? "",
-          code: invitation?.code ?? "",
-          url: body.inviteUrl,
-          emailSent: Boolean(body.emailSent),
-          hadEmail: Boolean(invitation?.email),
-        });
-        setLinkCopied(false);
-      }
-      reload();
-    } else {
-      const body = await res.json().catch(() => null);
-      alert(body?.error ?? "Resend failed.");
-    }
-  }
-
-  async function copyInviteLink() {
-    if (!inviteLinkInfo) return;
-    try {
-      await navigator.clipboard.writeText(inviteLinkInfo.url);
-      setLinkCopied(true);
-    } catch {
-      // Clipboard permission denied or unavailable — the link is still
-      // selectable text in the banner below, so this isn't a dead end.
-    }
-  }
-
-  async function toggleSuspend(id: string, currentlyActive: boolean) {
-    setBusyId(id);
-    const res = await fetch(`/api/admin/partners/${id}/${currentlyActive ? "suspend" : "reactivate"}`, { method: "POST" });
-    setBusyId(null);
-    if (res.ok) reload();
-    else {
-      const body = await res.json().catch(() => null);
-      alert(body?.error ?? "Action failed.");
-    }
-  }
-
-  const activePartnerCount = partners.filter((p) => p.status === "ACTIVE").length;
-  const pendingInviteCount = invitations.filter((i) => i.status === "PENDING").length;
-  const positionsPct = positionsLimit > 0 ? Math.min(100, (positionsFilled / positionsLimit) * 100) : 0;
-
-  return (
-    <section style={{ marginBottom: "3rem" }}>
-      <h2 style={sectionHeadingStyle}>Founding Partners</h2>
-      <p style={mutedSmallStyle}>
-        {activePartnerCount} active · {pendingInviteCount} pending invitation{pendingInviteCount === 1 ? "" : "s"}
-      </p>
-
-      <div style={{ ...foundingProgressWrapStyle, marginTop: "1rem" }}>
-        <div style={foundingProgressBarOuterStyle}>
-          <div style={{ ...foundingProgressBarInnerStyle, width: `${positionsPct}%` }} />
-        </div>
-        <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>
-          {positionsFilled} / {positionsLimit}{" "}
-          <span style={{ ...mutedSmallStyle, display: "inline" }}> Founding Partner positions filled</span>
-        </div>
-      </div>
-
-      <form onSubmit={sendInvite} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", margin: "1rem 0 2rem" }}>
-        <input
-          type="text"
-          style={memberSearchInputStyle}
-          placeholder="Invitee name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
-        <input
-          type="email"
-          style={memberSearchInputStyle}
-          placeholder="Email (optional)"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <select style={statusSelectStyle} value={expiresInDays} onChange={(e) => setExpiresInDays(e.target.value)}>
-          <option value="">No expiry</option>
-          <option value="7">Expires in 7 days</option>
-          <option value="14">Expires in 14 days</option>
-          <option value="30">Expires in 30 days</option>
-        </select>
-        <button type="submit" style={approveButtonStyle} disabled={inviting}>
-          {inviting ? "Sending..." : "Send invitation"}
-        </button>
-      </form>
-
-      {inviteLinkInfo && (
-        <div
-          style={{
-            background: "var(--surface-raised)",
-            border: `1px solid ${inviteLinkInfo.hadEmail && !inviteLinkInfo.emailSent ? "var(--danger)" : "var(--border)"}`,
-            borderRadius: "var(--radius)",
-            padding: "0.9rem 1rem",
-            marginBottom: "2rem",
-          }}
-        >
-          <div style={{ fontSize: "0.85rem", marginBottom: "0.5rem" }}>
-            {!inviteLinkInfo.hadEmail ? (
-              <>
-                Invite link for <strong>{inviteLinkInfo.name}</strong> (code <code>{inviteLinkInfo.code}</code>) — no
-                email on file, so copy this link and send it directly (DM, WhatsApp, in person, wherever reaches them).
-              </>
-            ) : inviteLinkInfo.emailSent ? (
-              <>
-                Invite link for <strong>{inviteLinkInfo.name}</strong> (code <code>{inviteLinkInfo.code}</code>) — the
-                email was sent too, but you can copy this and send it yourself as well.
-              </>
-            ) : (
-              <>
-                <span style={{ color: "var(--danger)", fontWeight: 600 }}>
-                  The invite email for {inviteLinkInfo.name} failed to send
-                </span>{" "}
-                — check the server logs for why (e.g. a sandboxed notification provider). The invitation itself
-                still exists — copy this link and send it directly instead.
-              </>
-            )}
-          </div>
-          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-            <input
-              readOnly
-              value={inviteLinkInfo.url}
-              onFocus={(e) => e.target.select()}
-              style={{ ...memberSearchInputStyle, flex: 1, minWidth: "260px", fontSize: "0.82rem" }}
-            />
-            <button type="button" onClick={copyInviteLink} style={approveButtonStyle}>
-              {linkCopied ? "Copied ✓" : "Copy link"}
-            </button>
-            <button type="button" onClick={() => setInviteLinkInfo(null)} style={rejectButtonStyle}>
-              Dismiss
-            </button>
-          </div>
-        </div>
-      )}
-
-      {loading ? (
-        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
-      ) : (
-        <>
-          <h3 style={statGroupHeadingStyle}>Invitations</h3>
-          {invitations.length === 0 ? (
-            <p style={{ color: "var(--text-muted)" }}>No invitations sent yet.</p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", marginBottom: "2rem" }}>
-              {invitations.map((inv) => (
-                <div key={inv.id} style={rowCardStyle}>
-                  <div>
-                    <div style={{ fontSize: "0.9rem" }}>
-                      {inv.name} · code <code>{inv.code}</code>
-                    </div>
-                    <div style={mutedSmallStyle}>
-                      {inv.status} · invited by {inv.invitedByEmail} · {new Date(inv.createdAt).toLocaleDateString()}
-                      {inv.email && ` · ${inv.email}`}
-                      {inv.expiresAt && ` · expires ${new Date(inv.expiresAt).toLocaleDateString()}`}
-                      {inv.resendCount > 0 && ` · resent ${inv.resendCount}x`}
-                    </div>
-                  </div>
-                  {inv.status === "PENDING" && (
-                    <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
-                      <button onClick={() => resendInvite(inv.id)} disabled={busyId === inv.id} style={approveButtonStyle}>
-                        Resend
-                      </button>
-                      <button onClick={() => revokeInvite(inv.id)} disabled={busyId === inv.id} style={rejectButtonStyle}>
-                        Revoke
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          <h3 style={statGroupHeadingStyle}>Partners</h3>
-          {partners.length === 0 ? (
-            <p style={{ color: "var(--text-muted)" }}>No activated partners yet.</p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-              {partners.map((p) => (
-                <div key={p.id} style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch", gap: "0.6rem" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
-                    <div>
-                      <div style={{ fontSize: "0.9rem" }}>
-                        {p.email}
-                        {p.joinedPositionNumber != null && ` · #${p.joinedPositionNumber}`}
-                      </div>
-                      <div style={mutedSmallStyle}>
-                        {p.status} · code <code>{p.referralCode}</code> · activated {new Date(p.activatedAt).toLocaleDateString()} ·{" "}
-                        {p.referredCreators.length} referred creator{p.referredCreators.length === 1 ? "" : "s"} ·{" "}
-                        {p.ledgerEntryCount} ledger event{p.ledgerEntryCount === 1 ? "" : "s"} · agreement{" "}
-                        {p.agreement ? `${p.agreement.version} accepted ${new Date(p.agreement.acceptedAt).toLocaleDateString()}` : "not on file"}
-                      </div>
-                      <div style={mutedSmallStyle}>
-                        commission — lifetime ${p.commissionSummary.lifetimeUsd.toFixed(2)} · pending $
-                        {p.commissionSummary.pendingUsd.toFixed(2)} · payable ${p.commissionSummary.payableUsd.toFixed(2)}{" "}
-                        · paid ${p.commissionSummary.paidUsd.toFixed(2)} · earning periods {p.earningPeriods.active} active /{" "}
-                        {p.earningPeriods.expired} expired
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => toggleSuspend(p.id, p.status === "ACTIVE")}
-                      disabled={busyId === p.id}
-                      style={p.status === "ACTIVE" ? rejectButtonStyle : approveButtonStyle}
-                    >
-                      {p.status === "ACTIVE" ? "Suspend" : "Reactivate"}
-                    </button>
-                  </div>
-                  {p.referredCreators.length > 0 && (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
-                      {p.referredCreators.map((c) => (
-                        <span key={c.foundingApplicationId} style={filterChipStyle}>
-                          {c.stageName} · {humanizeKey(c.status)}
-                          {c.correctedBy && " (corrected)"}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      <PartnerReportingSection />
-      <PartnerReferralsSection />
-      <PartnerCommissionManagementSection />
-      <AbuseFlagsSection />
-    </section>
-  );
-}
-
-interface PartnerReportRow {
-  totalFoundingBaddies: number;
-  target: number;
-  remainingToTarget: number;
-  totalReferredByPartners: number;
-  topPartners: { partnerId: string; partnerEmail: string; referralCode: string; creatorsReferred: number }[];
-}
-
-/** Founding Baddie / Founding Partner recruitment reporting (spec §7) — see GET /api/admin/partners/report for exactly what each figure means. */
-function PartnerReportingSection() {
-  const [report, setReport] = useState<PartnerReportRow | null>(null);
-
-  useEffect(() => {
-    fetch("/api/admin/partners/report")
-      .then((r) => (r.ok ? r.json() : null))
-      .then(setReport);
-  }, []);
-
-  if (!report) return null;
-
-  return (
-    <div style={{ marginTop: "2.5rem" }}>
-      <StatGroup title="Reporting">
-        <Stat label="Total Founding Baddies" value={report.totalFoundingBaddies} />
-        <Stat label="Referred by a Partner" value={report.totalReferredByPartners} />
-        <Stat label="Remaining to target" value={report.remainingToTarget} />
-        <Stat label="Target" value={report.target} />
-      </StatGroup>
-      {report.topPartners.length > 0 && (
-        <div style={{ marginTop: "1rem" }}>
-          <div style={{ ...mutedSmallStyle, marginBottom: "0.5rem" }}>Top Partners by recruitment</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-            {report.topPartners.map((p) => (
-              <div key={p.partnerId} style={rowCardStyle}>
-                <span style={{ fontSize: "0.88rem" }}>{p.partnerEmail}</span>
-                <span style={filterChipStyle}>{p.creatorsReferred} referred</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface PartnerReferralRow {
-  referralAttributionId: string;
-  partnerEmail: string;
-  partnerReferralCode: string;
-  stageName: string;
-  creatorEmail: string;
-  creatorStatus: string;
-  referredAt: string;
-  attributedAt: string;
-  correctedBy: string | null;
-  correctionReason: string | null;
-  subscriptionRevenueGeneratedUsd: number;
-  commissionGeneratedUsd: number;
-  earningPeriodStartAt: string | null;
-  earningPeriodEndAt: string | null;
-  earningPeriodStatus: "NOT_STARTED" | "ACTIVE" | "EXPIRED";
-}
-
-/** Flat, filterable referral list (spec §8 "Referrals") — see GET /api/admin/partners/referrals. */
-function PartnerReferralsSection() {
-  const [referrals, setReferrals] = useState<PartnerReferralRow[]>([]);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    setLoading(true);
-    const qs = statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : "";
-    fetch(`/api/admin/partners/referrals${qs}`)
-      .then((r) => (r.ok ? r.json() : { referrals: [] }))
-      .then((body) => setReferrals(body.referrals ?? []))
-      .finally(() => setLoading(false));
-  }, [statusFilter]);
-
-  return (
-    <div style={{ marginTop: "2.5rem" }}>
-      <h3 style={statGroupHeadingStyle}>Referrals ({referrals.length})</h3>
-      <select
-        style={{ ...statusSelectStyle, marginBottom: "1rem" }}
-        value={statusFilter}
-        onChange={(e) => setStatusFilter(e.target.value)}
-      >
-        <option value="">All statuses</option>
-        <option value="LIVE">Live</option>
-        <option value="VERIFIED">Verified</option>
-        <option value="APPROVED">Approved</option>
-        <option value="ONBOARDING">Onboarding</option>
-        <option value="REJECTED">Rejected</option>
-      </select>
-      {loading ? (
-        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
-      ) : referrals.length === 0 ? (
-        <p style={{ color: "var(--text-muted)" }}>No referrals match this filter.</p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          {referrals.map((r) => (
-            <div key={r.referralAttributionId} style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch", gap: "0.3rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
-                <span style={{ fontSize: "0.88rem" }}>
-                  {r.stageName} ← {r.partnerEmail}
-                </span>
-                <span style={filterChipStyle}>{humanizeKey(r.creatorStatus)}</span>
-              </div>
-              <div style={mutedSmallStyle}>
-                referred {new Date(r.referredAt).toLocaleDateString()} · attributed {new Date(r.attributedAt).toLocaleDateString()}
-                {r.correctedBy && " · attribution corrected"} · revenue ${r.subscriptionRevenueGeneratedUsd.toFixed(2)} · commission $
-                {r.commissionGeneratedUsd.toFixed(2)}
-                {r.earningPeriodStartAt && r.earningPeriodEndAt && (
-                  <>
-                    {" "}
-                    · earning period {new Date(r.earningPeriodStartAt).toLocaleDateString()} –{" "}
-                    {new Date(r.earningPeriodEndAt).toLocaleDateString()} ({r.earningPeriodStatus.toLowerCase()})
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface PartnerCommissionRow {
-  id: string;
-  partnerId: string;
-  partnerEmail: string;
-  creatorStageName: string;
-  creatorEmail: string;
-  netEligibleAmountUsd: number;
-  commissionAmountUsd: number;
-  reversedAmountUsd: number;
-  status: string;
-  heldBy: string | null;
-  heldReason: string | null;
-  heldAt: string | null;
-  reversedAt: string | null;
-  reversalReason: string | null;
-  createdAt: string;
-}
-
-/**
- * Commission ledger review (spec §8/§9/§10): hold a PENDING commission
- * for investigation, release a HELD one back to PENDING, or manually
- * reverse one believed fraudulent — never an automatic confiscation.
- * Every action prompts for a reason (window.prompt, same pattern as
- * every other admin reject/reason flow in this file) and is logged
- * server-side with actor/timestamp/reason/amount-before/amount-after.
- */
-function PartnerCommissionManagementSection() {
-  const [commissions, setCommissions] = useState<PartnerCommissionRow[]>([]);
-  const [statusFilter, setStatusFilter] = useState("PENDING");
-  const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  function reload() {
-    setLoading(true);
-    const qs = statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : "";
-    fetch(`/api/admin/partner-commissions${qs}`)
-      .then((r) => (r.ok ? r.json() : { commissions: [] }))
-      .then((body) => setCommissions(body.commissions ?? []))
-      .finally(() => setLoading(false));
-  }
-
-  useEffect(reload, [statusFilter]);
-
-  async function act(id: string, action: "hold" | "release" | "reverse") {
-    const reason = window.prompt(
-      action === "hold"
-        ? "Why are you holding this commission?"
-        : action === "release"
-          ? "Why are you releasing this commission?"
-          : "Why are you reversing this commission? This cannot be undone."
-    );
-    if (!reason) return;
-    setBusyId(id);
-    const res = await fetch(`/api/admin/partner-commissions/${id}/${action}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reason }),
-    });
-    setBusyId(null);
-    if (res.ok) reload();
-    else {
-      const body = await res.json().catch(() => null);
-      alert(body?.error && typeof body.error === "string" ? body.error : "Action failed.");
-    }
-  }
-
-  return (
-    <div style={{ marginTop: "2.5rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.75rem" }}>
-        <h3 style={{ ...statGroupHeadingStyle, margin: 0 }}>Commission management</h3>
-        <a
-          href={`/api/admin/partner-commissions/export${statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : ""}`}
-          style={{ ...filterChipStyle, textDecoration: "none" }}
-        >
-          Export CSV ↓
-        </a>
-      </div>
-      <select
-        style={{ ...statusSelectStyle, margin: "1rem 0" }}
-        value={statusFilter}
-        onChange={(e) => setStatusFilter(e.target.value)}
-      >
-        <option value="PENDING">Pending</option>
-        <option value="HELD">Held</option>
-        <option value="REVERSED">Reversed</option>
-        <option value="">All</option>
-      </select>
-      {loading ? (
-        <p style={{ color: "var(--text-muted)" }}>Loading...</p>
-      ) : commissions.length === 0 ? (
-        <p style={{ color: "var(--text-muted)" }}>No commissions match this filter.</p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          {commissions.map((c) => (
-            <div key={c.id} style={{ ...rowCardStyle, flexDirection: "column", alignItems: "stretch", gap: "0.5rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
-                <div>
-                  <div style={{ fontSize: "0.88rem" }}>
-                    {c.creatorStageName} ← {c.partnerEmail}
-                  </div>
-                  <div style={mutedSmallStyle}>
-                    net ${c.netEligibleAmountUsd.toFixed(2)} · commission ${c.commissionAmountUsd.toFixed(2)} · reversed $
-                    {c.reversedAmountUsd.toFixed(2)} · {new Date(c.createdAt).toLocaleDateString()}
-                    {c.heldReason && ` · held: ${c.heldReason}`}
-                    {c.reversalReason && ` · reversal: ${c.reversalReason}`}
-                  </div>
-                </div>
-                <span style={filterChipStyle}>{c.status}</span>
-              </div>
-              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                {c.status === "PENDING" && (
-                  <button onClick={() => act(c.id, "hold")} disabled={busyId === c.id} style={rejectButtonStyle}>
-                    Hold
-                  </button>
-                )}
-                {c.status === "HELD" && (
-                  <button onClick={() => act(c.id, "release")} disabled={busyId === c.id} style={approveButtonStyle}>
-                    Release
-                  </button>
-                )}
-                {c.status !== "REVERSED" && (
-                  <button onClick={() => act(c.id, "reverse")} disabled={busyId === c.id} style={rejectButtonStyle}>
-                    Reverse
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 interface AbuseFlagRow {
   id: string;
   type: string;
   status: string;
   reason: string;
   autoDetected: boolean;
-  partnerEmail: string | null;
-  applicationStageName: string | null;
-  commissionAmountUsd: number | null;
   reviewedBy: string | null;
   reviewedAt: string | null;
   resolutionNotes: string | null;
@@ -3942,14 +2321,10 @@ interface AbuseFlagRow {
 }
 
 /**
- * Founding Partner fraud/abuse review (spec §10) — narrow, rule-based
- * flags only, review/hold posture: this queue records a finding
- * (DISMISSED/CONFIRMED) but never itself corrects an attribution or
- * reverses a commission — see GET /api/admin/abuse-flags/[id]/resolve's
- * own comment on why. A CONFIRMED flag is a signal for admin to
- * separately use the existing attribution-correction flow (on the
- * Applications tab) or the Commission Management "Reverse" action
- * above, whichever fits the flag.
+ * Fraud & abuse review — narrow, rule-based flags only (e.g. a payment
+ * webhook whose amount/currency didn't match its order). Records a
+ * finding (DISMISSED/CONFIRMED) but never takes corrective action
+ * itself — see POST /api/admin/abuse-flags/[id]/resolve's own comment.
  */
 function AbuseFlagsSection() {
   const [flags, setFlags] = useState<AbuseFlagRow[]>([]);
@@ -4016,9 +2391,6 @@ function AbuseFlagsSection() {
                   <div style={{ fontSize: "0.88rem" }}>{humanizeKey(f.type)}</div>
                   <div style={mutedSmallStyle}>
                     {f.reason}
-                    {f.partnerEmail && ` · partner: ${f.partnerEmail}`}
-                    {f.applicationStageName && ` · creator: ${f.applicationStageName}`}
-                    {f.commissionAmountUsd != null && ` · commission: $${f.commissionAmountUsd.toFixed(2)}`}
                     {" · "}
                     {new Date(f.createdAt).toLocaleString()}
                   </div>
@@ -5126,67 +3498,6 @@ const chartCardStyle: React.CSSProperties = {
   padding: "0.9rem 1rem 0.5rem",
 };
 
-const foundingProgressWrapStyle: React.CSSProperties = {
-  marginBottom: "1.5rem",
-};
-
-const foundingProgressBarOuterStyle: React.CSSProperties = {
-  height: "10px",
-  borderRadius: "999px",
-  background: "var(--surface-raised)",
-  border: "1px solid var(--border)",
-  overflow: "hidden",
-  marginBottom: "0.5rem",
-};
-
-const foundingProgressBarInnerStyle: React.CSSProperties = {
-  height: "100%",
-  borderRadius: "999px",
-  background: "linear-gradient(90deg, var(--accent-dim), var(--accent))",
-  transition: "width 0.3s ease",
-};
-
-const funnelWrapStyle: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "0.4rem",
-  marginBottom: "1.5rem",
-};
-
-const funnelRowStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "9rem 1fr 2.5rem",
-  alignItems: "center",
-  gap: "0.6rem",
-  cursor: "pointer",
-  padding: "0.15rem 0",
-};
-
-const funnelLabelStyle: React.CSSProperties = {
-  fontSize: "0.78rem",
-  color: "var(--text-muted)",
-};
-
-const funnelBarOuterStyle: React.CSSProperties = {
-  height: "10px",
-  borderRadius: "999px",
-  background: "var(--surface-raised)",
-  overflow: "hidden",
-};
-
-const funnelBarInnerStyle: React.CSSProperties = {
-  height: "100%",
-  borderRadius: "999px",
-  minWidth: "2px",
-  transition: "width 0.3s ease",
-};
-
-const funnelCountStyle: React.CSSProperties = {
-  fontSize: "0.82rem",
-  fontWeight: 700,
-  textAlign: "right",
-};
-
 const actionItemStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -5230,19 +3541,6 @@ const filterCheckboxLabelStyle: React.CSSProperties = {
   fontSize: "0.82rem",
   color: "var(--text-muted)",
   cursor: "pointer",
-};
-
-const foundingBadgeStyle: React.CSSProperties = {
-  display: "inline-block",
-  marginLeft: "0.5rem",
-  background: "var(--accent-soft)",
-  color: "var(--accent)",
-  border: "1px solid var(--accent)",
-  borderRadius: "999px",
-  padding: "0.05rem 0.5rem",
-  fontSize: "0.68rem",
-  fontWeight: 700,
-  verticalAlign: "middle",
 };
 
 const resolutionTextareaStyle: React.CSSProperties = {

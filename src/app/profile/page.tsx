@@ -144,7 +144,6 @@ export default function ProfilePage() {
           <AccountTypePanel
             role={user.role}
             creatorProfile={user.creatorProfile}
-            foundingPartner={user.foundingPartner}
             createdAt={user.createdAt}
           />
           {/* Overview merged into this tab per direct request — a
@@ -176,33 +175,17 @@ export default function ProfilePage() {
 function AccountTypePanel({
   role,
   creatorProfile,
-  foundingPartner,
   createdAt,
 }: {
   role: "FAN" | "CREATOR" | "ADMIN" | "PARTNER";
   creatorProfile: { id: string; status: string } | null;
-  foundingPartner: { id: string; status: string } | null;
   createdAt: string;
 }) {
-  // foundingPartner and creatorProfile are independent — an account can
-  // hold both (a Founding Partner who's also applied as a creator; see
-  // /api/partner/dashboard's comment on why role alone can't tell "is
-  // this a partner" once that happens), so this panel describes whatever
-  // combination is actually true rather than picking just one.
   let heading = "Fan account";
   let body = "You can browse and subscribe to creators.";
   if (role === "ADMIN") {
     heading = "Admin account";
     body = "You have platform administration access.";
-  } else if (foundingPartner && creatorProfile) {
-    heading = "Founding Partner + Creator account";
-    body =
-      creatorProfile.status === "VERIFIED"
-        ? "You have your private Founding Partner dashboard, and you're a verified creator — your uploads publish immediately."
-        : `You have your private Founding Partner dashboard. Your creator application is in progress (status: ${creatorProfile.status}).`;
-  } else if (foundingPartner) {
-    heading = "Founding Partner account";
-    body = "You have access to your private Founding Partner dashboard.";
   } else if (creatorProfile) {
     heading = "Creator account";
     body =
@@ -235,11 +218,6 @@ function AccountTypePanel({
       {/* No "go manage your dashboard" link here anymore — Overview/
           Content/Settings are tabs on this same page now (see the
           SegmentedTabs above), not a separate route to point at. */}
-      {foundingPartner && (
-        <Link href="/partner-dashboard" style={{ ...linkStyle, display: "block" }}>
-          Go to your Partner dashboard →
-        </Link>
-      )}
     </div>
   );
 }
@@ -349,7 +327,7 @@ interface ApplicationDetails {
 
 /**
  * What this creator filled in when they applied — legal name and (for
- * Founding Baddies applicants) phone, plus whatever real verification
+ * creators from the original launch application) phone, plus whatever real verification
  * has been submitted (date of birth, nationality, ID number). All
  * read-only: legal name/DOB/nationality/ID number only ever change
  * through a real re-verification, never a form field here, per explicit
@@ -474,7 +452,7 @@ function OnboardingChecklist() {
     <div style={cardStyle}>
       <h2 style={{ ...sectionHeadingStyle, marginTop: 0, marginBottom: "0.3rem" }}>Get discovered</h2>
       <p style={{ ...mutedSmallStyle, marginTop: 0, marginBottom: "1rem" }}>
-        {doneCount} of {items.length} set up — finish these to look your best to fans and other Founding baddies.
+        {doneCount} of {items.length} set up — finish these to look your best to fans.
       </p>
       <div style={checklistGridStyle}>
         {items.map((item) => (
@@ -493,7 +471,6 @@ interface CreatorStats {
   publishedCount: number;
   totalCount: number;
   totalLikes: number;
-  referredByPartner: boolean;
 }
 
 /** Overview's at-a-glance numbers — see GET /api/creator/stats for what each figure means and why it's computed separately from the public creator-profile endpoint. */
@@ -520,14 +497,6 @@ function StatsPanel() {
         <WalletStat label="Total uploads" value={stats.totalCount} format="int" />
         <WalletStat label="Total likes" value={stats.totalLikes} format="int" />
       </div>
-      {/* Founding Partner Programme v2, spec §11 — quiet and private
-          only: no partner identity, no incentive language, no public
-          badge. Baddies stays a creator subscription platform first. */}
-      {stats.referredByPartner && (
-        <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", margin: "0.85rem 0 0" }}>
-          You joined Baddies through a Founding Partner referral.
-        </p>
-      )}
     </div>
   );
 }

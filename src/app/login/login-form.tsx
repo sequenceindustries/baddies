@@ -37,18 +37,33 @@ const COPY: Record<Intent, { subtitle: string; cta: string; registerHint: string
   },
 };
 
-export function LoginForm({ comingSoon }: { comingSoon: boolean }) {
+// GET /api/auth/google/callback redirects here with ?error=<reason> on
+// any failure — never a raw error page.
+const GOOGLE_ERROR_COPY: Record<string, string> = {
+  google_cancelled: "Google sign-in was cancelled.",
+  google_state_mismatch: "Your Google sign-in session expired. Please try again.",
+  google_exchange_failed: "We couldn't complete Google sign-in. Please try again.",
+  google_email_unverified: "Your Google account's email address isn't verified with Google.",
+  google_not_configured: "Google sign-in isn't available right now.",
+  account_inactive: "This account has been suspended. Contact support@baddies.africa if you think this is a mistake.",
+};
+
+export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   // ?intent=admin (linked from the admin gate) drops straight into an
   // admin-only view of this form -- no Fan/Creator picker, no "New
   // here?" register link, since you can't register your way into
   // admin. Sign-in itself is unchanged either way: one email/password
   // form, role decides where you land (see roleHomePath below).
-  const isAdminIntent = useSearchParams().get("intent") === "admin";
+  const isAdminIntent = searchParams.get("intent") === "admin";
+  const googleError = searchParams.get("error");
   const [intent, setIntent] = useState<Intent>(isAdminIntent ? "ADMIN" : "FAN");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    googleError ? (GOOGLE_ERROR_COPY[googleError] ?? "Sign-in failed. Please try again.") : null
+  );
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -150,25 +165,10 @@ export function LoginForm({ comingSoon }: { comingSoon: boolean }) {
       </div>
       {!isAdminIntent && (
         <p style={{ marginTop: "1.25rem", fontSize: "0.88rem", color: "var(--text-muted)" }}>
-          {comingSoon ? (
-            // /register is fully gated by middleware while LAUNCH_MODE is
-            // coming_soon (see src/middleware.ts) — both the Fan and
-            // Creator paths through it end up there, so neither
-            // registerHint above would actually go anywhere right now.
-            <>
-              New here?{" "}
-              <Link href="/founding-baddies" style={{ color: "var(--accent)" }}>
-                Become a Founding Baddie
-              </Link>
-            </>
-          ) : (
-            <>
-              New here?{" "}
-              <Link href="/register" style={{ color: "var(--accent)" }}>
-                {COPY[intent].registerHint}
-              </Link>
-            </>
-          )}
+          New here?{" "}
+          <Link href="/register" style={{ color: "var(--accent)" }}>
+            {COPY[intent].registerHint}
+          </Link>
         </p>
       )}
     </main>

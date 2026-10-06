@@ -11,8 +11,6 @@ interface MessageableCreator {
   creatorProfileId: string;
   displayName: string | null;
   avatarUrl: string | null;
-  isFoundingPartner: boolean;
-  isFoundingBaddie: boolean;
 }
 
 /**
@@ -68,7 +66,7 @@ export default function MessagesPage() {
               <Link href={`/creators/${c.creatorProfileId}`} style={rowLinkStyle}>
                 <CardAvatar url={c.avatarUrl} initial={(c.displayName ?? "?").trim().charAt(0).toUpperCase() || "?"} />
                 <span style={nameStyle}>{c.displayName ?? "Unnamed creator"}</span>
-                <VerifiedBadge isFoundingPartner={c.isFoundingPartner} isFoundingBaddie={c.isFoundingBaddie} />
+                <VerifiedBadge />
               </Link>
               <button onClick={() => setMessageTarget(c.creatorProfileId)} style={messageButtonStyle}>
                 Message

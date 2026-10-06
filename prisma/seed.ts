@@ -2,7 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { DEFAULT_BUSINESS_CONFIG, BUSINESS_CONFIG_KEYS } from "../src/lib/config/business";
 import { AGREEMENTS } from "./agreements";
 import { REVENUE_SHARE_RULES } from "./revenue-rules";
-import { DUMMY_CREATORS, seedDummyCreators } from "../src/lib/founding/dummy-creators";
+import { DUMMY_CREATORS, seedDummyCreators } from "../src/lib/creator/dummy-creators";
 
 const db = new PrismaClient();
 
@@ -15,11 +15,10 @@ const STARTER_CATEGORIES = [
   { slug: "fitness", name: "Fitness" },
 ];
 
-// DUMMY_CREATORS/DUMMY_PASSWORD and the actual account-writing logic now
-// live in src/lib/founding/dummy-creators.ts — it's called from here AND
-// from the admin "reset founding roster" route (production's own way to
-// get back to exactly this roster), so it can't stay a local-only script
-// function anymore. See that file for the roster and seeding logic.
+// DUMMY_CREATORS/DUMMY_PASSWORD and the actual account-writing logic
+// live in src/lib/creator/dummy-creators.ts — shared with the admin
+// wipe-test-content route. See that file for the roster and seeding
+// logic.
 
 async function main() {
   console.log("Seeding platform_settings with default business configuration...");
@@ -82,10 +81,8 @@ async function main() {
   // debris, it was scoped to "not dummy," and a real, live, human
   // creator on production is exactly as "not dummy" as leftover E2E
   // test rows are. It surfaced the hard way: the first real account that
-  // was ALSO a Founding Partner (see prisma/schema.prisma's
-  // FoundingPartner/ReferralAttribution models) hit this on a deploy,
-  // and only a foreign-key constraint (a real ReferralAttribution
-  // pointing at that partner) stopped a real user's account from being
+  // had a referral-programme row pointing at it hit this on a deploy,
+  // and only that foreign-key constraint stopped a real user's account from being
   // silently deleted — it just failed the deploy loudly instead. A
   // plain real creator with no such reference would have gone through
   // with no error at all. This was always live user-data risk, not just

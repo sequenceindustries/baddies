@@ -22,8 +22,6 @@ export interface PostCardItem {
     handle: string | null;
     avatarUrl: string | null;
     coverImageUrl: string | null;
-    isFoundingPartner: boolean;
-    isFoundingBaddie: boolean;
     viewerIsFollowing: boolean;
     viewerIsSubscribed: boolean;
     vvipPriceUsd: number;
@@ -319,7 +317,7 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
             <Link href={`/creators/${item.creator.creatorProfileId}`} style={postCreatorNameStyle}>
               {item.creator.displayName ?? "Unnamed creator"}
             </Link>
-            <VerifiedBadge isFoundingPartner={item.creator.isFoundingPartner} isFoundingBaddie={item.creator.isFoundingBaddie} />
+            <VerifiedBadge />
             {item.creator.handle && <span style={postHandleStyle}>@{item.creator.handle}</span>}
             {item.publishedAt && <span style={postTimeStyle}>· {timeAgo(item.publishedAt)}</span>}
           </div>

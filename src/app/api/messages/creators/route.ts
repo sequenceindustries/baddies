@@ -46,11 +46,9 @@ export async function GET() {
     where: { id: { in: creatorProfileIds }, acceptsMessages: true },
     select: {
       id: true,
-      isFoundingBaddie: true,
       user: {
         select: {
           profile: { select: { displayName: true, avatarUrl: true } },
-          foundingPartner: { select: { id: true } },
         },
       },
     },
@@ -61,8 +59,6 @@ export async function GET() {
       creatorProfileId: c.id,
       displayName: c.user.profile?.displayName ?? null,
       avatarUrl: (await resolveDisplayUrl(c.user.profile?.avatarUrl)) ?? null,
-      isFoundingPartner: c.user.foundingPartner !== null,
-      isFoundingBaddie: c.isFoundingBaddie,
     }))
   );
 

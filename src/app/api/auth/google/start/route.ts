@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { nanoid } from "nanoid";
-import { buildGoogleAuthUrl, isGoogleAuthConfigured } from "@/lib/auth/google";
+import { buildGoogleAuthUrl, isGoogleAuthConfigured, safeReturnTo } from "@/lib/auth/google";
 
 // Always dynamic: builds a redirect using live request/env state and
 // sets a cookie — must never be statically prerendered or cached.
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   // through `state` isn't safe (state is also this route's CSRF token,
   // and stuffing extra data into it invites tampering), so it rides
   // alongside in its own short-lived cookie instead.
-  const returnTo = req.nextUrl.searchParams.get("returnTo");
+  const returnTo = safeReturnTo(req.nextUrl.searchParams.get("returnTo"));
 
   const state = nanoid(24);
   const response = NextResponse.redirect(buildGoogleAuthUrl(state));
@@ -35,9 +35,9 @@ export async function GET(req: NextRequest) {
     path: "/",
   };
   response.cookies.set(STATE_COOKIE, state, cookieOpts);
-  if (returnTo && returnTo.startsWith("/")) {
-    // startsWith("/") only — never redirect off-site after callback,
-    // regardless of what a caller passes here.
+  if (returnTo) {
+    // Same-origin paths only (safeReturnTo) — never redirect off-site
+    // after callback, regardless of what a caller passes here.
     response.cookies.set("google_oauth_return_to", returnTo, cookieOpts);
   }
   return response;

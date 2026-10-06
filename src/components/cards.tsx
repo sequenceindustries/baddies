@@ -15,8 +15,6 @@ export interface CreatorCardData {
   city: string | null;
   verifiedBadge: true;
   vvipPriceUsd: number;
-  isFoundingPartner?: boolean;
-  isFoundingBaddie?: boolean;
   // This creator's latest Free post — always safe to show on a
   // discovery card (Free is public the moment it's live, see
   // src/lib/discovery/creator-card.ts), unlike VIP/Exclusive media.
@@ -149,7 +147,7 @@ export function CreatorCard({ creator, size = "md" }: { creator: CreatorCardData
             <span style={cardCreatorNameStyle}>{creator.displayName ?? "Unnamed creator"}</span>
           </span>
           <div style={cardTopScrimBadgeStyle}>
-            <VerifiedBadge isFoundingPartner={creator.isFoundingPartner} isFoundingBaddie={creator.isFoundingBaddie} />
+            <VerifiedBadge />
           </div>
         </div>
 

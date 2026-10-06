@@ -26,6 +26,17 @@ export function googleRedirectUri(): string {
   return `${base.replace(/\/$/, "")}/api/auth/google/callback`;
 }
 
+/**
+ * Only same-origin paths are allowed as a post-login destination — a
+ * plain startsWith("/") check would also accept protocol-relative
+ * "//evil.example" (or the "/\\evil.example" variant browsers normalize
+ * the same way), which `new URL(value, origin)` resolves off-site.
+ */
+export function safeReturnTo(value: string | null | undefined): string | null {
+  if (!value || !value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) return null;
+  return value;
+}
+
 export function buildGoogleAuthUrl(state: string): string {
   if (!GOOGLE_CLIENT_ID) throw new Error("GOOGLE_CLIENT_ID is not set.");
   const params = new URLSearchParams({

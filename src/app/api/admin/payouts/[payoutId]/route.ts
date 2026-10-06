@@ -18,7 +18,7 @@ const UpdateSchema = z.object({
  * dedicated /approve route already handles — Processing/Paid/Failed/
  * Reversed had no route at all before this. No dedicated state-machine
  * file exists for Payout (unlike Content/Creator), so this trusts
- * admin discretion, same as the Founding Applications status dropdown.
+ * admin discretion.
  */
 export async function PATCH(req: NextRequest, { params }: { params: { payoutId: string } }) {
   const user = await getCurrentUser();

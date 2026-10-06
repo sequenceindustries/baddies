@@ -151,7 +151,7 @@ export function CreatorProfileClient({
           <div style={identityTextStyle}>
             <span style={nameStyle}>{creator.displayName ?? "Unnamed creator"}</span>
             {creator.handle && <span style={handleStyle}>@{creator.handle}</span>}
-            <VerifiedBadge isFoundingPartner={creator.isFoundingPartner} isFoundingBaddie={creator.isFoundingBaddie} />
+            <VerifiedBadge />
           </div>
           {!isOwnProfile && user && (
             <CreatorOptionsMenu

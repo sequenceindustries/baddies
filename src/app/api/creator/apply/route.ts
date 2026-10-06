@@ -59,9 +59,9 @@ export async function POST(req: NextRequest) {
                 );
     }
 
-  // South African creators only, no exceptions — same request-origin
-  // check as /api/founding/apply (see its comment); Profile.country isn't
-  // trusted here either, since it's a fan's own self-reported field.
+  // South African creators only, no exceptions — checked against the
+  // request's own origin (see src/lib/security/geo.ts); Profile.country
+  // isn't trusted here, since it's a fan's own self-reported field.
   const country = await getRequestCountry(req);
   if (!isSouthAfrica(country)) {
     return NextResponse.json({ error: NOT_SOUTH_AFRICA_MESSAGE }, { status: 403 });

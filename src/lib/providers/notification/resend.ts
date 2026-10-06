@@ -5,11 +5,15 @@ const RESEND_API_URL = "https://api.resend.com/emails";
 /**
  * Resend NotificationProvider — a single REST call, no SDK dependency
  * (this codebase deliberately keeps its dependency list small; Resend's
- * API is plain JSON over fetch). `RESEND_FROM_EMAIL` defaults to
- * Resend's shared sandbox sender (works with no DNS setup); swap to a
- * verified @baddies.africa address once that domain is set up in
- * Resend — a separate, later task.
+ * API is plain JSON over fetch). `RESEND_FROM_EMAIL` defaults to the
+ * verified baddies.africa sending domain. Never point it at Resend's
+ * shared sandbox sender (onboarding@resend.dev) in production: Resend
+ * only delivers sandbox mail to the Resend account owner's own inbox, so
+ * every other recipient's email (verification links included) is
+ * rejected.
  */
+const DEFAULT_FROM_EMAIL = "baddies <no-reply@baddies.africa>";
+
 export class ResendNotificationProvider implements NotificationProvider {
   readonly name = "resend";
 
@@ -22,7 +26,12 @@ export class ResendNotificationProvider implements NotificationProvider {
       throw new Error("RESEND_API_KEY is not set — required when NOTIFICATION_PROVIDER=resend.");
     }
     this.apiKey = apiKey;
-    this.fromEmail = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
+    this.fromEmail = process.env.RESEND_FROM_EMAIL || DEFAULT_FROM_EMAIL;
+    if (process.env.NODE_ENV === "production" && /@resend\.dev>?$/i.test(this.fromEmail)) {
+      console.error(
+        `[notification:resend] RESEND_FROM_EMAIL is Resend's sandbox sender (${this.fromEmail}) — Resend only delivers it to the account owner, so real users won't receive email. Set it to an address on the verified baddies.africa domain.`
+      );
+    }
   }
 
   async sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
@@ -44,7 +53,7 @@ export class ResendNotificationProvider implements NotificationProvider {
     const body = await res.json().catch(() => null);
     if (!res.ok) {
       const message = body?.message ?? `Resend API error (${res.status})`;
-      throw new Error(message);
+      throw new Error(`Resend rejected the email (${res.status}): ${message}`);
     }
 
     return { providerMessageId: body?.id ?? null };

@@ -1,10 +1,7 @@
 import { getNotificationProvider } from "@/lib/providers/notification";
 import { createUserEmailVerificationToken } from "@/lib/auth/email-verification";
 
-/**
- * Real-account equivalent of src/lib/notifications/email-verification.ts
- * (which is Founding-Baddies-specific). Same composer/send shape.
- */
+/** Composes the account email-verification message. */
 export function buildUserEmailVerificationEmail(
   displayName: string,
   verifyUrl: string

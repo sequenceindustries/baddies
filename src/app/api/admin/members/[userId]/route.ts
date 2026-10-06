@@ -43,7 +43,6 @@ export async function GET(_req: Request, { params }: { params: { userId: string 
   }
 
   const [
-    foundingApplication,
     lastSession,
     recentActivity,
     reportsFiled,
@@ -60,7 +59,6 @@ export async function GET(_req: Request, { params }: { params: { userId: string 
     recentTips,
     fanTrial,
   ] = await Promise.all([
-    db.foundingApplication.findFirst({ where: { email: user.email }, orderBy: { createdAt: "desc" } }),
     db.session.findFirst({ where: { userId: user.id, revokedAt: null }, orderBy: { createdAt: "desc" }, select: { createdAt: true, ipAddress: true } }),
     db.auditLog.findMany({
       where: { OR: [{ actorId: user.id }, { targetId: user.id }] },
@@ -176,9 +174,6 @@ export async function GET(_req: Request, { params }: { params: { userId: string 
     emailVerifiedAt: user.emailVerified,
     createdAt: user.createdAt,
     lastSession: lastSession ? { at: lastSession.createdAt, ipAddress: lastSession.ipAddress } : null,
-    foundingApplication: foundingApplication
-      ? { id: foundingApplication.id, status: foundingApplication.status, appliedAt: foundingApplication.createdAt }
-      : null,
     creatorProfile: user.creatorProfile
       ? {
           status: user.creatorProfile.status,

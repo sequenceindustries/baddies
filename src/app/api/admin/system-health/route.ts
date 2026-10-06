@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { isGoogleAuthConfigured } from "@/lib/auth/google";
 import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
 
@@ -67,16 +68,17 @@ export async function GET() {
       uptimeSeconds: Math.round(process.uptime()),
       nodeEnv: process.env.NODE_ENV ?? "unknown",
     },
-    launchMode: process.env.LAUNCH_MODE === "coming_soon" ? "coming_soon" : "live (public site is up)",
     providers: {
       payment: provider(process.env.PAYMENT_PROVIDER),
       storage: provider(process.env.MEDIA_STORAGE_PROVIDER),
       verification: provider(process.env.VERIFICATION_PROVIDER),
+      notification: provider(process.env.NOTIFICATION_PROVIDER),
     },
+    googleSignInConfigured: isGoogleAuthConfigured(),
     notImplemented: [
       { label: "Failed background jobs", reason: "No job queue system exists in this codebase." },
       { label: "Recent system errors", reason: "No error-logging table exists — nothing to query." },
-      { label: "Notification / email delivery failures", reason: "No email provider is wired up yet, so nothing has ever been sent to fail." },
+      { label: "Notification / email delivery failures", reason: "Send failures are only logged to the server console — no delivery-log table exists." },
     ],
   });
 }

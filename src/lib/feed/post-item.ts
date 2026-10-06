@@ -24,13 +24,11 @@ export const POST_ITEM_SELECT = {
       id: true,
       unlimitedOptedIn: true,
       vvipPriceOverride: true,
-      isFoundingBaddie: true,
       coverImageUrl: true,
       handle: true,
       user: {
         select: {
           profile: { select: { displayName: true, avatarUrl: true } },
-          foundingPartner: { select: { id: true } },
         },
       },
     },
@@ -50,12 +48,10 @@ export interface PostItemRow {
     id: string;
     unlimitedOptedIn: boolean;
     vvipPriceOverride: unknown; // Prisma.Decimal | null — see resolveCreatorPricing's own param type
-    isFoundingBaddie: boolean;
     coverImageUrl: string | null;
     handle: string | null;
     user: {
       profile: { displayName: string | null; avatarUrl: string | null } | null;
-      foundingPartner: { id: string } | null;
     };
   };
 }
@@ -122,8 +118,6 @@ export async function shapeContentItem(
       handle: item.creatorProfile.handle,
       avatarUrl: avatarUrl ?? null,
       coverImageUrl: coverImageUrl ?? null,
-      isFoundingPartner: item.creatorProfile.user.foundingPartner !== null,
-      isFoundingBaddie: item.creatorProfile.isFoundingBaddie,
       viewerIsFollowing: opts.viewerIsFollowing,
       viewerIsSubscribed: opts.viewerIsSubscribed,
       vvipPriceUsd: opts.vvipPriceUsd,

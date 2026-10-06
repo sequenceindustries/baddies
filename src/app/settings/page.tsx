@@ -58,7 +58,7 @@ const ROLE_LABEL: Record<"FAN" | "CREATOR" | "ADMIN" | "PARTNER", string> = {
   FAN: "Fan",
   CREATOR: "Creator",
   ADMIN: "Admin",
-  PARTNER: "Founding Partner",
+  PARTNER: "Fan", // legacy role from the retired partner programme
 };
 
 /**
@@ -107,9 +107,9 @@ function AccountOverviewPanel({
 function AccountEmailPanel({ email, emailVerified, isCreator }: { email: string; emailVerified: boolean; isCreator: boolean }) {
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   // Only fetched for creators — a plain fan's phone lives nowhere in
-  // this app (only Founding Baddies applicants ever supply one, on
-  // FoundingApplication), so this stays null and the row just doesn't
-  // render rather than showing "Not on file" to everyone.
+  // this app (only creators who applied through the original launch
+  // application ever supplied one), so this usually stays null and the
+  // row just doesn't render rather than showing "Not on file".
   const [phone, setPhone] = useState<string | null>(null);
 
   useEffect(() => {

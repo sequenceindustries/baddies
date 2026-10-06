@@ -8,13 +8,11 @@ import { checkRateLimit, rateLimitResponse } from "@/lib/security/rate-limit";
 export const dynamic = "force-dynamic";
 
 /**
- * Resend the real-account verification email — the same one
- * POST /api/auth/register and POST /api/founding/apply both send at
- * account creation. Authenticated (unlike those two, which have no
- * session yet): this is for someone who already has an account and
+ * Resend the account verification email — the same one
+ * POST /api/auth/register sends at account creation. Authenticated: this is for someone who already has an account and
  * just missed or lost the original email, surfaced as a "Resend" action
- * wherever emailVerified === false is shown (see /profile's
- * StatusPanel).
+ * wherever emailVerified === false is shown (see /settings'
+ * AccountEmailPanel).
  */
 export async function POST() {
   const user = await getCurrentUser();

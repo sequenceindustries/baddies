@@ -17,7 +17,6 @@ export interface CreatorCardSource {
   id: string;
   locationVisible: boolean;
   vvipPriceOverride: unknown;
-  isFoundingBaddie: boolean;
   // The creator's own chosen "featured image" (set via /apply at
   // signup or the Dashboard's Content tab) — reuses the schema's
   // existing coverImageUrl field. Takes priority over the latest-Free-
@@ -27,7 +26,6 @@ export interface CreatorCardSource {
   coverImageUrl: string | null;
   user: {
     profile: { displayName: string | null; avatarUrl: string | null; country: string | null; city: string | null } | null;
-    foundingPartner: { id: string } | null;
   };
 }
 
@@ -39,8 +37,6 @@ export interface CreatorCard {
   city: string | null;
   verifiedBadge: true;
   vvipPriceUsd: number;
-  isFoundingPartner: boolean;
-  isFoundingBaddie: boolean;
   thumbnailUrl: string | null;
   thumbnailMimeType: string | null;
 }
@@ -62,8 +58,6 @@ export async function toCreatorCard(creator: CreatorCardSource): Promise<Creator
     city: creator.locationVisible ? (creator.user.profile?.city ?? null) : null,
     verifiedBadge: true,
     vvipPriceUsd: pricing.vvipPriceUsd,
-    isFoundingPartner: creator.user.foundingPartner !== null,
-    isFoundingBaddie: creator.isFoundingBaddie,
     thumbnailUrl: coverImageUrl ?? thumbnail?.signedUrl ?? null,
     thumbnailMimeType: creator.coverImageUrl ? guessMimeType(creator.coverImageUrl) : (thumbnail?.mimeType ?? null),
   };
@@ -113,12 +107,10 @@ export const CREATOR_CARD_SELECT = {
   id: true,
   locationVisible: true,
   vvipPriceOverride: true,
-  isFoundingBaddie: true,
   coverImageUrl: true,
   user: {
     select: {
       profile: { select: { displayName: true, avatarUrl: true, country: true, city: true } },
-      foundingPartner: { select: { id: true } },
     },
   },
 } as const;

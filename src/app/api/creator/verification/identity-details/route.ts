@@ -12,8 +12,8 @@ export const dynamic = "force-dynamic";
 
 /**
  * Read-only view of what this creator filled in when they applied —
- * legal name, phone (Founding Baddies applicants only — the plain
- * /apply path never collects one), date of birth, nationality, and a
+ * legal name, phone (only creators who applied through the original
+ * launch application have one — /apply never collects it), date of birth, nationality, and a
  * masked ID number, once step 1 above has been submitted. Surfaced on
  * /profile per explicit product decision: some of what a creator
  * "filled in" isn't editable here (legal name/DOB/nationality/ID number
@@ -48,7 +48,7 @@ export async function GET() {
   });
 }
 
-const MAX_BYTES = 15 * 1024 * 1024; // 15MB — same ceiling as Founding's identity-document upload
+const MAX_BYTES = 15 * 1024 * 1024; // 15MB
 
 const DetailsSchema = z.object({
   dateOfBirth: z.string().refine((s) => !Number.isNaN(Date.parse(s)), "Invalid date of birth."),

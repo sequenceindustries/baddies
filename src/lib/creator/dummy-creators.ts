@@ -7,10 +7,9 @@ import { generateDisplayVariant, getImageDimensions } from "@/lib/media/image-pi
 /**
  * The seeded 5-creator demo roster + the logic that writes it to the DB.
  * Lives here (not in prisma/seed.ts) because it's now called from two
- * places: the seed script itself (fresh/local environments) and the
- * admin "reset founding roster" route (src/app/api/admin/system/
- * reset-founding-roster/route.ts) — production's own way to get back to
- * exactly this roster after removing every real account. Every write
+ * places: the seed script itself (fresh/local environments) and
+ * src/app/api/admin/system/wipe-test-content/route.ts (which reads the
+ * roster's emails to know which creators to protect). Every write
  * below is an idempotent upsert keyed by a stable id/slug, so calling
  * this repeatedly (including right after a full delete) is always safe.
  */
@@ -261,9 +260,7 @@ async function fetchPhotoBytes(
 /**
  * Upserts every account in DUMMY_CREATORS (User/Profile/Wallet/
  * CreatorProfile/Content/MediaAsset/MediaBlob), each keyed by a stable
- * id/slug so this is always safe to re-run — including immediately
- * after a full delete of every creator account (see the "reset founding
- * roster" admin route, the other caller of this function).
+ * id/slug so this is always safe to re-run.
  */
 export async function seedDummyCreators(db: PrismaClient): Promise<void> {
   console.log("Seeding dummy creator accounts...");
@@ -309,7 +306,6 @@ export async function seedDummyCreators(db: PrismaClient): Promise<void> {
         userId: user.id,
         status: "VERIFIED",
         legalNameEncrypted,
-        isFoundingBaddie: true,
         unlimitedOptedIn: true,
         subscriberCountVisible: true,
         locationVisible: true,
@@ -319,7 +315,6 @@ export async function seedDummyCreators(db: PrismaClient): Promise<void> {
       },
       update: {
         status: "VERIFIED",
-        isFoundingBaddie: true,
         unlimitedOptedIn: true,
         subscriberCountVisible: true,
         locationVisible: true,
@@ -388,8 +383,7 @@ export async function seedDummyCreators(db: PrismaClient): Promise<void> {
     // fresh/demo environment rather than only whichever real account
     // happens to have posted one. Deliberately kept inside this function
     // rather than a one-off script — seedDummyCreators already re-runs on
-    // every deploy and after "reset founding roster" (see this file's own
-    // top comment), so upserting here with a freshly-computed 24h
+    // every deploy (see this file's own top comment), so upserting here with a freshly-computed 24h
     // expiresAt on every run keeps the demo story perpetually current
     // instead of silently lapsing between deploys, the same reproducible-
     // by-construction guarantee every other field in this function has.

@@ -69,12 +69,6 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  // Read server-side and passed down as a plain prop rather than checked
-  // inside Nav itself — Nav is a client component, and a non-NEXT_PUBLIC_
-  // env var like LAUNCH_MODE resolves correctly during SSR but comes back
-  // undefined once the same code re-runs in the browser on hydration,
-  // which would flip the rendered links right after paint.
-  const comingSoon = process.env.LAUNCH_MODE === "coming_soon";
   // SEO: lets a known search-engine crawler (Googlebot etc.) straight
   // past the 18+ AgeGate below, which otherwise blocks 100% of
   // server-rendered content on every page for every visitor — see
@@ -105,7 +99,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               page, AccountMenu, etc.) firing its own — see
               SessionProvider's own comment in components/ui.tsx. */}
           <SessionProvider>
-            <Nav comingSoon={comingSoon} />
+            <Nav />
             <RouteTransition>{children}</RouteTransition>
             <BottomTabBar />
           </SessionProvider>

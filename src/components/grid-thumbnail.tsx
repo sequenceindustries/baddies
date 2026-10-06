@@ -164,7 +164,7 @@ export function GridThumbnail({
             initial={(item.creator.displayName ?? "?").trim().charAt(0).toUpperCase() || "?"}
           />
           <span style={tileBadgeWrapStyle}>
-            <VerifiedBadge isFoundingPartner={item.creator.isFoundingPartner} isFoundingBaddie={item.creator.isFoundingBaddie} />
+            <VerifiedBadge />
           </span>
         </div>
       )}

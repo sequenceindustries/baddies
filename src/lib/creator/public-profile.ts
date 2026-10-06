@@ -31,8 +31,6 @@ export interface PublicCreatorProfile {
   followerCount: number;
   followingCount: number;
   subscriberCount?: number;
-  isFoundingPartner: boolean;
-  isFoundingBaddie: boolean;
   updatedAt: Date;
 }
 
@@ -61,7 +59,7 @@ export interface PublicCreatorProfile {
 export async function getPublicCreatorProfile(idOrHandle: string): Promise<PublicCreatorProfile | null> {
   const creator = await db.creatorProfile.findUnique({
     where: HANDLE_FORMAT.test(idOrHandle) ? { handle: idOrHandle } : { id: idOrHandle },
-    include: { user: { include: { profile: true, foundingPartner: true } } },
+    include: { user: { include: { profile: true } } },
   });
 
   if (!creator || creator.status !== "VERIFIED") {
@@ -101,8 +99,6 @@ export async function getPublicCreatorProfile(idOrHandle: string): Promise<Publi
     followerCount,
     followingCount,
     subscriberCount,
-    isFoundingPartner: creator.user.foundingPartner !== null,
-    isFoundingBaddie: creator.isFoundingBaddie,
     updatedAt: creator.updatedAt,
   };
 }

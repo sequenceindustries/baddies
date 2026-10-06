@@ -95,6 +95,12 @@ const nextConfig = {
       { source: "/subscriptions", destination: "/fan-subscriptions", permanent: true },
       { source: "/fan-home", destination: "/feed", permanent: true },
       { source: "/creator-dashboard", destination: "/profile", permanent: true },
+      // Retired Founding Baddies / Founding Partners launch programme —
+      // old links (emails, socials, search results) land on the
+      // homepage instead of a 404.
+      { source: "/founding-baddies/:path*", destination: "/", permanent: true },
+      { source: "/partner-invite/:path*", destination: "/", permanent: true },
+      { source: "/partner-dashboard/:path*", destination: "/", permanent: true },
     ];
   },
 };

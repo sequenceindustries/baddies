@@ -99,7 +99,7 @@ function summaryLineStyle(): React.CSSProperties {
 function StepDetails({ status, onSubmitted }: { status: StepStatus; onSubmitted: () => void }) {
   const [dateOfBirth, setDateOfBirth] = useState("");
   // Defaults to South Africa — every creator on this platform is South
-  // African (see /founding-baddies' own "no exceptions" copy), so this
+  // African (see /api/creator/apply's own geo check), so this
   // is the overwhelmingly common case; still a plain editable field for
   // the rare exception.
   const [nationality, setNationality] = useState("South Africa");

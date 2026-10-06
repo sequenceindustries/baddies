@@ -8,9 +8,8 @@ import { db } from "@/lib/db/client";
 // never be statically prerendered or cached.
 export const dynamic = "force-dynamic";
 
-// Same "type the exact phrase" second-step pattern as reset-founding-
-// roster/wipe-test-content — see reset-founding-roster's own doc
-// comment for why a single click is deliberately not enough here.
+// Same "type the exact phrase" second-step pattern as
+// wipe-test-content — a single click is deliberately not enough here.
 const CONFIRM_PHRASE = "DELETE FAN ACCOUNTS";
 
 // The one fan account this never touches, per direct request ("delete
@@ -18,8 +17,7 @@ const CONFIRM_PHRASE = "DELETE FAN ACCOUNTS";
 // email this project's own verification history already treats as a
 // standing keeper (see this session's memory / prior phase checklists:
 // "keep admin@example.test, the 5 seeded dummy creators, fan-test@
-// example.test"). Case-insensitive match, same as the founding-email
-// matching elsewhere in this admin area.
+// example.test"). Case-insensitive match.
 const PRESERVED_FAN_EMAIL = "fan-test@example.test";
 
 const DeleteSchema = z.object({ confirm: z.literal(CONFIRM_PHRASE) });
@@ -27,8 +25,7 @@ const DeleteSchema = z.object({ confirm: z.literal(CONFIRM_PHRASE) });
 /**
  * Irreversibly deletes every FAN-role account except PRESERVED_FAN_EMAIL.
  * Never runs on its own — an admin triggers it from their own real,
- * authenticated session (System nav group), same as reset-founding-
- * roster/wipe-test-content.
+ * authenticated session (System nav group), same as wipe-test-content.
  *
  * Safety model: everything happens inside one db.$transaction — if any
  * foreign-key constraint blocks a step, the whole transaction rolls
@@ -39,12 +36,11 @@ const DeleteSchema = z.object({ confirm: z.literal(CONFIRM_PHRASE) });
  * Report, Session, Notification, AgreementAcceptance, Block, Wallet
  * itself) is `onDelete: Cascade` on the User FK — deleting the User
  * row cleans all of those up automatically. The one deliberate
- * exception, matching reset-founding-roster's own reasoning: LedgerEntry
+ * exception: LedgerEntry
  * and Payout are `onDelete: Restrict` on their walletId (a real
  * financial record must never silently vanish via cascade), so a fan's
  * own Wallet can't cascade-delete while either still references it —
- * those are cleared explicitly, first, same as that route does for
- * creator/partner wallets. In practice a plain fan should have neither
+ * those are cleared explicitly, first. In practice a plain fan should have neither
  * (ledger entries are creator earnings), but this doesn't assume that,
  * it clears them if present.
  */

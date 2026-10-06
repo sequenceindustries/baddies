@@ -18,7 +18,7 @@ const FAN_TIERS = [
 const CREATOR_STEPS = [
   {
     name: "Join",
-    desc: "Join as a Founding baddie — open to South African creators only, no exceptions. Get verified once accepted.",
+    desc: "Apply as a creator — open to South African creators only, no exceptions. Get verified once accepted.",
   },
   {
     name: "Publish & set your price",

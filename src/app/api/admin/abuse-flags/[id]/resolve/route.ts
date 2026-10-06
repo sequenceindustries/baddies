@@ -17,16 +17,7 @@ const ResolveSchema = z.object({
 /**
  * Resolves an abuse flag as DISMISSED (no real issue found) or
  * CONFIRMED (the flagged pattern was real). This route only records
- * the finding — it never takes any corrective action itself. A
- * CONFIRMED self-referral or duplicate-attribution flag, for example,
- * links into the already-built, already-audited referral-correction
- * flow (PATCH /api/admin/founding-applications/[id]/correct-attribution)
- * rather than this route trying to reverse anything on its own; a
- * CONFIRMED suspicious-refund/chargeback pattern is a signal for admin
- * to separately use the Commission Management reverse action if
- * warranted. Keeping this one purpose (recording the review outcome)
- * avoids this becoming a second place that also mutates commissions or
- * attributions.
+ * the finding — it never takes any corrective action itself.
  */
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const user = await getCurrentUser();
@@ -34,7 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
   try {
-    requirePermission(user.role, "founding_partner:manage");
+    requirePermission(user.role, "report:review");
   } catch (err) {
     if (err instanceof ForbiddenError) return NextResponse.json({ error: err.message }, { status: 403 });
     throw err;

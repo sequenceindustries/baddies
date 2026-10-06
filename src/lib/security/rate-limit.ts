@@ -68,7 +68,7 @@ export function checkRateLimit(key: string, limit: number, windowSeconds: number
 /**
  * Convenience wrapper for the common case: limit a specific route by the
  * caller's IP. `routeKey` should be a short, stable string unique to the
- * route (e.g. "founding-apply", "partner-invite-accept") — never the
+ * route (e.g. "creator-apply", "auth-login") — never the
  * full URL, which would fragment the bucket per query string.
  */
 export function checkRateLimitByIp(req: Request, routeKey: string, limit: number, windowSeconds: number): RateLimitResult {

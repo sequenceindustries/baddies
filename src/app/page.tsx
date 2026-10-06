@@ -9,25 +9,16 @@ import { transitions } from "@/lib/motion/tokens";
 import { useSession, roleHomePath, Reveal } from "@/components/ui";
 import { CreatorCardRow, type CreatorCardData } from "@/components/cards";
 import { HowItWorks } from "@/components/how-it-works";
-import { Countdown } from "@/components/countdown";
 
 interface DiscoveryResponse {
   creators: CreatorCardData[];
 }
 
-// Fixed launch target, not "35 days from whenever someone loads this
-// page" — see Countdown's own comment on why that has to be a real date,
-// not a rolling duration. 35 days out from the day this went in.
-const LAUNCH_DATE = new Date("2026-10-08T00:00:00Z");
-
 /**
  * The real landing page (Sprint 0's placeholder replaced) — an anonymous
  * visitor's actual entry point. Logged-in visitors skip straight to their
- * role's home (roleHomePath — the feed, /feed, for everyone except
- * PARTNER, which keeps its own dashboard as the default; see
- * roleHomePath's own comment). Per product decision, the only CTA on
- * this page (and in Nav when it's showing) is the Founding Baddies
- * "Apply now" banner — no separate Join/Sign in buttons here.
+ * role's home (roleHomePath — the feed, /feed). Sign in/Join live in
+ * the Nav; the creator banner at the bottom is the page's own CTA.
  */
 export default function LandingPage() {
   const router = useRouter();
@@ -65,8 +56,8 @@ export default function LandingPage() {
     <main>
       <section className="hero-plain" style={{ position: "relative", overflow: "hidden" }}>
         <HeroBackground />
-        {/* One-time on-mount entrance stagger (logo → subhead →
-            countdown), not continuous/idle motion — a previous hero here
+        {/* One-time on-mount entrance stagger (logo → subhead), not
+            continuous/idle motion — a previous hero here
             had a real-time cursor-parallax effect that was deliberately
             removed (see globals.css's own comment on .hero-plain); this
             plays once and settles, it never keeps moving after that. */}
@@ -98,9 +89,6 @@ export default function LandingPage() {
             exclusive content and get paid directly by the fans who support them. Browse free
             previews with no card required, or subscribe to unlock more.
           </motion.p>
-          <motion.div variants={{ hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0, transition: transitions.large } }}>
-            <Countdown target={LAUNCH_DATE} label="Launching in" />
-          </motion.div>
         </motion.div>
       </section>
 
@@ -123,21 +111,19 @@ export default function LandingPage() {
         <HowItWorks />
       </Reveal>
 
-      {/* Moved to the bottom of the page per product decision — this
-          used to sit right under the hero (pulled up over its bottom
-          edge); now it's the last thing before the footer, after the
-          visitor has already seen the creator row and both "how it
-          works" explainers. */}
+      {/* The last thing before the footer, after the visitor has
+          already seen the creator row and both "how it works"
+          explainers. Leads into /register's own Fan/Creator picker. */}
       <Reveal>
-        <section style={foundingBannerSectionStyle}>
-          <Link href="/founding-baddies" style={foundingBannerStyle} className="hover-lift">
-            <span style={foundingBannerKickerStyle}>First generation</span>
-            <span style={foundingBannerTitleStyle}>Become a Founding baddie</span>
-            <p style={foundingBannerBodyStyle}>
-              Be part of baddies from the beginning. Join the first generation of creators helping
-              shape Africa&apos;s new adult content network.
+        <section style={creatorBannerSectionStyle}>
+          <Link href="/register" style={creatorBannerStyle} className="hover-lift">
+            <span style={creatorBannerKickerStyle}>For creators</span>
+            <span style={creatorBannerTitleStyle}>Become a baddie</span>
+            <p style={creatorBannerBodyStyle}>
+              Verified South African creators publish exclusive content and get paid directly by the
+              fans who support them.
             </p>
-            <span style={foundingBannerArrowStyle}>Join baddies →</span>
+            <span style={creatorBannerArrowStyle}>Join baddies →</span>
           </Link>
         </section>
       </Reveal>
@@ -179,7 +165,7 @@ const FOOTER_LINKS: { href: string; label: string }[] = [
 // Wraps the logo image rather than styling text directly now — h1 stays
 // for the page's heading semantics/accessible name (the img's alt covers
 // that), margin/line-height carried over from the old text treatment so
-// the layout rhythm below it (subhead, countdown) doesn't shift.
+// the layout rhythm below it (subhead) doesn't shift.
 const heroTitleStyle: React.CSSProperties = {
   margin: "0 0 0.6rem",
   lineHeight: 1,
@@ -208,7 +194,7 @@ const sectionStyle: React.CSSProperties = {
 // the hero) — a plain stacked section like the others, so the old
 // negative-margin/position/zIndex "pulled up over the hero" treatment
 // no longer applies.
-const foundingBannerSectionStyle: React.CSSProperties = {
+const creatorBannerSectionStyle: React.CSSProperties = {
   padding: "0 1.75rem",
   maxWidth: "1100px",
   margin: "0 auto 2rem",
@@ -216,7 +202,7 @@ const foundingBannerSectionStyle: React.CSSProperties = {
 
 // Border removed per product decision — background + boxShadow glow
 // still read as a distinct block without a hard edge.
-const foundingBannerStyle: React.CSSProperties = {
+const creatorBannerStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
@@ -231,7 +217,7 @@ const foundingBannerStyle: React.CSSProperties = {
   textAlign: "center",
 };
 
-const foundingBannerKickerStyle: React.CSSProperties = {
+const creatorBannerKickerStyle: React.CSSProperties = {
   fontSize: "0.72rem",
   fontWeight: 700,
   letterSpacing: "0.06em",
@@ -242,13 +228,13 @@ const foundingBannerKickerStyle: React.CSSProperties = {
   padding: "0.25rem 0.75rem",
 };
 
-const foundingBannerTitleStyle: React.CSSProperties = {
+const creatorBannerTitleStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)",
   fontSize: "1.6rem",
   fontWeight: 600,
 };
 
-const foundingBannerBodyStyle: React.CSSProperties = {
+const creatorBannerBodyStyle: React.CSSProperties = {
   color: "var(--text-muted)",
   fontSize: "0.92rem",
   lineHeight: 1.6,
@@ -256,7 +242,7 @@ const foundingBannerBodyStyle: React.CSSProperties = {
   margin: 0,
 };
 
-const foundingBannerArrowStyle: React.CSSProperties = {
+const creatorBannerArrowStyle: React.CSSProperties = {
   color: "var(--accent)",
   fontWeight: 700,
   fontSize: "1rem",

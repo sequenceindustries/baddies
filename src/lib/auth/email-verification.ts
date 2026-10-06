@@ -1,14 +1,12 @@
 import { SignJWT, jwtVerify } from "jose";
 
 /**
- * Real-account email verification token — same jose SignJWT/jwtVerify-
- * against-AUTH_SECRET shape as src/lib/founding/email-verification.ts,
- * but its own purpose tag and module. Kept separate rather than a
- * shared generic "founding or user" token helper for the same reason
- * Phase 3's onboarding-token module stayed separate from the founding
- * email-verification one: a distinct purpose tag per token type is
- * easier to read and audit than one generic function threaded through
- * several call sites for different accounts.
+ * Account email-verification token — a stateless jose HS256 JWT signed
+ * with AUTH_SECRET, carrying the userId and a dedicated purpose tag so
+ * a token minted for any other purpose can never be swapped in. Nothing
+ * is stored server-side: the signature + 48h `exp` are the whole proof,
+ * and the verify route's `emailVerified: null` guard makes redemption
+ * idempotent.
  */
 const PURPOSE = "user_email_verify";
 const TTL_SECONDS = 60 * 60 * 48; // 48h

@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 import { db } from "@/lib/db/client";
 import type { Prisma, UserRole } from "@prisma/client";
 import { createSession, hashPassword } from "@/lib/auth/session";
-import { exchangeGoogleCode, isGoogleAuthConfigured } from "@/lib/auth/google";
+import { exchangeGoogleCode, isGoogleAuthConfigured, safeReturnTo } from "@/lib/auth/google";
 import { getPlatformSetting } from "@/lib/config/settings";
 import { BUSINESS_CONFIG_KEYS } from "@/lib/config/business";
 
@@ -39,6 +39,12 @@ export async function GET(req: NextRequest) {
     return failure(req, "google_not_configured");
   }
 
+  // The visitor backed out of (or Google refused) the consent screen —
+  // Google redirects back with ?error=access_denied and no code.
+  if (req.nextUrl.searchParams.get("error")) {
+    return failure(req, "google_cancelled");
+  }
+
   const code = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state");
   const expectedState = req.cookies.get(STATE_COOKIE)?.value;
@@ -63,8 +69,33 @@ export async function GET(req: NextRequest) {
   let userId: string;
   let role: UserRole;
 
-  const existing = await db.user.findUnique({ where: { email: profile.email } });
+  // Google returns the address as the account holder typed it; our own
+  // registration stores whatever casing was entered too, so match
+  // case-insensitively rather than creating a near-duplicate account.
+  const existing = await db.user.findFirst({ where: { email: { equals: profile.email, mode: "insensitive" } } });
   if (existing) {
+    // Same gate as POST /api/auth/login — a suspended/banned account
+    // must not get back in through a second door.
+    if (!existing.isActive) {
+      return failure(req, "account_inactive");
+    }
+    if (!existing.emailVerified) {
+      // Google has just proven this person owns the address, which the
+      // existing (password) account never did. Whoever set that
+      // password may not be the address owner (an "account
+      // pre-hijacking" setup: register someone else's email, wait for
+      // them to sign in with Google), so the unproven password and any
+      // sessions it opened are retired before the real owner is let in;
+      // from here on the account signs in with Google.
+      const replacementHash = await hashPassword(nanoid(48));
+      await db.$transaction([
+        db.user.update({
+          where: { id: existing.id },
+          data: { emailVerified: new Date(), passwordHash: replacementHash },
+        }),
+        db.session.updateMany({ where: { userId: existing.id, revokedAt: null }, data: { revokedAt: new Date() } }),
+      ]);
+    }
     userId = existing.id;
     role = existing.role;
   } else {
@@ -117,7 +148,7 @@ export async function GET(req: NextRequest) {
     ipAddress: req.headers.get("x-forwarded-for") ?? undefined,
   });
 
-  const destination = returnTo && returnTo.startsWith("/") ? returnTo : "/";
+  const destination = safeReturnTo(returnTo) ?? "/";
   const response = NextResponse.redirect(new URL(destination, req.nextUrl.origin));
   response.cookies.set(process.env.SESSION_COOKIE_NAME ?? "baddies_session", token, {
     httpOnly: true,

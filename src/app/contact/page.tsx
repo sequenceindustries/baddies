@@ -1,7 +1,7 @@
 import { LegalPage } from "@/components/legal-page";
 
 const BODY = [
-  "We're building baddies as Africa's adult content network, and we'd like to hear from you — whether you're a prospective Founding baddie, a fan with a question, or reporting a concern about content on the platform.",
+  "We're building baddies as Africa's adult content network, and we'd like to hear from you — whether you're a creator, a fan with a question, or reporting a concern about content on the platform.",
   "",
   "General enquiries: support@baddies.africa",
   "Copyright & content removal (DMCA): legal@baddies.africa",

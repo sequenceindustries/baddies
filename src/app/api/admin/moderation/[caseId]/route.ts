@@ -20,9 +20,8 @@ const UpdateSchema = z.object({
  * One flexible update endpoint for a moderation case — status,
  * resolution notes, and self-assignment can each be set independently
  * in one call. No dedicated state-machine file exists for
- * ModerationCaseStatus (unlike Content/Creator), so — same reasoning
- * as the Founding Applications queue's own status dropdown — this
- * trusts admin discretion over a fixed transition table.
+ * ModerationCaseStatus (unlike Content/Creator), so this trusts admin
+ * discretion over a fixed transition table.
  */
 export async function PATCH(req: NextRequest, { params }: { params: { caseId: string } }) {
   const user = await getCurrentUser();

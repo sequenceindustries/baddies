@@ -39,7 +39,6 @@ export async function GET(req: NextRequest) {
   const roleParam = params.get("role");
   const role = roleParam && ROLES.includes(roleParam as UserRole) ? (roleParam as UserRole) : undefined;
   const statusParam = params.get("status"); // "active" | "suspended"
-  const founding = params.get("founding") === "true";
   const verified = params.get("verified") === "true";
   const newDaysParam = params.get("newDays"); // "7" | "30"
   const newDays = newDaysParam === "7" || newDaysParam === "30" ? Number(newDaysParam) : null;
@@ -64,45 +63,24 @@ export async function GET(req: NextRequest) {
   const rows = await db.user.findMany({
     where,
     orderBy: { createdAt: "desc" },
-    // founding=true can't be expressed in `where` (FoundingApplication
-    // has no FK to User — see its own schema comment) so it's applied
-    // as an in-memory filter below, after the founding-email set is
-    // known. Overfetch a wide page so filtering afterward still leaves
-    // a full page in the common case; a founding-only search on a
-    // large user base would need real pagination support later.
-    take: founding ? PAGE_SIZE * 4 : PAGE_SIZE + 1,
+    take: PAGE_SIZE + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     include: { profile: { select: { displayName: true } }, creatorProfile: { select: { id: true, status: true } } },
   });
 
-  let candidates = rows;
-  let foundingEmails: Set<string> | null = null;
-  if (founding) {
-    const applications = await db.foundingApplication.findMany({
-      where: { email: { in: rows.map((r) => r.email) } },
-      select: { email: true },
-    });
-    foundingEmails = new Set(applications.map((a) => a.email.toLowerCase()));
-    candidates = rows.filter((r) => foundingEmails!.has(r.email.toLowerCase()));
-  }
-
-  const hasMore = founding ? false : candidates.length > PAGE_SIZE;
-  const page = founding ? candidates.slice(0, PAGE_SIZE) : hasMore ? candidates.slice(0, PAGE_SIZE) : candidates;
+  const hasMore = rows.length > PAGE_SIZE;
+  const page = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
 
   // Batched enrichment for just this page — never per-row queries.
   const userIds = page.map((u) => u.id);
   const creatorProfileIds = page.map((u) => u.creatorProfile?.id).filter((id): id is string => Boolean(id));
-  const emails = page.map((u) => u.email);
 
-  const [lastSessions, foundingMatches, contentCounts, subscriberCounts, revenueSums, purchaseSums, tipSums, partnerRows] = await Promise.all([
+  const [lastSessions, contentCounts, subscriberCounts, revenueSums, purchaseSums, tipSums] = await Promise.all([
     userIds.length
       ? db.$queryRaw<{ userId: string; lastSessionAt: Date }[]>(
           Prisma.sql`SELECT DISTINCT ON ("userId") "userId", "createdAt" AS "lastSessionAt" FROM sessions WHERE "userId" IN (${Prisma.join(userIds)}) AND "revokedAt" IS NULL ORDER BY "userId", "createdAt" DESC`
         )
       : Promise.resolve([]),
-    foundingEmails
-      ? Promise.resolve([...foundingEmails])
-      : db.foundingApplication.findMany({ where: { email: { in: emails } }, select: { email: true } }).then((rows) => rows.map((r) => r.email.toLowerCase())),
     creatorProfileIds.length
       ? db.content.groupBy({ by: ["creatorProfileId"], where: { creatorProfileId: { in: creatorProfileIds } }, _count: { _all: true } })
       : Promise.resolve([]),
@@ -114,18 +92,9 @@ export async function GET(req: NextRequest) {
       : Promise.resolve([]),
     userIds.length ? db.purchase.groupBy({ by: ["fanId"], where: { fanId: { in: userIds } }, _sum: { priceUsd: true } }) : Promise.resolve([]),
     userIds.length ? db.tip.groupBy({ by: ["fanId"], where: { fanId: { in: userIds } }, _sum: { amountUsd: true } }) : Promise.resolve([]),
-    // Used by the Creators tab to group rows into Regular/Founding
-    // Baddies/Founding Partners — a real, distinct status from
-    // `foundingBaddie` above (that one's a FoundingApplication email
-    // match; this one's the actual FoundingPartner row a much smaller
-    // set of accounts hold, see prisma/schema.prisma's own 50-cap
-    // comment on that model).
-    userIds.length ? db.foundingPartner.findMany({ where: { userId: { in: userIds } }, select: { userId: true } }) : Promise.resolve([]),
   ]);
-  const foundingPartnerUserIds = new Set(partnerRows.map((p) => p.userId));
 
   const lastSessionByUser = new Map(lastSessions.map((s) => [s.userId, s.lastSessionAt]));
-  const foundingEmailSet = new Set(foundingMatches);
   const contentByCreator = new Map(contentCounts.map((c) => [c.creatorProfileId, c._count._all]));
   const subsByCreator = new Map(subscriberCounts.map((c) => [c.creatorProfileId, c._count._all]));
   const revenueByCreator = new Map(revenueSums.map((c) => [c.creatorProfileId, Number(c._sum.creatorShareAmount ?? 0)]));
@@ -143,8 +112,6 @@ export async function GET(req: NextRequest) {
       creatorProfileStatus: u.creatorProfile?.status ?? null,
       createdAt: u.createdAt,
       lastSessionAt: lastSessionByUser.get(u.id) ?? null,
-      foundingBaddie: foundingEmailSet.has(u.email.toLowerCase()),
-      isFoundingPartner: foundingPartnerUserIds.has(u.id),
       creatorStats: u.creatorProfile
         ? {
             contentCount: contentByCreator.get(u.creatorProfile.id) ?? 0,

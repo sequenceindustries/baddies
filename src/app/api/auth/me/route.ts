@@ -12,15 +12,6 @@ export async function GET() {
 
   const creatorProfile = await db.creatorProfile.findUnique({
         where: { userId: user.id },
-        select: { id: true, status: true, isFoundingBaddie: true },
-  });
-
-  // Looked up unconditionally, same as creatorProfile above — an
-  // account's role can be CREATOR while it's also a Founding Partner
-  // (see /api/partner/dashboard's comment), so "is this a partner" has
-  // to come from this row's own existence, never from role alone.
-  const foundingPartner = await db.foundingPartner.findUnique({
-        where: { userId: user.id },
         select: { id: true, status: true },
   });
 
@@ -38,7 +29,6 @@ export async function GET() {
                 emailVerified: user.emailVerified !== null,
                 createdAt: user.createdAt.toISOString(),
                 creatorProfile: creatorProfile ?? null,
-                foundingPartner: foundingPartner ?? null,
         },
   });
 }

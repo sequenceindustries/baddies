@@ -6,16 +6,15 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { requirePermission, ForbiddenError } from "@/lib/rbac/permissions";
 import { db } from "@/lib/db/client";
 import { getMediaStorageProvider } from "@/lib/providers/storage";
-import { DUMMY_CREATORS } from "@/lib/founding/dummy-creators";
+import { DUMMY_CREATORS } from "@/lib/creator/dummy-creators";
 
 // Always dynamic: this route mutates live production data and must
 // never be statically prerendered or cached.
 export const dynamic = "force-dynamic";
 
-// Same "type the exact phrase" second-step pattern as
-// reset-founding-roster — see that route's own doc comment for why a
-// single click is deliberately not enough for anything this codebase
-// treats as production-destructive.
+// "Type the exact phrase" second-step confirmation — a single click is
+// deliberately not enough for anything this codebase treats as
+// production-destructive.
 const CONFIRM_PHRASE = "WIPE TEST CONTENT";
 
 const WipeSchema = z.object({ confirm: z.literal(CONFIRM_PHRASE) });
@@ -37,9 +36,7 @@ const LOGO_HEIGHT = 462;
  * production currently has a handful of stray test/E2E creator accounts
  * (generic names like "creator 7", not the 5 real, deliberately curated
  * DUMMY_CREATORS roster) whose posted photos the account owner wants
- * gone from view, without deleting the accounts themselves (see
- * reset-founding-roster for the "delete the accounts entirely" version
- * of this same cleanup — deliberately not used here, by direct request).
+ * gone from view, without deleting the accounts themselves.
  *
  * Scope, deliberately narrow:
  *   - mediaType: IMAGE only. Video/audio posts are left completely
@@ -49,11 +46,10 @@ const LOGO_HEIGHT = 462;
  *     actually-posted photo.
  *   - creator scope: every Content row whose owning CreatorProfile's
  *     User.email is NOT one of the 5 DUMMY_CREATORS emails — the exact
- *     same "official roster" test already used by reset-founding-roster
- *     and the (production-disabled) seed-script stray-creator cleanup,
- *     so a real Founding Baddie who has genuinely signed up (recruitment
- *     is live pre-launch — see /founding-baddies) is never touched by
- *     this, only the 5 official demo creators are protected from it.
+ *     same "official roster" test already used by the (production-
+ *     disabled) seed-script stray-creator cleanup. Note this scope means
+ *     every real, non-demo creator's IMAGE posts are in scope too — only
+ *     the 5 official demo creators are protected from it.
  *
  * What actually changes: every MediaAsset row (both ORIGINAL and any
  * DISPLAY variant) belonging to an in-scope Content row gets its
@@ -71,7 +67,7 @@ const LOGO_HEIGHT = 462;
  * creator accounts, and their other data all still exist exactly as
  * before. It's still irreversible in the sense that the original
  * uploaded photo bytes are gone (there's no undo), which is why this
- * gets the same confirm-phrase treatment as reset-founding-roster.
+ * gets the confirm-phrase treatment.
  */
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();

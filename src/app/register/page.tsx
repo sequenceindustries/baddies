@@ -148,16 +148,15 @@ export default function RegisterPage() {
           </button>
         </form>
 
-        {/* Always creates a fan account regardless of the Fan/Creator
-            picker above — Google's consent screen has no room for that
-            choice mid-flow. "Become a creator" in the nav afterward is
-            the same next step a plain Fan signup already points at. */}
+        {/* Always creates a fan account (same as the form above) — a
+            "Creator" pick just sends them on to /apply afterward, the
+            same next step the email/password path takes. */}
         <div style={dividerRowStyle}>
           <span style={dividerLineStyle} />
           <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>or</span>
           <span style={dividerLineStyle} />
         </div>
-        <GoogleSignInButton />
+        <GoogleSignInButton returnTo={intent === "CREATOR" ? "/apply" : "/feed"} />
       </div>
       <p style={{ marginTop: "1.25rem", fontSize: "0.88rem", color: "var(--text-muted)" }}>
         Already have an account?{" "}

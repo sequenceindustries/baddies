@@ -27,7 +27,7 @@ export function StoryComposerButton({ onPosted }: { onPosted: () => void }) {
       <button
         type="button"
         onClick={() => fileInputRef.current?.click()}
-        style={storyButtonStyle}
+        style={feedIconButtonStyle}
         aria-label="Add to your story"
         title="Add to your story"
       >
@@ -135,35 +135,39 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-// Camera glyph — deliberately distinct from FeedComposer's own "+"
-// glyph so the two icon-only affordances read as different actions at
-// a glance. Same hand-drawn SVG convention as every other icon in this
-// codebase: viewBox 0 0 24 24, stroke=currentColor, strokeWidth
-// 1.6-1.8, round caps/joins, fill=none, aria-hidden, fixed pixel size.
+// Stories glyph: a segmented ring (the universal "story" cue — the
+// same ring StoryAvatarRow draws around avatars) around a single "S".
+// Shares SearchIcon's exact drawing spec (src/app/feed/page.tsx) so the
+// two flanking icons read as one set: viewBox 0 0 24 24, 20px, stroke
+// currentColor at 1.8, round caps/joins, fill none.
 function StoryIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.2l.9-1.5a1 1 0 0 1 .86-.5h5.08a1 1 0 0 1 .86.5l.9 1.5h1.2A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-8Z"
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
         stroke="currentColor"
-        strokeWidth="1.6"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeDasharray="3.57 3.5"
+        transform="rotate(-80 12 12)"
+      />
+      <path
+        d="M14.3 9.4c-.4-.9-1.3-1.5-2.4-1.5-1.3 0-2.3.8-2.3 1.9 0 2.5 4.9 1.5 4.9 4.3 0 1.2-1.1 2-2.5 2-1.2 0-2.2-.6-2.6-1.6"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <circle cx="12" cy="12.5" r="3.4" stroke="currentColor" strokeWidth="1.6" />
     </svg>
   );
 }
 
-// Shrunk to 28px (from 44px) and given an accent ring so this reads as
-// "story" rather than just "camera" without a full icon redraw — per
-// direct request ("change the stories camera icon into something that
-// implies story") and ("plus sign to post must be larger the stories
-// and discovery icons, which must be smaller and same size on the
-// sides of the +" — this and the new discovery/search icon share the
-// same size, both smaller than FeedComposer's own "+"). Bumped again,
-// 28px->38px, in the same follow-up pass that enlarged the "+" and
-// centered the whole row.
-const storyButtonStyle: React.CSSProperties = {
+// Shared by both icon-only buttons flanking FeedComposer's larger "+"
+// (this one and the feed's DiscoverySearchButton) so they're the same
+// size, surface, border and color — one icon set, not two.
+export const feedIconButtonStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -171,10 +175,12 @@ const storyButtonStyle: React.CSSProperties = {
   height: "38px",
   borderRadius: "50%",
   background: "var(--surface)",
-  border: "2px solid var(--accent)",
+  border: "1px solid var(--border)",
   color: "var(--accent)",
   cursor: "pointer",
   flexShrink: 0,
+  padding: 0,
+  textDecoration: "none",
 };
 
 const modalBackdropStyle: React.CSSProperties = {

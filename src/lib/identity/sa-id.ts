@@ -9,9 +9,7 @@
  * not a source of truth — the date field it feeds stays editable so
  * someone can correct it if the guess lands on the wrong century.
  *
- * Shared by both real verification flows that collect an SA ID number:
- * the Founding Baddies application's own identity step
- * (ApplicationNextSteps.tsx) and the real creator VerificationFlow
+ * Used by the creator VerificationFlow
  * (components/verification-capture.tsx).
  */
 export function parseSaIdDateOfBirth(idNumber: string): string | null {

@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { transitions } from "@/lib/motion/tokens";
 import { PostCard, type PostCardItem } from "@/components/post-card";
 import { StoryAvatarRow } from "@/components/story-avatar-row";
-import { StoryComposerButton } from "@/components/story-composer-button";
+import { StoryComposerButton, feedIconButtonStyle } from "@/components/story-composer-button";
 import { UploadForm } from "@/components/upload-form";
 import { EmptyContentState, SkeletonBlock, useSession } from "@/components/ui";
 
@@ -354,9 +354,8 @@ const composerCardStyle: React.CSSProperties = {
 /**
  * Icon-only, opens /discovery — per direct request ("search icon pops
  * out discovery content/page"), placed to the right of the "+" post
- * trigger. Same 38px sizing as StoryComposerButton so both flank the
- * larger "+" equally, matching this row's own established icon-only
- * convention rather than a new visual language.
+ * trigger. Shares StoryComposerButton's exact button style
+ * (feedIconButtonStyle) so both flank the larger "+" as a matched pair.
  */
 function DiscoverySearchButton() {
   const { user } = useSession();
@@ -370,12 +369,14 @@ function DiscoverySearchButton() {
   if (!creatorActive) return null;
 
   return (
-    <Link href="/discovery" style={discoverySearchButtonStyle} aria-label="Discover">
+    <Link href="/discovery" style={feedIconButtonStyle} aria-label="Discover" title="Discover">
       <SearchIcon />
     </Link>
   );
 }
 
+// Drawn to the same spec as StoryIcon (see story-composer-button.tsx)
+// so the two flanking icons read as one set.
 function SearchIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -384,20 +385,6 @@ function SearchIcon() {
     </svg>
   );
 }
-
-const discoverySearchButtonStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  width: "38px",
-  height: "38px",
-  borderRadius: "50%",
-  background: "var(--surface)",
-  border: "1px solid var(--border)",
-  color: "var(--accent)",
-  flexShrink: 0,
-  textDecoration: "none",
-};
 
 const composerHeaderStyle: React.CSSProperties = {
   display: "flex",

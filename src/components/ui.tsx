@@ -17,12 +17,7 @@ export interface SessionUser {
   displayName: string | null;
   emailVerified: boolean;
   createdAt: string;
-  creatorProfile: { id: string; status: string; isFoundingBaddie: boolean } | null;
-  // Independent of role, same reason creatorProfile is: an account can
-  // hold both a FoundingPartner row and (once applied) a CreatorProfile
-  // at once, since applying as a creator flips role to CREATOR the same
-  // way it does for a plain FAN — see /api/partner/dashboard's comment.
-  foundingPartner: { id: string; status: string } | null;
+  creatorProfile: { id: string; status: string } | null;
 }
 
 export interface DetectedLocation {
@@ -162,42 +157,17 @@ export function useSession(): SessionContextValue {
 
 /**
  * Where a signed-in visitor's "home" is — used right after login/
- * register, and by the landing page's already-signed-in redirect.
- *
- * Per direct follow-up request ("for all, landing page should be
- * feed"), the feed (/feed — renamed from /fan-home once it stopped
- * being fan-only, see /app/feed/page.tsx's own comment) is now the
- * default landing page for
- * FAN, CREATOR, and ADMIN alike — their own dashboard/admin panel is
- * still reachable (Dashboard/Admin nav links, both unchanged), just no
- * longer where they land automatically. PARTNER keeps its own
- * dashboard as the default — it was never part of this feed-access
- * request (no Home/Discover nav link either, see NavLinks' own
- * comment), and a partner's referral/commission dashboard is
- * business-critical in a way a content feed landing page would bury.
+ * register, and by the landing page's already-signed-in redirect. The
+ * feed (/feed) is every role's default landing page; their own
+ * dashboard/admin panel is still reachable from the nav.
  */
-export function roleHomePath(role: SessionUser["role"]): string {
-  if (role === "PARTNER") return "/partner-dashboard";
+export function roleHomePath(_role: SessionUser["role"]): string {
   return "/feed";
 }
 
-const NO_AUTH_LINKS_PATHS = new Set(["/", "/founding-baddies"]);
-
-export function Nav({ comingSoon = false }: { comingSoon?: boolean }) {
+export function Nav() {
   const { user, loading, refresh } = useSession();
   const pathname = usePathname();
-  // Both the landing page and the Founding Baddies campaign page keep
-  // only their own single "Apply"/"Apply now" CTA — no Sign in/Join
-  // here either, or a signed-out visitor would have a second way in
-  // past that one deliberate button.
-  const hideAuthLinks = NO_AUTH_LINKS_PATHS.has(pathname);
-  // The landing page specifically (not /founding-baddies, which keeps
-  // its single "Apply now" CTA untouched) gets a "Log in" link back,
-  // per direct request ("add login on home page, top right") — a
-  // narrow, deliberate exception to hideAuthLinks' "one CTA only" rule
-  // above: still no "Join" here, just the one way back in for a
-  // returning visitor.
-  const showLoginLink = pathname === "/";
   const [mobileOpen, setMobileOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
@@ -224,15 +194,19 @@ export function Nav({ comingSoon = false }: { comingSoon?: boolean }) {
     window.location.href = "/";
   }
 
-  // Nothing to show at all (signed out, on a hideAuthLinks page with no
-  // login-link exception) — no point rendering a hamburger for an empty
-  // dropdown.
-  const hasNavContent = !(hideAuthLinks && !user) || showLoginLink;
-
   return (
     <div style={navWrapStyle}>
+    {/* Three-column grid (navStyle): brand | primary links | account
+        actions. The two outer columns share the leftover width equally
+        so the middle column sits at the true horizontal center of the
+        bar regardless of how wide the brand or the right-side controls
+        are — space-between would only center it when both sides happen
+        to match. Under the mobile breakpoint both .nav-links-desktop
+        groups are CSS-hidden and the hamburger takes over; the explicit
+        gridColumn placements keep brand left / actions right even with
+        the middle cell gone. */}
     <nav style={navStyle}>
-      <Link href="/" style={{ ...brandStyle, textDecoration: "none" }}>
+      <Link href="/" style={{ ...brandStyle, textDecoration: "none", gridColumn: 1, justifySelf: "start" }}>
         {/* SEO Phase 8 — see src/app/page.tsx's own comment on the
             same asset for why this is the one <img> in the app worth
             converting to next/image (a genuinely static, non-expiring
@@ -241,36 +215,24 @@ export function Nav({ comingSoon = false }: { comingSoon?: boolean }) {
         <NextImage src="/baddies-wordmark-white.webp" alt="baddies" width={2000} height={462} priority style={brandLogoStyle} />
       </Link>
 
-      <div className="nav-links-desktop" style={navDesktopLinksStyle}>
-        {!loading && (
-          <NavLinks
-            user={user ?? null}
-            hideAuthLinks={hideAuthLinks}
-            showLoginLink={showLoginLink}
-            comingSoon={comingSoon}
-            onLogout={handleLogout}
-            layout="row"
-            pathname={pathname}
-          />
-        )}
+      <div className="nav-links-desktop" style={navCenterLinksStyle}>
+        {!loading && user && <NavPrimaryLinks user={user} pathname={pathname} />}
       </div>
 
-      {/* Grouped with the hamburger in their own flex row — navStyle
-          uses justify-content:space-between, so two separate top-level
-          flex children here would get spread apart by that rule instead
-          of sitting adjacent. Wrapping them keeps the bell immediately
-          before the burger, satisfying both halves of the request with
-          one insertion point: under the mobile breakpoint nav-links-
-          desktop disappears, so the row reads "brand — bell — hamburger"
-          (bell immediately before the burger, no gap); above it, the
-          hamburger itself is the one that's CSS-hidden (0 width), so
-          this group just reads as "brand — links — bell", a natural
-          desktop spot. */}
       <div style={navTrailingGroupStyle}>
         {!loading && user?.creatorProfile && <NotificationBell />}
         {!loading && user && <MessageBell />}
 
-        {!loading && hasNavContent && (
+        <div className="nav-links-desktop" style={navDesktopAccountStyle}>
+          {!loading &&
+            (user ? (
+              <AccountMenu user={user} onLogout={handleLogout} />
+            ) : (
+              <NavSignedOutLinks pathname={pathname} />
+            ))}
+        </div>
+
+        {!loading && (
           <button
             type="button"
             className="nav-hamburger"
@@ -293,15 +255,14 @@ export function Nav({ comingSoon = false }: { comingSoon?: boolean }) {
           style={mobileMenuStyle}
           {...fadeSlideUp}
         >
-          <NavLinks
-            user={user ?? null}
-            hideAuthLinks={hideAuthLinks}
-            showLoginLink={showLoginLink}
-            comingSoon={comingSoon}
-            onLogout={handleLogout}
-            layout="column"
-            pathname={pathname}
-          />
+          {user ? (
+            <>
+              <NavPrimaryLinks user={user} pathname={pathname} />
+              <MobileAccountBlock user={user} onLogout={handleLogout} />
+            </>
+          ) : (
+            <NavSignedOutLinks pathname={pathname} />
+          )}
         </motion.div>
       )}
     </AnimatePresence>
@@ -309,134 +270,61 @@ export function Nav({ comingSoon = false }: { comingSoon?: boolean }) {
   );
 }
 
+// Minimal current-page indication, per direct request ("highlight
+// where the user is... minimal indication") — just brightens/bolds
+// whichever link's href matches the current route rather than adding a
+// background pill or border; every other link stays muted gray.
+function navLinkStyle(pathname: string, href: string, base: React.CSSProperties) {
+  return pathname === href ? { ...base, ...activeLinkStyle } : base;
+}
+
 /**
- * The actual link set for a given auth state, shared verbatim between
- * the desktop row and the mobile dropdown (layout only changes how the
- * signed-in account controls render — AccountMenu's floating popover
- * doesn't make sense nested inside a dropdown that's already floating,
- * so the mobile column gets the same identity/Settings/Sign out content
- * laid out flat instead).
+ * The centered, signed-in link set — shared verbatim between the
+ * desktop center column and the mobile dropdown. Deliberately different
+ * link sets per role (not one big list with items hidden) — a creator
+ * lands on tools for running their page, a fan lands on tools for
+ * browsing/paying. "Timeline" (/feed) is surfaced to every role and is
+ * everyone's default landing page (roleHomePath, above). Only FAN gets
+ * "My subscriptions". /discovery is reachable via the feed's own search
+ * icon rather than a persistent nav entry.
  */
-function NavLinks({
-  user,
-  hideAuthLinks,
-  showLoginLink,
-  comingSoon,
-  onLogout,
-  layout,
-  pathname,
-}: {
-  user: SessionUser | null;
-  hideAuthLinks: boolean;
-  showLoginLink: boolean;
-  comingSoon: boolean;
-  onLogout: () => void;
-  layout: "row" | "column";
-  // Minimal current-page indication, per direct request ("highlight
-  // where the user is... minimal indication") — just brightens/bolds
-  // whichever link's href matches the current route (navLinkStyle,
-  // below) rather than adding a background pill or border; every other
-  // link stays the same muted gray it always was.
-  pathname: string;
-}) {
-  function navLinkStyle(href: string, base: React.CSSProperties) {
-    return pathname === href ? { ...base, ...activeLinkStyle } : base;
-  }
-
-  if (user) {
-    return (
-      <>
-        {/* Deliberately different link sets per role (not one big list
-            with items hidden) — a creator lands on tools for running
-            their page, a fan lands on tools for browsing/paying, per
-            "creators shouldn't see what fans see." A creator's own
-            dashboard (Overview/Content/Settings) no longer has its own
-            nav link or route at all — it was merged into /profile as
-            additional tabs (social-feed follow-up: "remove dashboard
-            from menu and merge with profile"); /profile is already
-            reachable from AccountMenu for every signed-in role, so no
-            replacement link was needed here. Partner Dashboard still
-            keys off foundingPartner's own existence, not role — a
-            Founding Partner who's also applied as a creator gets both
-            that link and Profile's own creator tabs at once, since
-            applying flips role to CREATOR the same way it does for a
-            plain FAN (see /api/partner/dashboard's comment).
-
-            "Timeline" (was "Home", renamed per direct request — still
-            /feed, the fan-facing feed) is surfaced to every role
-            including CREATOR/ADMIN/PARTNER, and is still everyone's
-            actual default landing page (roleHomePath, below). Only FAN
-            gets "My subscriptions". No "Discover" link here anymore
-            (removed per direct request) — /discovery itself is
-            untouched and still reachable via the feed's own search
-            icon, this only removed the persistent nav entry. */}
-        <Link href="/feed" style={navLinkStyle("/feed", linkStyle)}>
-          Timeline
-        </Link>
-        {user.role === "ADMIN" && (
-          <Link href="/admin" style={navLinkStyle("/admin", linkStyle)}>
-            Admin
-          </Link>
-        )}
-        {user.role === "FAN" && (
-          <Link href="/fan-subscriptions" style={navLinkStyle("/fan-subscriptions", linkStyle)}>
-            My subscriptions
-          </Link>
-        )}
-        {(user.role === "FAN" || user.role === "PARTNER") && !user.creatorProfile && (
-          <Link href="/apply" style={navLinkStyle("/apply", primaryLinkStyle)}>
-            Become a creator
-          </Link>
-        )}
-        {user.foundingPartner && (
-          <Link href="/partner-dashboard" style={navLinkStyle("/partner-dashboard", linkStyle)}>
-            Partner Dashboard
-          </Link>
-        )}
-        {layout === "row" ? (
-          <AccountMenu user={user} onLogout={onLogout} />
-        ) : (
-          <MobileAccountBlock user={user} onLogout={onLogout} />
-        )}
-      </>
-    );
-  }
-
-  // No "Discover" link here — Discover, creator profiles, and search are
-  // all gated behind sign-in (see SignInGate's comment), so linking to
-  // them for a signed-out visitor would just be a dead end. The landing
-  // page's own Top Baddies row is the one thing they get to browse first.
-  // The landing page itself is the one deliberate exception (see Nav's
-  // own showLoginLink comment) — a returning visitor still gets a way
-  // back in, just "Log in" alone, not the Join/Founding-Baddie CTA.
-  if (hideAuthLinks) {
-    return showLoginLink ? (
-      <Link href="/login" style={navLinkStyle("/login", linkStyle)}>
-        Log in
-      </Link>
-    ) : null;
-  }
-
+function NavPrimaryLinks({ user, pathname }: { user: SessionUser; pathname: string }) {
   return (
     <>
-      <Link href="/login" style={navLinkStyle("/login", linkStyle)}>
-        Sign in
+      <Link href="/feed" style={navLinkStyle(pathname, "/feed", linkStyle)}>
+        Timeline
       </Link>
-      {comingSoon ? (
-        // /register is fully gated by middleware while LAUNCH_MODE is
-        // coming_soon (see src/middleware.ts) — a "Join" link here would
-        // be clickable and look live but silently bounce back to "/".
-        // Founding Baddies is the one fan/creator-facing path that
-        // actually works right now, so that's the CTA new visitors get
-        // instead.
-        <Link href="/founding-baddies" style={navLinkStyle("/founding-baddies", primaryLinkStyle)}>
-          Become a Founding Baddie
-        </Link>
-      ) : (
-        <Link href="/register" style={navLinkStyle("/register", primaryLinkStyle)}>
-          Join
+      {user.role === "ADMIN" && (
+        <Link href="/admin" style={navLinkStyle(pathname, "/admin", linkStyle)}>
+          Admin
         </Link>
       )}
+      {user.role === "FAN" && (
+        <Link href="/fan-subscriptions" style={navLinkStyle(pathname, "/fan-subscriptions", linkStyle)}>
+          My subscriptions
+        </Link>
+      )}
+      {(user.role === "FAN" || user.role === "PARTNER") && !user.creatorProfile && (
+        <Link href="/apply" style={navLinkStyle(pathname, "/apply", primaryLinkStyle)}>
+          Become a creator
+        </Link>
+      )}
+    </>
+  );
+}
+
+// No "Discover" link for a signed-out visitor — Discover, creator
+// profiles, and search are all gated behind sign-in (see SignInGate's
+// comment), so linking to them would just be a dead end.
+function NavSignedOutLinks({ pathname }: { pathname: string }) {
+  return (
+    <>
+      <Link href="/login" style={navLinkStyle(pathname, "/login", linkStyle)}>
+        Sign in
+      </Link>
+      <Link href="/register" style={navLinkStyle(pathname, "/register", primaryLinkStyle)}>
+        Join
+      </Link>
     </>
   );
 }
@@ -450,7 +338,7 @@ function MobileAccountBlock({ user, onLogout }: { user: SessionUser; onLogout: (
       <div style={{ fontWeight: 600, fontSize: "0.92rem" }}>{user.displayName ?? user.email}</div>
       <div style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginTop: "0.15rem" }}>{user.email}</div>
       <div style={{ marginTop: "0.5rem" }}>
-        <AccountTypeBadge role={user.role} creatorProfile={user.creatorProfile} foundingPartner={user.foundingPartner} />
+        <AccountTypeBadge role={user.role} creatorProfile={user.creatorProfile} />
       </div>
       <Link href="/profile" style={accountMenuLinkStyle}>
         Profile
@@ -543,8 +431,8 @@ function notificationTimeAgo(iso: string): string {
  * WalletMenuLink already uses just below.
  *
  * No real-time push exists anywhere in this app (no WebSocket/SSE) —
- * the unread count is a plain 45s poll, matching countdown.tsx's own
- * minimal setInterval/clearInterval shape. 45s: a low-urgency social-
+ * the unread count is a plain 45s poll — a minimal
+ * setInterval/clearInterval shape. 45s: a low-urgency social-
  * proof signal, not a message needing near-real-time delivery.
  *
  * Opening the panel fires the list fetch and "mark all read" together,
@@ -969,7 +857,7 @@ function AccountMenu({ user, onLogout }: { user: SessionUser; onLogout: () => vo
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <button onClick={() => setOpen((v) => !v)} style={accountMenuTriggerStyle} aria-expanded={open}>
-        {user.displayName ?? user.email}
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.displayName ?? user.email}</span>
         <span style={{ fontSize: "0.65rem" }}>▾</span>
       </button>
       <AnimatePresence>
@@ -979,7 +867,7 @@ function AccountMenu({ user, onLogout }: { user: SessionUser; onLogout: () => vo
               <div style={{ fontWeight: 600, fontSize: "0.92rem" }}>{user.displayName ?? "Unnamed"}</div>
               <div style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginTop: "0.15rem" }}>{user.email}</div>
               <div style={{ marginTop: "0.5rem" }}>
-                <AccountTypeBadge role={user.role} creatorProfile={user.creatorProfile} foundingPartner={user.foundingPartner} />
+                <AccountTypeBadge role={user.role} creatorProfile={user.creatorProfile} />
               </div>
             </div>
             <Link href="/profile" style={accountMenuLinkStyle} onClick={() => setOpen(false)}>
@@ -999,20 +887,9 @@ function AccountMenu({ user, onLogout }: { user: SessionUser; onLogout: () => vo
   );
 }
 
-// Three real, distinct creator standings, not a decorative palette —
-// each one traces to real data (FoundingPartner row / CreatorProfile.
-// isFoundingBaddie / plain VERIFIED status), never a guess. Per direct
-// follow-up request, the badge itself dropped its text label entirely
-// (just the tick now — label kept here only as an aria-label/title for
-// accessibility, never rendered) and its colors were reassigned: gold
-// for a Founding Partner (unchanged), blue for a Founding baddie
-// (unchanged — "remain the blue tick"), pink for every other verified
-// creator (was green — "normal creators will use a pink tick").
-const CREATOR_BADGE_KIND = {
-  partner: { label: "Founding Partner", color: "#d4af37" },
-  founding: { label: "Founding baddie", color: "var(--accent)" },
-  baddie: { label: "Verified baddie", color: "var(--accent-wine)" },
-} as const;
+// Pink tick for every verified creator — the label isn't rendered,
+// only exposed as an aria-label/title for accessibility.
+const VERIFIED_CREATOR_BADGE = { label: "Verified baddie", color: "var(--accent-wine)" } as const;
 
 export function CheckTick({ color, size = 13 }: { color: string; size?: number }) {
   return (
@@ -1050,25 +927,9 @@ export function SouthAfricaFlagIcon() {
   );
 }
 
-/**
- * isFoundingPartner takes priority over isFoundingBaddie when a creator
- * somehow holds both (the same dual-role shape FoundingPartner/
- * CreatorProfile already allow elsewhere in this app) — a real Founding
- * Partner badge is the more specific, more significant fact. Neither
- * flag set falls back to the plain "Verified baddie" badge every
- * verified creator had before this distinction existed. Renders as a
- * bare colored tick now, no text label — the label still exists as this
- * span's title/aria-label so the distinction stays available on hover
- * and to screen readers, just not always-visible text.
- */
-export function VerifiedBadge({
-  isFoundingPartner = false,
-  isFoundingBaddie = false,
-}: {
-  isFoundingPartner?: boolean;
-  isFoundingBaddie?: boolean;
-}) {
-  const kind = isFoundingPartner ? CREATOR_BADGE_KIND.partner : isFoundingBaddie ? CREATOR_BADGE_KIND.founding : CREATOR_BADGE_KIND.baddie;
+/** A verified creator's colored tick (see VERIFIED_CREATOR_BADGE). */
+export function VerifiedBadge() {
+  const kind = VERIFIED_CREATOR_BADGE;
   return (
     <span style={badgeStyle} title={kind.label} aria-label={kind.label}>
       <CheckTick color={kind.color} />
@@ -1082,45 +943,28 @@ export function VerifiedBadge({
  * account or a creator account. Creator gets its onboarding status
  * appended (e.g. "Creator · Pending") since "Creator" alone doesn't say
  * whether they can actually publish/monetise yet. Verified creators get
- * the standalone VerifiedBadge (a colored tick — gold/blue/pink, see its
- * own comment) in the nav instead of this pill — see Nav — so the only
+ * the standalone VerifiedBadge (a colored tick) in the nav instead of this pill — see Nav — so the only
  * colors this one actually renders are blue (Fan/
  * Admin/general) and muted gray (still-pending creator).
  */
 function AccountTypeBadge({
   role,
   creatorProfile,
-  foundingPartner,
 }: {
   role: SessionUser["role"];
   creatorProfile: SessionUser["creatorProfile"];
-  foundingPartner: SessionUser["foundingPartner"];
 }) {
   if (role === "ADMIN") {
     return <span style={accountBadgeStyle("var(--accent)")}>Admin</span>;
   }
 
-  // foundingPartner and creatorProfile are independent (see SessionUser's
-  // own comment) — an account can hold both at once, and gets both
-  // badges at once rather than one hiding the other.
-  const badges: React.ReactNode[] = [];
-  if (foundingPartner) {
-    badges.push(
-      <span key="partner" style={accountBadgeStyle("var(--accent)")}>
-        Founding Partner
-      </span>
-    );
-  }
   if (creatorProfile) {
     const verified = creatorProfile.status === "VERIFIED";
-    badges.push(
-      <span key="creator" style={accountBadgeStyle(verified ? "var(--success)" : "var(--text-muted)")}>
+    return (
+      <span style={accountBadgeStyle(verified ? "var(--success)" : "var(--text-muted)")}>
         Creator · {verified ? "Verified" : "Pending"}
       </span>
     );
-  }
-  if (badges.length > 0) {
-    return <span style={{ display: "inline-flex", gap: "0.4rem", flexWrap: "wrap" }}>{badges}</span>;
   }
   return <span style={accountBadgeStyle("var(--accent)")}>Fan</span>;
 }
@@ -1327,8 +1171,8 @@ export const inputStyle: React.CSSProperties = {
 
 /**
  * A password `<input>` with a show/hide toggle icon — every password
- * field in the app (register, login, settings' change-password ×3,
- * founding-baddies, partner-invite) used a plain `type="password"`
+ * field in the app (register, login, settings' change-password ×3)
+ * used a plain `type="password"`
  * input with no way to check what you typed. Same visual slot as those
  * (accepts `style` so callers keep passing `inputStyle`, same `value`/
  * `onChange`/`required`/`minLength` surface as a plain input — a
@@ -1998,20 +1842,32 @@ const navWrapStyle: React.CSSProperties = {
   zIndex: 20,
 };
 
-const navDesktopLinksStyle: React.CSSProperties = {
+// Middle grid column — the centered primary links.
+const navCenterLinksStyle: React.CSSProperties = {
+  gridColumn: 2,
   display: "flex",
   gap: "1.25rem",
   alignItems: "center",
+  justifyContent: "center",
 };
 
-// Keeps NotificationBell and the hamburger adjacent regardless of
-// navStyle's space-between — see the comment at this div's JSX call
-// site in Nav for why a bare pair of top-level flex children wouldn't
-// stay next to each other.
+// Right grid column — bells, account controls (desktop) and the
+// hamburger (mobile), always flush right.
 const navTrailingGroupStyle: React.CSSProperties = {
+  gridColumn: 3,
+  justifySelf: "end",
   display: "flex",
   alignItems: "center",
   gap: "0.15rem",
+  minWidth: 0,
+};
+
+const navDesktopAccountStyle: React.CSSProperties = {
+  display: "flex",
+  gap: "1.25rem",
+  alignItems: "center",
+  marginLeft: "0.6rem",
+  minWidth: 0,
 };
 
 // No `display` set here on purpose — visibility is owned entirely by the
@@ -2053,9 +1909,13 @@ const mobileAccountBlockStyle: React.CSSProperties = {
 };
 
 const navStyle: React.CSSProperties = {
-  display: "flex",
+  display: "grid",
+  // max-content floor: the side columns stay equal (so the middle is
+  // truly centered) whenever there's room, and grow rather than overlap
+  // the middle when there isn't.
+  gridTemplateColumns: "minmax(max-content, 1fr) auto minmax(max-content, 1fr)",
   alignItems: "center",
-  justifyContent: "space-between",
+  columnGap: "1.25rem",
   padding: "1.1rem 1.75rem",
   borderBottom: "1px solid var(--border)",
   background: "rgba(11, 11, 16, 0.72)",
@@ -2120,6 +1980,7 @@ const accountMenuTriggerStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: "0.35rem",
+  maxWidth: "180px",
   background: "transparent",
   border: "1px solid var(--border)",
   color: "var(--text)",
