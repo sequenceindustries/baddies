@@ -3,6 +3,7 @@ import { DEFAULT_BUSINESS_CONFIG, BUSINESS_CONFIG_KEYS } from "../src/lib/config
 import { AGREEMENTS } from "./agreements";
 import { REVENUE_SHARE_RULES } from "./revenue-rules";
 import { DUMMY_CREATORS, seedDummyCreators } from "../src/lib/creator/dummy-creators";
+import { backfillInlinePublicImages } from "../src/lib/media/backfill-inline-images";
 
 const db = new PrismaClient();
 
@@ -72,6 +73,10 @@ async function main() {
 
   await seedDummyCreators(db);
 
+  console.log("Moving any inline (data:) avatar/cover images to storage...");
+  const converted = await backfillInlinePublicImages(db);
+  console.log(`  ${converted} image(s) moved.`);
+
   // Production-only guard, not an environment-flavor preference: this
   // used to run everywhere, including against the real production
   // database on every single deploy (prisma/seed.ts is this app's
@@ -133,6 +138,14 @@ async function cleanupStrayCreators() {
     if (wallet) {
       await db.ledgerEntry.deleteMany({ where: { walletId: wallet.id } });
       await db.payout.deleteMany({ where: { walletId: wallet.id } });
+    }
+    // Subscription / PendingOrder → CreatorProfile are ON DELETE
+    // RESTRICT too (monetisation redesign), so fans' rows pointing at
+    // this test creator go first.
+    const creator = await db.creatorProfile.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (creator) {
+      await db.subscription.deleteMany({ where: { creatorProfileId: creator.id } });
+      await db.pendingOrder.deleteMany({ where: { creatorProfileId: creator.id } });
     }
     await db.user.delete({ where: { id: user.id } });
     console.log(`  Removed ${user.email}`);

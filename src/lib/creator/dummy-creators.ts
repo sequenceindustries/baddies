@@ -3,6 +3,7 @@ import { hashPassword } from "@/lib/auth/session";
 import { encryptField } from "@/lib/security/field-encryption";
 import { getMediaStorageProvider } from "@/lib/providers/storage";
 import { generateDisplayVariant, getImageDimensions } from "@/lib/media/image-pipeline";
+import { persistPublicImageAt } from "@/lib/media/persist-public-image";
 
 /**
  * The seeded 5-creator demo roster + the logic that writes it to the DB.
@@ -184,8 +185,8 @@ function fallbackAvatarDataUri(initial: string, colorA: string, colorB: string):
  * here), rather than a plain initial on a gradient. Used for both
  * Profile.avatarUrl (square) and CreatorProfile.coverImageUrl (the
  * "featured image" shown on discovery cards, cropped closer to
- * CreatorCard's own 4:5) — both are plain string fields, so this is
- * stored directly as a data: URI, no storage provider involved.
+ * CreatorCard's own 4:5). Returned as a data: URI, which the caller
+ * uploads to storage before saving (see seedDummyCreators).
  */
 async function fetchImageDataUri(
   photoId: string,
@@ -269,9 +270,16 @@ export async function seedDummyCreators(db: PrismaClient): Promise<void> {
     const passwordHash = await hashPassword(DUMMY_PASSWORD);
     const legalNameEncrypted = encryptField(spec.legalName);
     const initial = spec.displayName.charAt(0).toUpperCase();
+    // Uploaded to storage under fixed keys (overwritten on every re-run)
+    // so the DB holds a short URL — never the inline base64, which was
+    // being embedded in every page that shows these creators.
     const [avatarUrl, coverImageUrl] = await Promise.all([
-      fetchImageDataUri(spec.avatarPhotoId, 240, 240, initial, spec.colorA, spec.colorB),
-      fetchImageDataUri(spec.featuredPhotoId, 640, 800, initial, spec.colorA, spec.colorB),
+      fetchImageDataUri(spec.avatarPhotoId, 240, 240, initial, spec.colorA, spec.colorB).then((uri) =>
+        persistPublicImageAt(uri, `public/seed/${spec.slug}/avatar`)
+      ),
+      fetchImageDataUri(spec.featuredPhotoId, 640, 800, initial, spec.colorA, spec.colorB).then((uri) =>
+        persistPublicImageAt(uri, `public/seed/${spec.slug}/cover`)
+      ),
     ]);
 
     const user = await db.user.upsert({

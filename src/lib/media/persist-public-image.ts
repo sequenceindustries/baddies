@@ -82,6 +82,25 @@ export async function persistPublicImage(
 }
 
 /**
+ * Like persistPublicImage, but under a caller-chosen fixed storage key —
+ * re-running it overwrites the same object instead of adding a new one
+ * each time. For idempotent jobs (the demo-creator seed, which runs on
+ * every deploy).
+ */
+export async function persistPublicImageAt(value: string, storageKeyToWrite: string): Promise<string> {
+  const match = value.match(DATA_URL_PATTERN);
+  if (!match) return value;
+  const [, contentType, base64Data] = match;
+  const storage = getMediaStorageProvider();
+  const { storageKey } = await storage.putObject({
+    key: storageKeyToWrite,
+    contentType: contentType as string,
+    body: Buffer.from(base64Data as string, "base64"),
+  });
+  return storage.getSignedReadUrl(storageKey, PUBLIC_IMAGE_TTL_SECONDS);
+}
+
+/**
  * Re-derives a fresh signed URL for an already-stored avatarUrl/
  * coverImageUrl value, just-in-time, on every read. Necessary because
  * PUBLIC_IMAGE_TTL_SECONDS is a real ceiling under a SigV4-backed

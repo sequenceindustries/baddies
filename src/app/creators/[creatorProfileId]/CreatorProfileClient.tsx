@@ -149,7 +149,7 @@ export function CreatorProfileClient({
             )}
           </div>
           <div style={identityTextStyle}>
-            <span style={nameStyle}>{creator.displayName ?? "Unnamed creator"}</span>
+            <h1 style={nameStyle}>{creator.displayName ?? "Unnamed creator"}</h1>
             {creator.handle && <span style={handleStyle}>@{creator.handle}</span>}
             <VerifiedBadge />
           </div>
@@ -532,7 +532,8 @@ const identityTextStyle: React.CSSProperties = {
   gap: "0.4rem",
 };
 
-const nameStyle: React.CSSProperties = { fontWeight: 600, fontSize: "1.1rem" };
+// The page's one <h1> (the creator's name), styled exactly as before.
+const nameStyle: React.CSSProperties = { fontWeight: 600, fontSize: "1.1rem", margin: 0, lineHeight: "inherit" };
 
 const mutedStyle: React.CSSProperties = { color: "var(--text-muted)", fontSize: "0.9rem", margin: 0 };
 const handleStyle: React.CSSProperties = { color: "var(--text-muted)", fontSize: "0.9rem" };

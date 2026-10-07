@@ -207,7 +207,7 @@ export function Nav() {
         the middle cell gone. */}
     <nav style={navStyle}>
       <Link href="/" style={{ ...brandStyle, textDecoration: "none", gridColumn: 1, justifySelf: "start" }}>
-        {/* SEO Phase 8 — see src/app/page.tsx's own comment on the
+        {/* SEO Phase 8 — see src/app/landing-page.tsx's own comment on the
             same asset for why this is the one <img> in the app worth
             converting to next/image (a genuinely static, non-expiring
             file, unlike signed avatar/cover URLs). Above-the-fold on

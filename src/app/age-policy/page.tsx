@@ -1,4 +1,14 @@
+import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
+
+// Per-page title/description/canonical — without these every info page
+// shared the site-wide default title and description (duplicate-content
+// signals to search engines).
+export const metadata: Metadata = {
+  title: "18+ / Age Policy | baddies",
+  description: "baddies is strictly 18+. How age is verified for fans and creators.",
+  alternates: { canonical: "/age-policy" },
+};
 
 const DRAFT_NOTICE =
   "DRAFT — placeholder text pending review by a qualified attorney. Not final, not legally reviewed. Baddies will notify users before any reviewed version replaces this one.";

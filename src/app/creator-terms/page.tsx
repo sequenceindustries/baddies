@@ -1,4 +1,14 @@
+import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
+
+// Per-page title/description/canonical — without these every info page
+// shared the site-wide default title and description (duplicate-content
+// signals to search engines).
+export const metadata: Metadata = {
+  title: "Creator Terms | baddies",
+  description: "The terms that apply to verified creators publishing and earning on baddies.",
+  alternates: { canonical: "/creator-terms" },
+};
 
 // Mirrors the CREATOR_TERMS entry in prisma/agreements.ts (what creators
 // formally accept during onboarding) — see privacy/page.tsx's comment on

@@ -41,6 +41,9 @@ export async function generateMetadata({
     ? truncateForMeta(creator.bio, META_DESCRIPTION_LIMIT)
     : `${name}'s verified creator profile on baddies — Africa's adult content network.`;
   const canonicalPath = resolveCreatorCanonicalPath(creator);
+  // Never put an inline data: image into og:image — crawlers ignore it
+  // and it bloats the page.
+  const ogImage = creator.avatarUrl && !creator.avatarUrl.startsWith("data:") ? creator.avatarUrl : null;
 
   return {
     title,
@@ -50,10 +53,10 @@ export async function generateMetadata({
       title,
       description,
       type: "profile",
-      images: creator.avatarUrl ? [creator.avatarUrl] : undefined,
+      images: ogImage ? [ogImage] : undefined,
     },
     twitter: {
-      card: creator.avatarUrl ? "summary" : "summary_large_image",
+      card: ogImage ? "summary" : "summary_large_image",
       title,
       description,
     },

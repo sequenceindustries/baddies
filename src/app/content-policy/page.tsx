@@ -1,4 +1,14 @@
+import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
+
+// Per-page title/description/canonical — without these every info page
+// shared the site-wide default title and description (duplicate-content
+// signals to search engines).
+export const metadata: Metadata = {
+  title: "Content Policy | baddies",
+  description: "What can and can't be published on baddies, and how content is moderated.",
+  alternates: { canonical: "/content-policy" },
+};
 
 // Mirrors the CONTENT_POLICY entry in prisma/agreements.ts (what creators
 // formally accept during onboarding) — see privacy/page.tsx's comment on

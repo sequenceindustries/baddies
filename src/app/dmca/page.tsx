@@ -1,4 +1,14 @@
+import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal-page";
+
+// Per-page title/description/canonical — without these every info page
+// shared the site-wide default title and description (duplicate-content
+// signals to search engines).
+export const metadata: Metadata = {
+  title: "DMCA / Copyright | baddies",
+  description: "How to report copyright infringement or request content removal on baddies.",
+  alternates: { canonical: "/dmca" },
+};
 
 const DRAFT_NOTICE =
   "DRAFT — placeholder text pending review by a qualified attorney. Not final, not legally reviewed. Baddies will notify users before any reviewed version replaces this one.";
