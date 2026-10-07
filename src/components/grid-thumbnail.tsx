@@ -121,14 +121,14 @@ export function GridThumbnail({
         <>
           {backdrop && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={backdrop} alt="" style={tileBlurredImgStyle} />
+            <img src={backdrop} alt="" loading="lazy" decoding="async" style={tileBlurredImgStyle} />
           )}
           <div style={tileScrimStyle} />
           <LockGlyph />
         </>
       ) : media ? (
         media.mimeType.startsWith("video/") ? (
-          <motion.video ref={videoRef} src={media.signedUrl} muted playsInline loop style={tileMediaStyle} variants={tileMediaVariants} />
+          <motion.video ref={videoRef} src={media.signedUrl} preload="metadata" muted playsInline loop style={tileMediaStyle} variants={tileMediaVariants} />
         ) : media.mimeType.startsWith("audio/") ? (
           <div style={tileAudioGlyphStyle}>♪</div>
         ) : (
@@ -142,6 +142,8 @@ export function GridThumbnail({
           // every fresh view, not just the first).
           // eslint-disable-next-line @next/next/no-img-element
           <motion.img
+            loading="lazy"
+            decoding="async"
             src={media.signedUrl}
             alt={item.caption || `Photo by ${item.creator.displayName ?? "a baddies creator"}`}
             style={tileMediaStyle}

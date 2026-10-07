@@ -357,6 +357,7 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
           <>
             {media.mimeType.startsWith("video/") ? (
               <motion.video
+                preload="metadata"
                 key={activeIndex}
                 ref={videoRef}
                 src={media.signedUrl}
@@ -378,6 +379,8 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
               // profile content list, since Phase 4).
               // eslint-disable-next-line @next/next/no-img-element
               <motion.img
+                loading="lazy"
+                decoding="async"
                 key={activeIndex}
                 src={media.signedUrl}
                 alt={item.caption || `Photo by ${item.creator.displayName ?? "a baddies creator"}`}
@@ -689,7 +692,7 @@ function LockedMediaBlock({
     <div style={lockedBlockStyle}>
       {backdrop && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={backdrop} alt="" style={lockedBackdropImgStyle} />
+        <img src={backdrop} alt="" loading="lazy" decoding="async" style={lockedBackdropImgStyle} />
       )}
       <div style={lockedScrimStyle} />
       <div style={lockedContentStyle}>

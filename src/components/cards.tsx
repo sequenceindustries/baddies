@@ -109,6 +109,8 @@ export function CreatorCard({ creator, size = "md" }: { creator: CreatorCardData
             // category, and location pages (since Phases 4-5).
             // eslint-disable-next-line @next/next/no-img-element
             <motion.img
+              loading="lazy"
+              decoding="async"
               src={creator.thumbnailUrl!}
               alt={`${creator.displayName ?? "Creator"} — verified creator on baddies`}
               style={cardMediaLayerStyle}
@@ -119,6 +121,8 @@ export function CreatorCard({ creator, size = "md" }: { creator: CreatorCardData
         ) : showAvatarAsMedia ? (
           // eslint-disable-next-line @next/next/no-img-element
           <motion.img
+            loading="lazy"
+            decoding="async"
             src={creator.avatarUrl!}
             alt={`${creator.displayName ?? "Creator"} — verified creator on baddies`}
             style={cardMediaLayerStyle}
@@ -362,6 +366,8 @@ export function MediaLightbox({ mimeType, url, onClose }: { mimeType: string; ur
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
           <motion.img
+            loading="lazy"
+            decoding="async"
             src={url}
             alt=""
             style={{ ...lightboxMediaStyle, transformOrigin: origin, cursor: zoomed ? "grab" : "zoom-in" }}
@@ -527,7 +533,7 @@ export function CardAvatar({ url, initial }: { url?: string | null; initial: str
     <span style={cardCreatorAvatarStyle}>
       {url && !failed ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt="" style={avatarImgStyle} onError={() => setFailed(true)} />
+        <img src={url} alt="" loading="lazy" decoding="async" style={avatarImgStyle} onError={() => setFailed(true)} />
       ) : (
         initial
       )}
