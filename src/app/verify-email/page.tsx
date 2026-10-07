@@ -76,7 +76,7 @@ export default function VerifyEmailPage() {
       )}
       {status === "ok" && (
         <>
-          <h1 style={{ fontFamily: "var(--font-display)", fontSize: "1.4rem", fontWeight: 500 }}>Email verified</h1>
+          <h1 style={{ fontFamily: "var(--font-display)", fontSize: "1.4rem", fontWeight: 700 }}>Email verified</h1>
           <p style={{ color: "var(--text-muted)", marginTop: "0.4rem" }}>
             Thanks — your email is confirmed. You&apos;re all set.
           </p>

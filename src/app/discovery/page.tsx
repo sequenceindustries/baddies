@@ -125,6 +125,6 @@ const creatorsSectionStyle: React.CSSProperties = { marginTop: "2.5rem" };
 const sectionHeadingStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)",
   fontSize: "1.1rem",
-  fontWeight: 500,
+  fontWeight: 700,
   margin: "0 0 0.9rem",
 };

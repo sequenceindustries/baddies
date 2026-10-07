@@ -216,7 +216,7 @@ export function Nav() {
       </Link>
 
       <div className="nav-links-desktop" style={navCenterLinksStyle}>
-        {!loading && user && <NavPrimaryLinks user={user} pathname={pathname} />}
+        {!loading && (user ? <NavPrimaryLinks user={user} pathname={pathname} /> : <NavPublicLinks pathname={pathname} />)}
       </div>
 
       <div style={navTrailingGroupStyle}>
@@ -261,7 +261,10 @@ export function Nav() {
               <MobileAccountBlock user={user} onLogout={handleLogout} />
             </>
           ) : (
-            <NavSignedOutLinks pathname={pathname} />
+            <>
+              <NavPublicLinks pathname={pathname} />
+              <NavSignedOutLinks pathname={pathname} />
+            </>
           )}
         </motion.div>
       )}
@@ -322,8 +325,23 @@ function NavSignedOutLinks({ pathname }: { pathname: string }) {
       <Link href="/login" style={navLinkStyle(pathname, "/login", linkStyle)}>
         Sign in
       </Link>
-      <Link href="/register" style={navLinkStyle(pathname, "/register", primaryLinkStyle)}>
+      <Link href="/register" style={joinPillStyle}>
         Join
+      </Link>
+    </>
+  );
+}
+
+// Centre-pill links for signed-out visitors — the public pages worth
+// reaching before joining (Discover is fully public since SEO Phase 4).
+function NavPublicLinks({ pathname }: { pathname: string }) {
+  return (
+    <>
+      <Link href="/discovery" style={navLinkStyle(pathname, "/discovery", linkStyle)}>
+        Discover
+      </Link>
+      <Link href="/apply" style={navLinkStyle(pathname, "/apply", linkStyle)}>
+        For creators
       </Link>
     </>
   );
@@ -1161,7 +1179,7 @@ export function Field(props: {
 export const inputStyle: React.CSSProperties = {
   width: "100%",
   marginTop: "0.4rem",
-  padding: "0.7rem 0.8rem",
+  padding: "0.75rem 0.95rem",
   background: "var(--surface-raised)",
   border: "1px solid var(--border)",
   borderRadius: "var(--radius)",
@@ -1450,11 +1468,11 @@ export const checkboxRowStyle: React.CSSProperties = {
 
 export const primaryButtonStyle: React.CSSProperties = {
   width: "100%",
-  padding: "0.8rem",
+  padding: "0.85rem 1.25rem",
   background: "var(--accent)",
-  color: "var(--bg)",
+  color: "var(--on-accent)",
   border: "none",
-  borderRadius: "var(--radius)",
+  borderRadius: "999px",
   fontWeight: 600,
   fontSize: "0.95rem",
   cursor: "pointer",
@@ -1463,7 +1481,7 @@ export const primaryButtonStyle: React.CSSProperties = {
 export const cardStyle: React.CSSProperties = {
   background: "var(--surface)",
   border: "1px solid var(--border)",
-  borderRadius: "14px",
+  borderRadius: "var(--radius-lg)",
   padding: "2rem",
 };
 
@@ -1475,9 +1493,12 @@ export const pageWrapStyle: React.CSSProperties = {
 
 export const displayHeadingStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)",
-  fontSize: "1.9rem",
-  fontWeight: 500,
-  margin: "0 0 0.4rem",
+  fontSize: "clamp(2.2rem, 5vw, 3.2rem)",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "-0.01em",
+  lineHeight: 0.98,
+  margin: "0 0 0.6rem",
 };
 
 /**
@@ -1844,12 +1865,17 @@ const navWrapStyle: React.CSSProperties = {
 };
 
 // Middle grid column — the centered primary links.
+// dayos-style: the primary links sit together in one rounded pill.
 const navCenterLinksStyle: React.CSSProperties = {
   gridColumn: 2,
   display: "flex",
-  gap: "1.25rem",
+  gap: "0.15rem",
   alignItems: "center",
   justifyContent: "center",
+  padding: "0.3rem",
+  borderRadius: "999px",
+  background: "rgba(35, 39, 46, 0.72)",
+  border: "1px solid var(--border)",
 };
 
 // Right grid column — bells, account controls (desktop) and the
@@ -1917,16 +1943,15 @@ const navStyle: React.CSSProperties = {
   gridTemplateColumns: "minmax(max-content, 1fr) auto minmax(max-content, 1fr)",
   alignItems: "center",
   columnGap: "1.25rem",
-  padding: "1.1rem 1.75rem",
-  borderBottom: "1px solid var(--border)",
-  background: "rgba(11, 11, 16, 0.72)",
-  backdropFilter: "blur(10px)",
+  padding: "0.9rem clamp(1rem, 3vw, 2.5rem)",
+  background: "rgba(17, 18, 20, 0.78)",
+  backdropFilter: "blur(14px)",
 };
 
 /** Thin brand-accent strip under the nav, visible on every page. */
 const navAccentBarStyle: React.CSSProperties = {
-  height: "3px",
-  background: "linear-gradient(90deg, var(--accent), transparent 70%)",
+  height: "1px",
+  background: "var(--border)",
 };
 
 const brandStyle: React.CSSProperties = {
@@ -1946,9 +1971,26 @@ const brandLogoStyle: React.CSSProperties = {
 };
 
 const linkStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
   color: "var(--text-muted)",
   textDecoration: "none",
   fontSize: "0.9rem",
+  padding: "0.45rem 0.95rem",
+  borderRadius: "999px",
+};
+
+const joinPillStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: "38px",
+  padding: "0 1.15rem",
+  borderRadius: "999px",
+  background: "var(--accent)",
+  color: "var(--on-accent)",
+  fontWeight: 600,
+  fontSize: "0.88rem",
+  textDecoration: "none",
 };
 
 const primaryLinkStyle: React.CSSProperties = {
@@ -1965,6 +2007,7 @@ const primaryLinkStyle: React.CSSProperties = {
 const activeLinkStyle: React.CSSProperties = {
   color: "var(--text)",
   fontWeight: 600,
+  background: "var(--surface-raised)",
 };
 
 const ghostButtonStyle: React.CSSProperties = {

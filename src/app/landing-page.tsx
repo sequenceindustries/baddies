@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
 import { transitions } from "@/lib/motion/tokens";
@@ -15,15 +14,20 @@ interface DiscoveryResponse {
 }
 
 /**
- * The real landing page (Sprint 0's placeholder replaced) — an anonymous
- * visitor's actual entry point. Logged-in visitors skip straight to their
- * role's home (roleHomePath — the feed, /feed). Sign in/Join live in
- * the Nav; the creator banner at the bottom is the page's own CTA.
+ * The landing page — an anonymous visitor's entry point; signed-in
+ * visitors go straight to their home (roleHomePath, the feed).
+ *
+ * Editorial layout (dayos-inspired): a left-aligned hero with a huge
+ * condensed all-caps headline, pill CTAs and a fanned stack of real
+ * creator previews; then full-width sections with rounded tops that
+ * alternate near-black and navy, a three-tier pricing row, and one big
+ * closing creator call to action.
  */
 export default function LandingPage() {
   const router = useRouter();
   const { user, loading } = useSession();
   const [topCreators, setTopCreators] = useState<CreatorCardData[]>([]);
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     if (!loading && user) {
@@ -48,109 +52,184 @@ export default function LandingPage() {
   }, []);
 
   // Only hide once we KNOW there's a logged-in user to redirect — not
-  // while that's still loading, which would otherwise blank the page
-  // (this is every visitor's first paint) for a beat on every load.
+  // while that's still loading (every visitor's first paint).
   if (user) return null;
 
+  const heroImages = topCreators
+    .filter((c) => c.thumbnailUrl && !c.thumbnailMimeType?.startsWith("video/"))
+    .slice(0, 3);
+
+  const rise = (delay: number) =>
+    reduceMotion
+      ? {}
+      : {
+          initial: { opacity: 0, y: 18 },
+          animate: { opacity: 1, y: 0 },
+          transition: { ...transitions.large, delay },
+        };
+
   return (
-    <main>
-      <section className="hero-plain" style={{ position: "relative", overflow: "hidden" }}>
-        <HeroBackground />
-        {/* One-time on-mount entrance stagger (logo → subhead), not
-            continuous/idle motion — a previous hero here
-            had a real-time cursor-parallax effect that was deliberately
-            removed (see globals.css's own comment on .hero-plain); this
-            plays once and settles, it never keeps moving after that. */}
-        <motion.div
-          className="hero-plain-content"
-          style={{ position: "relative", zIndex: 1 }}
-          initial="hidden"
-          animate="visible"
-          variants={{ visible: { transition: { staggerChildren: 0.12 } } }}
-        >
-          <motion.h1
-            style={heroTitleStyle}
-            variants={{ hidden: { opacity: 0, scale: 0.96 }, visible: { opacity: 1, scale: 1, transition: transitions.large } }}
-          >
-            {/* SEO Phase 8: the wordmark is the one genuinely static,
-                non-expiring image asset used site-wide (unlike avatar/
-                cover URLs, which are signed and re-signed per read —
-                see this project's SEO plan for why those stay plain
-                <img>) — real dimensions (2000x403) let next/image
-                reserve the correct aspect ratio and avoid any CLS,
-                while `style` still governs the actual rendered size. */}
-            <Image src="/baddies-wordmark-white.webp" alt="baddies" width={2000} height={403} priority style={heroLogoStyle} />
-          </motion.h1>
-          <motion.p
-            style={heroSubStyle}
-            variants={{ hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0, transition: transitions.large } }}
-          >
-            Africa&apos;s adult content network — where verified South African creators publish
-            exclusive content and get paid directly by the fans who support them. Browse free
-            previews with no card required, or subscribe to unlock more.
-          </motion.p>
-        </motion.div>
+    <main style={{ textAlign: "left" }}>
+      {/* ── Hero ───────────────────────────────────────────── */}
+      <section style={heroSectionStyle}>
+        <div className="landing-hero-grid" style={containerStyle}>
+          <div>
+            <motion.span style={eyebrowStyle} {...rise(0)}>
+              Africa&apos;s creator network · 18+
+            </motion.span>
+            <motion.h1 style={heroHeadlineStyle} {...rise(0.06)}>
+              <span className="landing-hero-line">Verified creators.</span>
+              <span className="landing-hero-line">Exclusive content.</span>
+              <span className="landing-hero-line" style={{ color: "var(--accent)" }}>
+                Paid directly.
+              </span>
+            </motion.h1>
+            <motion.p style={heroSubStyle} {...rise(0.14)}>
+              Verified South African creators publish exclusive content and get paid directly by the fans who
+              support them. Browse free previews — no card required.
+            </motion.p>
+            <motion.div style={ctaRowStyle} {...rise(0.2)}>
+              <Link href="/register" style={pillPrimaryStyle} className="hover-lift">
+                Join free
+              </Link>
+              <Link href="/discovery" style={pillGhostStyle} className="hover-lift">
+                Browse creators
+              </Link>
+            </motion.div>
+          </div>
+
+          {heroImages.length > 0 && (
+            <div className="landing-hero-stack" aria-hidden="true" style={heroStackStyle}>
+              {heroImages.map((c, i) => (
+                <motion.div
+                  key={c.creatorProfileId}
+                  style={{ ...heroStackCardStyle, ...HERO_STACK_POSITIONS[i] }}
+                  initial={reduceMotion ? false : { opacity: 0, y: 30, rotate: 0 }}
+                  animate={{ opacity: 1, y: 0, rotate: HERO_STACK_ROTATIONS[i] }}
+                  transition={{ ...transitions.large, delay: 0.15 + i * 0.08 }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element -- signed, short-lived storage URL */}
+                  <img src={c.thumbnailUrl!} alt="" style={heroStackImgStyle} />
+                  <span style={heroStackNameStyle}>{c.displayName}</span>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
       </section>
 
-      {/* Larger cards, one sliding row (CreatorCardRow's size="lg"
-          scroll) rather than several stacked rows — this is the one
-          creator row a signed-out visitor sees before joining, so it
-          gets more visual weight than the same row does elsewhere
-          (Discover, fan Home). Below the fold / loads async, so this
-          reveals on scroll rather than joining the hero's initial
-          stagger above. */}
+      {/* ── The Baddest (navy block) ───────────────────────── */}
       {topCreators.length > 0 && (
-        <Reveal>
-          <section style={sectionStyle}>
-            <CreatorCardRow title="The Baddest" creators={topCreators} size="lg" scroll />
-          </section>
-        </Reveal>
+        <section style={{ ...blockSectionStyle, background: "var(--navy)" }}>
+          <Reveal>
+            <div style={containerStyle}>
+              <div style={sectionHeaderRowStyle}>
+                <h2 style={sectionTitleStyle}>The Baddest.</h2>
+                <Link href="/discovery" style={sectionLinkStyle}>
+                  See everyone →
+                </Link>
+              </div>
+              <CreatorCardRow creators={topCreators} size="lg" scroll />
+            </div>
+          </Reveal>
+        </section>
       )}
 
-      <Reveal>
-        <HowItWorks />
-      </Reveal>
+      {/* ── How it works ───────────────────────────────────── */}
+      <section style={{ ...blockSectionStyle, background: "var(--bg)" }}>
+        <Reveal>
+          <div style={containerStyle}>
+            <h2 style={sectionTitleStyle}>How it works.</h2>
+            <p style={sectionSubStyle}>One platform for creators to earn and fans to unlock what they love.</p>
+          </div>
+          <HowItWorks />
+        </Reveal>
+      </section>
 
-      {/* The last thing before the footer, after the visitor has
-          already seen the creator row and both "how it works"
-          explainers. Leads into /register's own Fan/Creator picker. */}
-      <Reveal>
-        <section style={creatorBannerSectionStyle}>
-          <Link href="/register" style={creatorBannerStyle} className="hover-lift">
-            <span style={creatorBannerKickerStyle}>For creators</span>
-            <span style={creatorBannerTitleStyle}>Become a baddie</span>
-            <p style={creatorBannerBodyStyle}>
-              Verified South African creators publish exclusive content and get paid directly by the
-              fans who support them.
+      {/* ── Pricing ────────────────────────────────────────── */}
+      <section style={{ ...blockSectionStyle, background: "var(--surface)" }}>
+        <Reveal>
+          <div style={containerStyle}>
+            <h2 style={sectionTitleStyle}>Simple pricing.</h2>
+            <p style={sectionSubStyle}>Prepaid, no auto-renewal, no surprises.</p>
+            <div style={pricingGridStyle}>
+              {PRICING.map((tier) => (
+                <div key={tier.name} style={tier.featured ? pricingCardFeaturedStyle : pricingCardStyle} className="hover-lift">
+                  <span style={pricingNameStyle}>{tier.name}</span>
+                  <span style={pricingPriceStyle}>{tier.price}</span>
+                  <span style={pricingUnitStyle}>{tier.unit}</span>
+                  <p style={pricingDescStyle}>{tier.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Reveal>
+      </section>
+
+      {/* ── Creator CTA (navy block) ───────────────────────── */}
+      <section style={{ ...blockSectionStyle, background: "var(--navy)" }}>
+        <Reveal>
+          <div style={containerStyle}>
+            <span style={eyebrowStyle}>For creators</span>
+            <h2 style={ctaHeadlineStyle}>
+              Become
+              <br />a baddie.
+            </h2>
+            <p style={{ ...sectionSubStyle, maxWidth: "520px" }}>
+              South African creators only. Get verified, publish Teasers, VIP and Exclusive content, and get paid
+              directly by your fans.
             </p>
-            <span style={creatorBannerArrowStyle}>Join baddies →</span>
-          </Link>
-        </section>
-      </Reveal>
+            <div style={ctaRowStyle}>
+              <Link href="/register" style={pillPrimaryStyle} className="hover-lift">
+                Apply as a creator
+              </Link>
+            </div>
+          </div>
+        </Reveal>
+      </section>
 
+      {/* ── Footer ─────────────────────────────────────────── */}
       <footer style={footerStyle}>
-        <p style={footerTaglineStyle}>South Africa to the World!</p>
-        <nav style={footerLinksRowStyle}>
-          {FOOTER_LINKS.map((link) => (
-            <Link key={link.href} href={link.href} style={footerLinkStyle}>
-              {link.label}
-            </Link>
-          ))}
-        </nav>
-        <a
-          href="https://www.instagram.com/baddest.africa/"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="baddies on Instagram"
-          style={footerSocialLinkStyle}
-        >
-          <InstagramIcon />
-        </a>
-        <p style={footerCopyrightStyle}>© {new Date().getFullYear()} baddies. All rights reserved.</p>
+        <div style={{ ...containerStyle, ...footerInnerStyle }}>
+          <div>
+            <p style={footerTaglineStyle}>South Africa to the world.</p>
+            <a
+              href="https://www.instagram.com/baddest.africa/"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="baddies on Instagram"
+              style={footerSocialLinkStyle}
+            >
+              <InstagramIcon />
+            </a>
+          </div>
+          <nav style={footerLinksStyle} aria-label="Legal">
+            {FOOTER_LINKS.map((link) => (
+              <Link key={link.href} href={link.href} style={footerLinkStyle}>
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
+        <p style={{ ...containerStyle, ...footerCopyrightStyle }}>
+          © {new Date().getFullYear()} baddies. All rights reserved.
+        </p>
       </footer>
     </main>
   );
 }
+
+const PRICING: { name: string; price: string; unit: string; desc: string; featured?: boolean }[] = [
+  { name: "Teasers", price: "Free", unit: "always", desc: "Public previews from every verified creator. No card required." },
+  {
+    name: "VIP Pass",
+    price: "$3.50",
+    unit: "/month, from",
+    desc: "One pass unlocks VIP content from every participating creator. 3, 6 or 12 months.",
+    featured: true,
+  },
+  { name: "Exclusive", price: "$10", unit: "/month per creator", desc: "Subscribe directly to a creator for their subscriber-only posts." },
+];
 
 const FOOTER_LINKS: { href: string; label: string }[] = [
   { href: "/terms", label: "Terms of Service" },
@@ -162,167 +241,251 @@ const FOOTER_LINKS: { href: string; label: string }[] = [
   { href: "/contact", label: "Contact" },
 ];
 
-// Wraps the logo image rather than styling text directly now — h1 stays
-// for the page's heading semantics/accessible name (the img's alt covers
-// that), margin/line-height carried over from the old text treatment so
-// the layout rhythm below it (subhead) doesn't shift.
-const heroTitleStyle: React.CSSProperties = {
-  margin: "0 0 0.6rem",
-  lineHeight: 1,
+// Three cards fanned out to the right of the hero headline.
+const HERO_STACK_POSITIONS: React.CSSProperties[] = [
+  { left: "6%", top: "10%", zIndex: 1 },
+  { left: "34%", top: "0%", zIndex: 3 },
+  { left: "60%", top: "14%", zIndex: 2 },
+];
+const HERO_STACK_ROTATIONS = [-8, 2, 9];
+
+const containerStyle: React.CSSProperties = {
+  maxWidth: "1240px",
+  margin: "0 auto",
+  padding: "0 clamp(1rem, 4vw, 2.5rem)",
 };
 
-const heroLogoStyle: React.CSSProperties = {
-  width: "clamp(220px, 24vw, 420px)",
-  height: "auto",
+const heroSectionStyle: React.CSSProperties = {
+  padding: "clamp(3rem, 9vw, 7rem) 0 clamp(4rem, 8vw, 7rem)",
+  overflow: "hidden",
+};
+
+const eyebrowStyle: React.CSSProperties = {
+  display: "inline-block",
+  fontSize: "0.78rem",
+  fontWeight: 600,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+  color: "var(--accent)",
+  marginBottom: "1.25rem",
+};
+
+const heroHeadlineStyle: React.CSSProperties = {
+  fontFamily: "var(--font-display)",
+  fontSize: "clamp(3.2rem, 6.4vw, 7rem)",
+  fontWeight: 800,
+  lineHeight: 0.9,
+  letterSpacing: "-0.02em",
+  textTransform: "uppercase",
+  margin: "0 0 1.75rem",
 };
 
 const heroSubStyle: React.CSSProperties = {
   color: "var(--text-muted)",
-  fontSize: "1.05rem",
-  lineHeight: 1.6,
-  maxWidth: "560px",
-  margin: "0 auto",
+  fontSize: "clamp(1rem, 1.6vw, 1.2rem)",
+  lineHeight: 1.55,
+  maxWidth: "500px",
+  margin: "0 0 2rem",
 };
 
-const sectionStyle: React.CSSProperties = {
-  padding: "1.5rem 1.75rem",
-  maxWidth: "1100px",
-  margin: "0 auto 1.5rem",
-};
+const ctaRowStyle: React.CSSProperties = { display: "flex", flexWrap: "wrap", gap: "0.75rem" };
 
-// Now the last section before the footer (moved down from just under
-// the hero) — a plain stacked section like the others, so the old
-// negative-margin/position/zIndex "pulled up over the hero" treatment
-// no longer applies.
-const creatorBannerSectionStyle: React.CSSProperties = {
-  padding: "0 1.75rem",
-  maxWidth: "1100px",
-  margin: "0 auto 2rem",
-};
-
-// Border removed per product decision — background + boxShadow glow
-// still read as a distinct block without a hard edge.
-const creatorBannerStyle: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
+const pillBase: React.CSSProperties = {
+  display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  gap: "0.85rem",
-  textDecoration: "none",
-  color: "var(--text)",
-  background: "var(--surface)",
-  borderRadius: "20px",
-  padding: "3rem 2rem",
-  boxShadow: "var(--glow)",
-  textAlign: "center",
-};
-
-const creatorBannerKickerStyle: React.CSSProperties = {
-  fontSize: "0.72rem",
-  fontWeight: 700,
-  letterSpacing: "0.06em",
-  textTransform: "uppercase",
-  color: "var(--accent)",
-  background: "var(--surface-raised)",
+  minHeight: "48px",
+  padding: "0 1.6rem",
   borderRadius: "999px",
-  padding: "0.25rem 0.75rem",
-};
-
-const creatorBannerTitleStyle: React.CSSProperties = {
-  fontFamily: "var(--font-display)",
-  fontSize: "1.6rem",
   fontWeight: 600,
+  fontSize: "0.95rem",
+  textDecoration: "none",
 };
 
-const creatorBannerBodyStyle: React.CSSProperties = {
-  color: "var(--text-muted)",
-  fontSize: "0.92rem",
-  lineHeight: 1.6,
-  maxWidth: "420px",
-  margin: 0,
+const pillPrimaryStyle: React.CSSProperties = {
+  ...pillBase,
+  background: "var(--accent)",
+  color: "var(--on-accent)",
 };
 
-const creatorBannerArrowStyle: React.CSSProperties = {
-  color: "var(--accent)",
+const pillGhostStyle: React.CSSProperties = {
+  ...pillBase,
+  background: "transparent",
+  color: "var(--text)",
+  border: "1px solid var(--slate)",
+};
+
+const heroStackStyle: React.CSSProperties = { position: "relative", minHeight: "460px" };
+
+const heroStackCardStyle: React.CSSProperties = {
+  position: "absolute",
+  width: "40%",
+  aspectRatio: "3 / 4",
+  borderRadius: "var(--radius-lg)",
+  overflow: "hidden",
+  background: "var(--surface-raised)",
+  boxShadow: "0 30px 60px -25px rgba(0, 0, 0, 0.8)",
+};
+
+const heroStackImgStyle: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover", display: "block" };
+
+const heroStackNameStyle: React.CSSProperties = {
+  position: "absolute",
+  left: "0.9rem",
+  bottom: "0.8rem",
+  fontFamily: "var(--font-display)",
   fontWeight: 700,
-  fontSize: "1rem",
+  fontSize: "1.2rem",
+  textTransform: "uppercase",
+  textShadow: "0 2px 12px rgba(0,0,0,0.6)",
+};
+
+// Full-width blocks with rounded tops, stacked so each one overlaps the
+// previous section's bottom edge — the dayos section transition.
+const blockSectionStyle: React.CSSProperties = {
+  borderRadius: "clamp(24px, 4vw, 48px) clamp(24px, 4vw, 48px) 0 0",
+  marginTop: "calc(-1 * clamp(24px, 4vw, 48px))",
+  padding: "clamp(3.5rem, 7vw, 6rem) 0 clamp(4.5rem, 8vw, 7rem)",
+  position: "relative",
+};
+
+const sectionHeaderRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-end",
+  justifyContent: "space-between",
+  gap: "1rem",
+  flexWrap: "wrap",
+  marginBottom: "1.75rem",
+};
+
+const sectionTitleStyle: React.CSSProperties = {
+  fontFamily: "var(--font-display)",
+  fontSize: "clamp(2.6rem, 6vw, 4.8rem)",
+  fontWeight: 800,
+  lineHeight: 0.92,
+  letterSpacing: "-0.02em",
+  textTransform: "uppercase",
+  margin: "0 0 0.75rem",
+};
+
+const sectionSubStyle: React.CSSProperties = {
+  color: "var(--text-muted)",
+  fontSize: "1.05rem",
+  lineHeight: 1.55,
+  margin: "0 0 2.25rem",
+};
+
+const sectionLinkStyle: React.CSSProperties = {
+  color: "var(--accent)",
+  fontWeight: 600,
+  textDecoration: "none",
+  marginBottom: "0.9rem",
+};
+
+const pricingGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  gap: "1rem",
+};
+
+const pricingCardStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  background: "var(--bg)",
+  borderRadius: "var(--radius-lg)",
+  padding: "2rem",
+};
+
+const pricingCardFeaturedStyle: React.CSSProperties = {
+  ...pricingCardStyle,
+  background: "linear-gradient(160deg, var(--accent-violet) 0%, var(--navy) 100%)",
+};
+
+const pricingNameStyle: React.CSSProperties = {
+  fontSize: "0.8rem",
+  fontWeight: 600,
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  color: "var(--text-muted)",
+};
+
+const pricingPriceStyle: React.CSSProperties = {
+  fontFamily: "var(--font-display)",
+  fontSize: "4rem",
+  fontWeight: 800,
+  lineHeight: 1,
+  marginTop: "1rem",
+};
+
+const pricingUnitStyle: React.CSSProperties = { color: "var(--text-muted)", fontSize: "0.9rem", marginTop: "0.25rem" };
+
+const pricingDescStyle: React.CSSProperties = {
+  color: "var(--text)",
+  opacity: 0.85,
+  fontSize: "0.95rem",
+  lineHeight: 1.5,
+  margin: "1.5rem 0 0",
+};
+
+const ctaHeadlineStyle: React.CSSProperties = {
+  ...sectionTitleStyle,
+  fontSize: "clamp(3.4rem, 10vw, 8rem)",
+  lineHeight: 0.88,
+  margin: "0 0 1.5rem",
 };
 
 const footerStyle: React.CSSProperties = {
-  textAlign: "center",
-  padding: "0 1.75rem 2.5rem",
+  borderRadius: "clamp(24px, 4vw, 48px) clamp(24px, 4vw, 48px) 0 0",
+  marginTop: "calc(-1 * clamp(24px, 4vw, 48px))",
+  background: "var(--bg)",
+  padding: "3.5rem 0 2rem",
+  position: "relative",
+};
+
+const footerInnerStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: "2rem",
+  flexWrap: "wrap",
 };
 
 const footerTaglineStyle: React.CSSProperties = {
-  color: "var(--text-muted)",
-  fontSize: "0.85rem",
-  fontWeight: 600,
+  fontFamily: "var(--font-display)",
+  fontSize: "2rem",
+  fontWeight: 800,
+  textTransform: "uppercase",
+  lineHeight: 1,
   margin: "0 0 1rem",
 };
 
-const footerLinksRowStyle: React.CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  justifyContent: "center",
-  gap: "0.4rem 1.1rem",
-  marginBottom: "1rem",
+const footerLinksStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(140px, auto))",
+  gap: "0.6rem 2rem",
+  alignContent: "start",
 };
 
 const footerLinkStyle: React.CSSProperties = {
   color: "var(--text-muted)",
-  fontSize: "0.78rem",
+  fontSize: "0.88rem",
   textDecoration: "none",
 };
 
-// A small, muted icon rather than a prominent button — matches the
-// legal-link row's own understated weight, just one more quiet way to
-// find the page.
-const footerSocialLinkStyle: React.CSSProperties = {
-  display: "inline-flex",
-  color: "var(--text-muted)",
-  marginBottom: "1rem",
-};
+const footerSocialLinkStyle: React.CSSProperties = { display: "inline-flex", color: "var(--text-muted)" };
 
-// The one place in the whole motion/interactivity upgrade with ambient
-// background motion, by direct product decision — everywhere else
-// deliberately has none ("premium and sexy, not like a gaming
-// website"). transform/opacity only, an extremely slow loop (18s),
-// very low amplitude and opacity — meant to be felt more than seen.
-// pointerEvents: none so it never intercepts clicks on the hero content
-// sitting above it (see the hero section's own zIndex: 1).
-function HeroBackground() {
-  const reduceMotion = useReducedMotion();
-  if (reduceMotion) return null;
-  return (
-    <motion.div
-      aria-hidden="true"
-      style={{
-        position: "absolute",
-        inset: "-10%",
-        background: "radial-gradient(ellipse at 30% 40%, var(--accent-soft) 0%, transparent 55%)",
-        opacity: 0.6,
-        pointerEvents: "none",
-        zIndex: 0,
-      }}
-      animate={{ x: ["-2%", "2%", "-2%"], y: ["-1%", "1.5%", "-1%"] }}
-      transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
-    />
-  );
-}
+const footerCopyrightStyle: React.CSSProperties = {
+  color: "var(--text-muted)",
+  fontSize: "0.78rem",
+  opacity: 0.75,
+  marginTop: "2.5rem",
+};
 
 function InstagramIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="1.6" />
       <circle cx="12" cy="12" r="4.2" stroke="currentColor" strokeWidth="1.6" />
       <circle cx="17.4" cy="6.6" r="1.1" fill="currentColor" />
     </svg>
   );
 }
-
-const footerCopyrightStyle: React.CSSProperties = {
-  color: "var(--text-muted)",
-  fontSize: "0.75rem",
-  opacity: 0.75,
-  margin: 0,
-};

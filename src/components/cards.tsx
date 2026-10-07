@@ -559,7 +559,7 @@ const sectionStyle: React.CSSProperties = { marginBottom: "4rem" };
 const sectionHeadingStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)",
   fontSize: "1.2rem",
-  fontWeight: 500,
+  fontWeight: 700,
   margin: "0 0 1.75rem",
 };
 

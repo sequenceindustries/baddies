@@ -71,7 +71,7 @@ export default function StubConfirmPage() {
 
   return (
     <main style={{ padding: "4rem 1.75rem", maxWidth: "480px", margin: "0 auto" }}>
-      <h1 style={{ fontFamily: "var(--font-display)", fontSize: "1.4rem", fontWeight: 500 }}>
+      <h1 style={{ fontFamily: "var(--font-display)", fontSize: "1.4rem", fontWeight: 700 }}>
         Dev checkout — stub processor
       </h1>
       <p style={{ color: "var(--text-muted)", marginTop: "0.4rem", fontSize: "0.9rem" }}>

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Montserrat } from "next/font/google";
+import { Barlow_Condensed, Inter } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
 import { Nav, SessionProvider } from "@/components/ui";
@@ -11,32 +11,23 @@ import { isKnownCrawlerUserAgent } from "@/lib/seo/crawler";
 import { SITE_URL } from "@/lib/seo/site-url";
 import Script from "next/script";
 
-// Performance audit, P0: this was a `@import url("https://fonts.
-// googleapis.com/...")` inside globals.css — one of the classic render-
-// blocking font patterns. The browser had to fetch the HTML, then the
-// stylesheet, discover the @import inside it, fetch Google's CSS from a
-// third-party origin (no preconnect hint existed either, so DNS/TLS for
-// that origin didn't even start early), THEN fetch the actual font
-// files from a fourth request — a fully serial chain on every single
-// page load, for every visitor, before body text could render in its
-// real font. next/font/google self-hosts the exact same Montserrat
-// files at build time (served from this app's own origin, alongside
-// every other static asset) and inlines the @font-face rules directly
-// into the page — zero external requests, zero extra DNS/TLS handshake,
-// and it still sets font-display: swap itself so text is never invisible
-// while the font loads. All 5 weights × both styles are declared, but
-// (per how @font-face lazy-loading actually works) a browser only ever
-// fetches the specific weight+style FILE combinations real text on the
-// page ends up using — the same 6 combinations the old @import URL
-// named explicitly (400/500/600/700/800 normal, 600 italic) — so this
-// isn't a payload increase, just the same bytes served locally instead
-// of round-tripped through a third party.
-const montserrat = Montserrat({
+// Type system (dayos-inspired redesign): a condensed bold grotesque for
+// big all-caps display headings + a clean neo-grotesque for everything
+// else. Suisse Intl (the reference) is commercial, so these are the
+// closest free equivalents. Self-hosted via next/font (no render-blocking
+// third-party CSS, font-display: swap); a browser only downloads the
+// weight files real text actually uses.
+const inter = Inter({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  style: ["normal", "italic"],
   display: "swap",
-  variable: "--font-montserrat",
+  variable: "--font-inter",
+});
+
+const barlowCondensed = Barlow_Condensed({
+  subsets: ["latin"],
+  weight: ["500", "600", "700", "800"],
+  display: "swap",
+  variable: "--font-barlow-condensed",
 });
 
 export const metadata: Metadata = {
@@ -77,7 +68,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   // request headers aren't available inside a client component.
   const isCrawler = isKnownCrawlerUserAgent(headers().get("user-agent"));
   return (
-    <html lang="en" className={montserrat.variable}>
+    <html lang="en" className={`${inter.variable} ${barlowCondensed.variable}`}>
       <body>
         <Script
     src="https://www.googletagmanager.com/gtag/js?id=G-TZ7LP4HMWG"

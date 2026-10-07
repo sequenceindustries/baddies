@@ -45,10 +45,11 @@ export function HowItWorks() {
     <section style={sectionStyle}>
       <div style={columnsGridStyle}>
         <div>
-          <h2 style={sectionHeadingStyle}>How it works for creators</h2>
+          <h3 style={sectionHeadingStyle}>For creators</h3>
           <div style={blockStackStyle}>
-            {CREATOR_STEPS.map((step) => (
+            {CREATOR_STEPS.map((step, i) => (
               <div key={step.name} className="hover-lift" style={tierCardStyle}>
+                <span style={stepNumberStyle}>{String(i + 1).padStart(2, "0")}</span>
                 <div style={tierNameStyle}>{step.name}</div>
                 <p style={tierDescStyle}>{step.desc}</p>
               </div>
@@ -56,7 +57,7 @@ export function HowItWorks() {
           </div>
         </div>
         <div>
-          <h2 style={sectionHeadingStyle}>How it works for fans</h2>
+          <h3 style={sectionHeadingStyle}>For fans</h3>
           <div style={blockStackStyle}>
             {FAN_TIERS.map((tier) => (
               <div key={tier.name} className="hover-lift" style={fansTierCardStyle}>
@@ -72,17 +73,19 @@ export function HowItWorks() {
 }
 
 const sectionStyle: React.CSSProperties = {
-  padding: "1.5rem 1.75rem",
-  maxWidth: "1100px",
-  margin: "0 auto 1.5rem",
+  padding: "0 clamp(1rem, 4vw, 2.5rem)",
+  maxWidth: "1240px",
+  margin: "0 auto",
+  textAlign: "left",
 };
 
 const sectionHeadingStyle: React.CSSProperties = {
-  fontFamily: "var(--font-display)",
-  fontSize: "1.7rem",
-  fontWeight: 500,
-  margin: "0 0 1.25rem",
-  textAlign: "center",
+  fontSize: "0.8rem",
+  fontWeight: 600,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+  color: "var(--accent)",
+  margin: "0 0 1rem",
 };
 
 // Two columns (creators left, fans right) on wide screens, stacking to
@@ -104,9 +107,17 @@ const blockStackStyle: React.CSSProperties = {
 // still separate each block from the page without a hard edge.
 const tierCardStyle: React.CSSProperties = {
   background: "var(--surface)",
-  borderRadius: "16px",
-  padding: "1.75rem",
-  boxShadow: "var(--glow)",
+  borderRadius: "var(--radius-lg)",
+  padding: "1.75rem 2rem",
+};
+
+const stepNumberStyle: React.CSSProperties = {
+  display: "block",
+  fontFamily: "var(--font-display)",
+  fontSize: "0.95rem",
+  fontWeight: 700,
+  color: "var(--accent)",
+  marginBottom: "0.75rem",
 };
 
 // A visibly different shade from the creator steps (var(--surface),
@@ -119,14 +130,16 @@ const fansTierCardStyle: React.CSSProperties = {
 
 const tierNameStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)",
-  fontSize: "1.15rem",
-  fontWeight: 600,
-  marginBottom: "0.5rem",
+  fontSize: "1.9rem",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  lineHeight: 1,
+  marginBottom: "0.6rem",
 };
 
 const tierDescStyle: React.CSSProperties = {
   color: "var(--text-muted)",
-  fontSize: "0.88rem",
+  fontSize: "0.95rem",
   lineHeight: 1.5,
   margin: 0,
 };

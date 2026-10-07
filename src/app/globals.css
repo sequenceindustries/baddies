@@ -1,46 +1,41 @@
-/* Gotham itself is a commercial Hoefler&Co/Monotype typeface with no
-   Google Fonts license, so it can't be embedded here — Montserrat is the
-   standard free geometric-sans stand-in for it (very similar proportions,
-   the usual web substitute). Used as the single family for both display
-   and body, same as real Gotham usage (it has no serif counterpart).
-   Loaded via next/font/google in layout.tsx now (performance audit,
-   P0) — self-hosted at build time instead of a render-blocking @import
-   of Google's own CSS, so --font-montserrat below resolves to a local,
-   already-inlined @font-face rather than a family name requiring three
-   extra cross-origin requests before it's available. */
+/* Design tokens — dayos-inspired, mostly-dark redesign.
+   Palette: #111214 near-black base, #02193b deep navy for contrast
+   blocks, #56c2ff sky-blue primary accent (buttons, links, active
+   states), #663af3 violet secondary accent (verified ticks, highlights),
+   #3f4959 slate for lines and quiet surfaces. Type: condensed bold
+   all-caps display (Barlow Condensed) + Inter body — see layout.tsx.
+   Every component reads these variables, so this block re-skins the
+   whole app. */
 
 :root {
-    --bg: #000000;
-    --bg-elevated: #121218;
-    --surface: #18181f;
-    --surface-raised: #212129;
-    --border: #2c2c36;
-    --text: #f5f2ec;
-    --text-muted: #a19dab;
+    --bg: #111214;
+    --bg-elevated: #15171b;
+    --surface: #1a1d22;
+    --surface-raised: #23272e;
+    --border: rgba(63, 73, 89, 0.55); /* #3f4959 */
+    --text: #f4f6f8;
+    --text-muted: #9aa4b2;
 
-    --accent-wine: #d0466a;
+    --navy: #02193b;
+    --slate: #3f4959;
 
-    /* One accent, everywhere — pricing, buttons, borders, glows, the lot,
-       for every role (fan/creator/admin alike). This replaced an earlier
-       scheme where --accent swapped per [data-role] (gold/teal/wine) and
-       a separate --accent-gold stayed gold everywhere for "premium"
-       pricing/Exclusive-tier/Verified-badge — both retired in favor of
-       one consistent blue brand color. The only place account type still
-       shows as color is the nav's account-type indicator (top right),
-       which deliberately does NOT use --accent so it reads as a distinct
-       status color instead of blending into every other blue element —
-       see VerifiedBadge/AccountTypeBadge in components/ui.tsx. */
-    --accent: #3b82f6;
-    --accent-dim: #2563eb;
-    --accent-soft: rgba(59, 130, 246, 0.14);
+    /* Secondary accent (name kept for existing call sites) — violet. */
+    --accent-wine: #663af3;
+    --accent-violet: #663af3;
 
-    --danger: #f0685c;
+    --accent: #56c2ff;
+    --accent-dim: #2fa8ec;
+    --accent-soft: rgba(86, 194, 255, 0.14);
+    --on-accent: #0b1a2b; /* text on --accent buttons */
+
+    --danger: #ff6b6b;
     --success: #4fd8a0;
-    --radius: 12px;
-    --font-display: var(--font-montserrat), system-ui, sans-serif;
-    --font-body: var(--font-montserrat), system-ui, sans-serif;
+    --radius: 16px;
+    --radius-lg: 28px;
+    --font-display: var(--font-barlow-condensed), "Arial Narrow", system-ui, sans-serif;
+    --font-body: var(--font-inter), system-ui, sans-serif;
 
-    --glow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 12px 40px -12px rgba(0, 0, 0, 0.6);
+    --glow: 0 0 0 1px rgba(255, 255, 255, 0.03), 0 18px 48px -20px rgba(0, 0, 0, 0.7);
 }
 
 * {
@@ -76,6 +71,18 @@ a {
    page's inline styles individually. */
 main {
     text-align: center;
+}
+
+/* dayos-style display headings: condensed, bold, all-caps, tight. Inline
+   styles across the app already point headings at --font-display; this
+   adds the case/weight/tracking in one place. */
+h1,
+h2 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: -0.01em;
+    line-height: 0.98;
 }
 
 input,
@@ -477,5 +484,36 @@ a[href]:hover {
 @media (prefers-reduced-motion: reduce) {
     .onboarding-pulse {
         animation: none;
+    }
+}
+
+/* Landing hero (landing-page.tsx): headline + fanned creator stack side
+   by side on desktop; stacked on narrow screens, where the image fan
+   shrinks rather than disappearing. */
+.landing-hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr);
+    gap: 2rem;
+    align-items: center;
+}
+
+.landing-hero-line {
+    display: block;
+}
+
+@media (min-width: 901px) {
+    .landing-hero-line {
+        white-space: nowrap;
+    }
+}
+
+@media (max-width: 900px) {
+    .landing-hero-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .landing-hero-stack {
+        min-height: 300px !important;
+        max-width: 460px;
     }
 }
