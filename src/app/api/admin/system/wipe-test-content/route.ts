@@ -27,7 +27,7 @@ const LOGO_CONTENT_TYPE = "image/webp";
 // MediaAsset row so its stored metadata stays accurate, not just its
 // bytes.
 const LOGO_WIDTH = 2000;
-const LOGO_HEIGHT = 462;
+const LOGO_HEIGHT = 403;
 
 /**
  * Overwrites the stored image bytes of every IMAGE-type Content post

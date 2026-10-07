@@ -25,7 +25,7 @@ describe("pricing", () => {
     const curve: Record<string, number> = JSON.parse(
       DEFAULT_BUSINESS_CONFIG[BUSINESS_CONFIG_KEYS.PRICING_VIP_PASS_DISCOUNT_CURVE]
     );
-    const prices = VIP_PASS_DURATIONS_MONTHS.map((m) => Math.round(base * m * (1 - curve[String(m)]) * 100) / 100);
+    const prices = VIP_PASS_DURATIONS_MONTHS.map((m) => Math.round(base * m * (1 - (curve[String(m)] ?? 0)) * 100) / 100);
     expect(prices).toEqual([13.5, 24, 42]);
   });
 });

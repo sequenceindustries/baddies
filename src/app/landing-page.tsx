@@ -76,10 +76,10 @@ export default function LandingPage() {
                 non-expiring image asset used site-wide (unlike avatar/
                 cover URLs, which are signed and re-signed per read —
                 see this project's SEO plan for why those stay plain
-                <img>) — real dimensions (2000x462) let next/image
+                <img>) — real dimensions (2000x403) let next/image
                 reserve the correct aspect ratio and avoid any CLS,
                 while `style` still governs the actual rendered size. */}
-            <Image src="/baddies-wordmark-white.webp" alt="baddies" width={2000} height={462} priority style={heroLogoStyle} />
+            <Image src="/baddies-wordmark-white.webp" alt="baddies" width={2000} height={403} priority style={heroLogoStyle} />
           </motion.h1>
           <motion.p
             style={heroSubStyle}

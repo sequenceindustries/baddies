@@ -212,7 +212,7 @@ export function Nav() {
             converting to next/image (a genuinely static, non-expiring
             file, unlike signed avatar/cover URLs). Above-the-fold on
             every page, so `priority` here too. */}
-        <NextImage src="/baddies-wordmark-white.webp" alt="baddies" width={2000} height={462} priority style={brandLogoStyle} />
+        <NextImage src="/baddies-wordmark-white.webp" alt="baddies" width={2000} height={403} priority style={brandLogoStyle} />
       </Link>
 
       <div className="nav-links-desktop" style={navCenterLinksStyle}>
@@ -1567,7 +1567,7 @@ export function EmptyContentState({ message }: { message: string }) {
         alt=""
         aria-hidden="true"
         width={2000}
-        height={462}
+        height={403}
         style={emptyContentLogoStyle}
       />
       <p style={{ color: "var(--text-muted)", margin: 0 }}>{message}</p>
