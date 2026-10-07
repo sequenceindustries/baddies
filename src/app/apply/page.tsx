@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/components/ui";
 import {
@@ -14,6 +13,7 @@ import {
   primaryButtonStyle,
   errorBannerStyle,
   ImageUploadField,
+  SignInGate,
 } from "@/components/ui";
 
 export default function ApplyPage() {
@@ -44,22 +44,7 @@ export default function ApplyPage() {
   }
 
   if (!user) {
-    return (
-      <main style={pageWrapStyle}>
-        <h1 style={displayHeadingStyle}>Sign in required</h1>
-        <p style={{ color: "var(--text-muted)" }}>
-          You need an account before joining as a creator.{" "}
-          <Link href="/register" style={{ color: "var(--accent)", fontWeight: 600 }}>
-            Create an account
-          </Link>{" "}
-          or{" "}
-          <Link href="/login" style={{ color: "var(--accent)", fontWeight: 600 }}>
-            sign in
-          </Link>
-          .
-        </p>
-      </main>
-    );
+    return <SignInGate heading="Become a creator" message="Create an account or sign in first — then you can apply as a creator." />;
   }
 
   async function handleSubmit(e: React.FormEvent) {

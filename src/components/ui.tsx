@@ -1522,6 +1522,7 @@ export function SignInGate({
 
 const signInGateCtaRowStyle: React.CSSProperties = {
   display: "flex",
+  justifyContent: "center", // matches the centred heading/message above
   gap: "0.75rem",
   flexWrap: "wrap",
 };

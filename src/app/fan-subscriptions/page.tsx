@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useSession, displayHeadingStyle, SkeletonBlock } from "@/components/ui";
+import { useSession, displayHeadingStyle, SkeletonBlock, SignInGate } from "@/components/ui";
 import { SegmentedTabs } from "@/components/segmented-tabs";
 
 type SubsTab = "vip" | "subscriptions" | "history";
@@ -69,11 +69,7 @@ export default function SubscriptionsPage() {
 
   if (sessionLoading) return <main style={mainStyle} />;
   if (!user) {
-    return (
-      <main style={mainStyle}>
-        <h1 style={displayHeadingStyle}>Sign in required</h1>
-      </main>
-    );
+    return <SignInGate heading="Sign in required" message="Sign in to see your VIP Pass and creator subscriptions." />;
   }
 
   const tabs: { value: SubsTab; label: string }[] = [

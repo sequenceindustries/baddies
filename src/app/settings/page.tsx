@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession, displayHeadingStyle, cardStyle, Field, inputStyle, primaryButtonStyle, errorBannerStyle, PasswordInput } from "@/components/ui";
+import { useSession, displayHeadingStyle, cardStyle, Field, inputStyle, primaryButtonStyle, errorBannerStyle, PasswordInput, SignInGate } from "@/components/ui";
 import { SegmentedTabs } from "@/components/segmented-tabs";
 
 type SettingsTab = "account" | "password" | "sessions";
@@ -29,11 +29,7 @@ export default function SettingsPage() {
 
   if (loading) return <main style={mainStyle} />;
   if (!user) {
-    return (
-      <main style={mainStyle}>
-        <h1 style={displayHeadingStyle}>Sign in required</h1>
-      </main>
-    );
+    return <SignInGate heading="Sign in required" message="Sign in to manage your email, password and active sessions." />;
   }
 
   return (
