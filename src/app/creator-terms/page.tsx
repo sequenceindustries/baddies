@@ -10,15 +10,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/creator-terms" },
 };
 
-// Mirrors the CREATOR_TERMS entry in prisma/agreements.ts (what creators
-// formally accept during onboarding) — see privacy/page.tsx's comment on
-// why this is a separate copy rather than a shared import.
-const DRAFT_NOTICE =
-  "DRAFT — placeholder text pending review by a qualified attorney. Not final, not legally reviewed. Baddies will notify creators before any reviewed version replaces this one.";
-
 const BODY = [
-  DRAFT_NOTICE,
-  "",
   "1. Eligibility. You must be 18 years or older and a South African resident to create content on baddies.",
   "2. Your account. You're responsible for the accuracy of the information you provide and for keeping your login credentials secure.",
   "3. Ownership. You retain ownership of the content you upload. You grant baddies a licence to host, stream, and display it to your subscribers for as long as your account and that content remain active.",

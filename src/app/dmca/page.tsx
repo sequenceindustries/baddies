@@ -10,12 +10,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/dmca" },
 };
 
-const DRAFT_NOTICE =
-  "DRAFT — placeholder text pending review by a qualified attorney. Not final, not legally reviewed. Baddies will notify users before any reviewed version replaces this one.";
-
 const BODY = [
-  DRAFT_NOTICE,
-  "",
   "baddies respects intellectual property rights and responds to valid notices of copyright infringement, and to reports of non-consensual or otherwise unlawful content.",
   "",
   "1. To request removal of content, send a written notice to legal@baddies.africa including:",

@@ -10,12 +10,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/terms" },
 };
 
-const DRAFT_NOTICE =
-  "DRAFT — placeholder text pending review by a qualified attorney. Not final, not legally reviewed. Baddies will notify users before any reviewed version replaces this one.";
-
 const BODY = [
-  DRAFT_NOTICE,
-  "",
   "1. Eligibility. You must be 18 years or older — or the age of majority in your jurisdiction, whichever is higher — to create an account or use baddies.",
   "2. What baddies is. baddies is Africa's adult content network, connecting independent verified creators directly with the fans who support them.",
   "3. Your account. You're responsible for the accuracy of the information you provide and for keeping your login credentials secure.",
