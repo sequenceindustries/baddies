@@ -612,7 +612,10 @@ const optionsMenuButtonStyle: React.CSSProperties = {
   border: "none",
   color: "var(--text)",
   cursor: "pointer",
-  padding: "0.2rem",
+  // ~38px touch target, same visual position: padding grows the hit
+  // area, the negative margin cancels it out of the layout.
+  padding: "10px",
+  margin: "-6.8px",
   display: "flex",
   alignItems: "center",
 };

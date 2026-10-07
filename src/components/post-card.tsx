@@ -901,7 +901,9 @@ const followButtonStyle: React.CSSProperties = {
   fontWeight: 700,
   fontSize: "0.85rem",
   cursor: "pointer",
-  padding: 0,
+  // Larger touch target, same visual position (see engagementButtonStyle).
+  padding: "12px 8px",
+  margin: "-12px -8px",
 };
 
 const followErrorStyle: React.CSSProperties = { fontSize: "0.7rem", color: "var(--danger)", marginTop: "0.2rem" };
@@ -913,7 +915,9 @@ const optionsMenuButtonStyle: React.CSSProperties = {
   border: "none",
   color: "var(--text)",
   cursor: "pointer",
-  padding: "0.2rem",
+  // Larger touch target, same visual position (see engagementButtonStyle).
+  padding: "10px",
+  margin: "-6.8px",
   display: "flex",
   alignItems: "center",
 };
@@ -1079,7 +1083,12 @@ function engagementButtonStyle(active: boolean): React.CSSProperties {
     fontSize: "0.82rem",
     fontWeight: active ? 600 : 400,
     cursor: "pointer",
-    padding: 0,
+    // ~40px touch target around a 17px icon without moving anything: the
+    // padding grows the hit area and the equal negative margin cancels it
+    // out of the layout (9px a side fits inside the row's 1.25rem gap, so
+    // neighbouring targets never overlap).
+    padding: "12px 9px",
+    margin: "-12px -9px",
   };
 }
 
