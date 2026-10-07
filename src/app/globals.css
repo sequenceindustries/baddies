@@ -3,7 +3,8 @@
    blocks, #56c2ff sky-blue primary accent (buttons, links, active
    states), #663af3 violet secondary accent (verified ticks, highlights),
    #3f4959 slate for lines and quiet surfaces. Type: condensed bold
-   all-caps display (Barlow Condensed) + Inter body — see layout.tsx.
+   all-caps display (Barlow Condensed) + Gotham body (Montserrat
+   fallback) — see layout.tsx.
    Every component reads these variables, so this block re-skins the
    whole app. */
 
@@ -33,7 +34,7 @@
     --radius: 16px;
     --radius-lg: 28px;
     --font-display: var(--font-barlow-condensed), "Arial Narrow", system-ui, sans-serif;
-    --font-body: var(--font-inter), system-ui, sans-serif;
+    --font-body: "Gotham", var(--font-montserrat), system-ui, sans-serif;
 
     --glow: 0 0 0 1px rgba(255, 255, 255, 0.03), 0 18px 48px -20px rgba(0, 0, 0, 0.7);
 }

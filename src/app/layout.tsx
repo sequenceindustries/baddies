@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Barlow_Condensed, Inter } from "next/font/google";
+import { Barlow_Condensed, Montserrat } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
 import { Nav, SessionProvider } from "@/components/ui";
@@ -13,15 +13,16 @@ import Script from "next/script";
 import { AnalyticsEvents } from "@/components/analytics-events";
 
 // Type system (dayos-inspired redesign): a condensed bold grotesque for
-// big all-caps display headings + a clean neo-grotesque for everything
-// else. Suisse Intl (the reference) is commercial, so these are the
-// closest free equivalents. Self-hosted via next/font (no render-blocking
+// big all-caps display headings + Gotham for everything else. Gotham is
+// a commercial Hoefler&Co typeface with no web licence here, so
+// globals.css lists "Gotham" first (used wherever it's installed) and
+// falls back to Montserrat, the standard free Gotham stand-in. Self-hosted via next/font (no render-blocking
 // third-party CSS, font-display: swap); a browser only downloads the
 // weight files real text actually uses.
-const inter = Inter({
+const montserrat = Montserrat({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-inter",
+  variable: "--font-montserrat",
 });
 
 const barlowCondensed = Barlow_Condensed({
@@ -69,7 +70,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   // request headers aren't available inside a client component.
   const isCrawler = isKnownCrawlerUserAgent(headers().get("user-agent"));
   return (
-    <html lang="en" className={`${inter.variable} ${barlowCondensed.variable}`}>
+    <html lang="en" className={`${montserrat.variable} ${barlowCondensed.variable}`}>
       <body>
         {/* Production only — dev servers would otherwise send local
             test traffic into the real GA4 property. */}
