@@ -97,12 +97,13 @@ const introStyle: React.CSSProperties = {
   fontSize: "0.92rem",
   lineHeight: 1.6,
   maxWidth: "640px",
-  margin: "-0.5rem 0 1rem",
+  margin: "-0.25rem auto 1.25rem",
 };
 
 const chipRowStyle: React.CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
+  justifyContent: "center",
   gap: "0.5rem",
   marginBottom: "1.25rem",
 };

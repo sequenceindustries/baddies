@@ -39,6 +39,10 @@ const bodyStyle: React.CSSProperties = {
   color: "var(--text-muted)",
   fontSize: "0.95rem",
   lineHeight: 1.7,
+  // Long-form clauses read badly centred (main is centred globally).
+  textAlign: "left",
+  display: "grid",
+  gap: "0.85rem",
 };
 
 const paragraphStyle: React.CSSProperties = {
