@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
-import { getVerificationProvider } from "@/lib/providers/verification";
+import { getVerificationProvider, stubVerificationBlocked } from "@/lib/providers/verification";
 import { applyVerificationOutcome } from "@/lib/creator/verification-workflow";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
@@ -26,6 +26,12 @@ const StartVerificationSchema = z.object({
  * client — same "processor is authoritative" principle as payments (§21).
  */
 export async function POST(req: NextRequest) {
+  // No real verification vendor in production yet — the stub would
+  // auto-pass the caller's own ID/age/liveness checks.
+  if (stubVerificationBlocked()) {
+    return NextResponse.json({ error: "Not available." }, { status: 404 });
+  }
+
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });

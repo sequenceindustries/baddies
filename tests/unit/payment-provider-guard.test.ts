@@ -27,3 +27,23 @@ describe("stub payment provider production guard", () => {
     expect(paymentsAvailable()).toBe(true);
   });
 });
+
+describe("stub verification provider production guard", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("blocks the auto-passing stub in production unless explicitly allowed", async () => {
+    const { stubVerificationBlocked } = await import("@/lib/providers/verification");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VERIFICATION_PROVIDER", "stub");
+    expect(stubVerificationBlocked()).toBe(true);
+    vi.stubEnv("ALLOW_STUB_VERIFICATION", "true");
+    expect(stubVerificationBlocked()).toBe(false);
+  });
+
+  it("allows the stub outside production", async () => {
+    const { stubVerificationBlocked } = await import("@/lib/providers/verification");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("VERIFICATION_PROVIDER", "stub");
+    expect(stubVerificationBlocked()).toBe(false);
+  });
+});

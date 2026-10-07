@@ -44,7 +44,6 @@ export default function SubscriptionsPage() {
   const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>([]);
   const [purchases, setPurchases] = useState<PurchaseItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
   // Initialized to the literal "vip" rather than derived from the tabs
   // array below — that array depends on `purchases`, which isn't
   // populated until after the initial fetch resolves, so deriving the
@@ -67,22 +66,6 @@ export default function SubscriptionsPage() {
   useEffect(() => {
     if (user) reload();
   }, [user]);
-
-  async function cancelSubscription(id: string) {
-    if (!window.confirm("Cancel this subscription? Access ends immediately.")) return;
-    setBusyId(id);
-    const res = await fetch(`/api/fan/subscriptions/${id}/cancel`, { method: "POST" });
-    setBusyId(null);
-    if (res.ok) reload();
-  }
-
-  async function cancelVipPass() {
-    if (!window.confirm("Cancel your VIP Pass? Access ends immediately.")) return;
-    setBusyId("vip-pass");
-    const res = await fetch("/api/fan/vip-pass/cancel", { method: "POST" });
-    setBusyId(null);
-    if (res.ok) reload();
-  }
 
   if (sessionLoading) return <main style={mainStyle} />;
   if (!user) {
@@ -125,9 +108,7 @@ export default function SubscriptionsPage() {
                       {new Date(vipPass.currentPeriodEnd).toLocaleDateString()}
                     </div>
                   </div>
-                  <button onClick={cancelVipPass} disabled={busyId === "vip-pass"} style={cancelButtonStyle}>
-                    {busyId === "vip-pass" ? "..." : "Cancel"}
-                  </button>
+                  <span style={prepaidNoteStyle}>Prepaid · no auto-renewal</span>
                 </div>
               ) : (
                 <p style={{ color: "var(--text-muted)" }}>
@@ -161,15 +142,7 @@ export default function SubscriptionsPage() {
                             ` · active until ${new Date(s.currentPeriodEnd).toLocaleDateString()}`}
                         </div>
                       </div>
-                      {s.status === "ACTIVE" && (
-                        <button
-                          onClick={() => cancelSubscription(s.subscriptionId)}
-                          disabled={busyId === s.subscriptionId}
-                          style={cancelButtonStyle}
-                        >
-                          {busyId === s.subscriptionId ? "..." : "Cancel"}
-                        </button>
-                      )}
+                      {s.status === "ACTIVE" && <span style={prepaidNoteStyle}>Prepaid · no auto-renewal</span>}
                     </div>
                   ))}
                 </div>
@@ -229,15 +202,13 @@ const rowCardStyle: React.CSSProperties = {
   gap: "1rem",
 };
 
-const cancelButtonStyle: React.CSSProperties = {
-  background: "transparent",
-  border: "1px solid var(--border)",
-  color: "var(--danger)",
-  borderRadius: "var(--radius)",
-  padding: "0.4rem 0.85rem",
-  fontSize: "0.82rem",
-  fontWeight: 600,
-  cursor: "pointer",
+// Packages are paid upfront and simply end on their date — there's no
+// recurring charge to cancel (a "Cancel" here used to end access
+// immediately, throwing away time the fan had already paid for).
+const prepaidNoteStyle: React.CSSProperties = {
+  fontSize: "0.75rem",
+  color: "var(--text-muted)",
+  whiteSpace: "nowrap",
   flexShrink: 0,
 };
 

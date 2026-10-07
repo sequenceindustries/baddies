@@ -13,6 +13,22 @@ export * from "./types";
  * added here once a provider is selected post-underwriting (see build
  * brief §5, §36 — do not wire a real provider before approval).
  */
+/**
+ * The stub provider auto-PASSES every identity/age/liveness check. That's
+ * fine for local dev, but in production it would let an applicant mark
+ * their own ID checks as passed — so it's refused there unless
+ * ALLOW_STUB_VERIFICATION=true is set deliberately (private staging).
+ * Real creator evidence in production goes through
+ * /api/creator/verification/capture → MANUAL_REVIEW → admin review.
+ */
+export function stubVerificationBlocked(): boolean {
+  return (
+    (process.env.VERIFICATION_PROVIDER ?? "stub") === "stub" &&
+    process.env.NODE_ENV === "production" &&
+    process.env.ALLOW_STUB_VERIFICATION !== "true"
+  );
+}
+
 export function getVerificationProvider(): VerificationProvider {
   const providerName = process.env.VERIFICATION_PROVIDER ?? "stub";
 

@@ -6,6 +6,7 @@ import { hashPassword, createSession } from "@/lib/auth/session";
 import { sendUserEmailVerification } from "@/lib/notifications/user-email-verification";
 import { getPlatformSetting } from "@/lib/config/settings";
 import { BUSINESS_CONFIG_KEYS } from "@/lib/config/business";
+import { checkRateLimitByIp, rateLimitResponse } from "@/lib/security/rate-limit";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -34,6 +35,11 @@ const RegisterSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  // Every signup sends a real verification email — cap automated mass
+  // account creation (and mail-sending) per IP, same mechanism as login.
+  const rateLimit = checkRateLimitByIp(req, "auth-register", 10, 60 * 60);
+  if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
+
   const json = await req.json().catch(() => null);
   const parsed = RegisterSchema.safeParse(json);
   if (!parsed.success) {
