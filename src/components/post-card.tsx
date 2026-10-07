@@ -8,9 +8,10 @@ import { backdropFade, fadeScale, fadeSlideUp, transitions } from "@/lib/motion/
 import { SkeletonBlock, useSession, VerifiedBadge } from "./ui";
 import { CardAvatar, HeartIcon, MediaLightbox, ReportButton, timeAgo } from "./cards";
 
-// Matches the feed's VIP banner and the creator profile's Subscribe
-// button until the 1/3/6/12-month package picker ships.
-const CHECKOUT_DEFAULT_DURATION_MONTHS = 3;
+// 1-month package, matching the feed's VIP banner and the creator
+// profile's Subscribe button — the price on the button is exactly what's
+// charged until the 1/3/6/12-month package picker ships.
+const CHECKOUT_DEFAULT_DURATION_MONTHS = 1;
 
 export interface PostCardItem {
   contentId: string;

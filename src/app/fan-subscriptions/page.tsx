@@ -11,6 +11,7 @@ interface VipPass {
   subscriptionId: string;
   status: string;
   priceUsdAtPurchase: number;
+  durationMonths: number;
   currentPeriodEnd: string;
   cancelledAt: string | null;
 }
@@ -21,6 +22,7 @@ interface SubscriptionItem {
   creatorDisplayName: string | null;
   status: string;
   priceUsdAtPurchase: number;
+  durationMonths: number;
   currentPeriodEnd: string;
   cancelledAt: string | null;
 }
@@ -38,6 +40,7 @@ interface PurchaseItem {
 export default function SubscriptionsPage() {
   const { user, loading: sessionLoading } = useSession();
   const [vipPass, setVipPass] = useState<VipPass | null>(null);
+  const [vipPassPriceUsd, setVipPassPriceUsd] = useState<number | null>(null);
   const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>([]);
   const [purchases, setPurchases] = useState<PurchaseItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,6 +57,7 @@ export default function SubscriptionsPage() {
       .then((r) => (r.ok ? r.json() : { vipPass: null, subscriptions: [], purchases: [] }))
       .then((body) => {
         setVipPass(body.vipPass ?? null);
+        setVipPassPriceUsd(typeof body.vipPassPriceUsd === "number" ? body.vipPassPriceUsd : null);
         setSubscriptions(body.subscriptions ?? []);
         setPurchases(body.purchases ?? []);
       })
@@ -117,7 +121,7 @@ export default function SubscriptionsPage() {
                   <div>
                     <div style={{ fontWeight: 600 }}>Active</div>
                     <div style={mutedSmallStyle}>
-                      ${vipPass.priceUsdAtPurchase.toFixed(2)}/mo · renews{" "}
+                      {packageLabel(vipPass.priceUsdAtPurchase, vipPass.durationMonths)} · active until{" "}
                       {new Date(vipPass.currentPeriodEnd).toLocaleDateString()}
                     </div>
                   </div>
@@ -127,7 +131,11 @@ export default function SubscriptionsPage() {
                 </div>
               ) : (
                 <p style={{ color: "var(--text-muted)" }}>
-                  No active VIP Pass — get one from any creator&apos;s profile to unlock VIP-tier content across
+                  No active VIP Pass.{" "}
+                  <Link href="/feed" style={{ color: "var(--accent)", fontWeight: 600 }}>
+                    Get it on your Timeline
+                  </Link>{" "}
+                  {vipPassPriceUsd != null && `for $${vipPassPriceUsd.toFixed(2)}/month `}to unlock VIP-tier content across
                   every participating creator.
                 </p>
               )}
@@ -148,9 +156,9 @@ export default function SubscriptionsPage() {
                           {s.creatorDisplayName ?? "Unnamed creator"}
                         </Link>
                         <div style={mutedSmallStyle}>
-                          ${s.priceUsdAtPurchase.toFixed(2)}/mo · {s.status}
+                          {packageLabel(s.priceUsdAtPurchase, s.durationMonths)} · {s.status}
                           {s.status === "ACTIVE" &&
-                            ` · renews ${new Date(s.currentPeriodEnd).toLocaleDateString()}`}
+                            ` · active until ${new Date(s.currentPeriodEnd).toLocaleDateString()}`}
                         </div>
                       </div>
                       {s.status === "ACTIVE" && (
@@ -232,3 +240,9 @@ const cancelButtonStyle: React.CSSProperties = {
   cursor: "pointer",
   flexShrink: 0,
 };
+
+// Packages are prepaid, never auto-renewing — a 1-month package reads
+// "$5.00/mo", a longer one shows its real total and length.
+function packageLabel(priceUsd: number, durationMonths: number): string {
+  return durationMonths > 1 ? `$${priceUsd.toFixed(2)} · ${durationMonths}-month package` : `$${priceUsd.toFixed(2)}/mo`;
+}

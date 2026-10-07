@@ -13,8 +13,8 @@ describe("business config defaults", () => {
     expect(creator + platform).toBeCloseTo(1.0, 5);
   });
 
-  it("default prices match the locked MVP pricing", () => {
-    expect(DEFAULT_BUSINESS_CONFIG[BUSINESS_CONFIG_KEYS.VVIP_DEFAULT_PRICE_USD]).toBe("9.99");
-    expect(DEFAULT_BUSINESS_CONFIG[BUSINESS_CONFIG_KEYS.VIP_PASS_PRICE_USD]).toBe("19.99");
+  it("default prices match soft-launch pricing (VIP $5, Exclusive $10)", () => {
+    expect(DEFAULT_BUSINESS_CONFIG[BUSINESS_CONFIG_KEYS.VVIP_DEFAULT_PRICE_USD]).toBe("10.00");
+    expect(DEFAULT_BUSINESS_CONFIG[BUSINESS_CONFIG_KEYS.VIP_PASS_PRICE_USD]).toBe("5.00");
   });
 });

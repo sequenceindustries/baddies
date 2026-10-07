@@ -20,7 +20,6 @@ import { SegmentedTabs } from "@/components/segmented-tabs";
 import { VerificationFlow } from "@/components/verification-capture";
 import { UploadForm } from "@/components/upload-form";
 import { ACCESS_LABEL, CardAvatar, timeAgo } from "@/components/cards";
-import { EXCLUSIVE_MIN_PRICE_USD } from "@/lib/creator/pricing";
 
 // "overview" merged into "profile" per direct request ("merge Profile
 // and Overview") — see the tabs array and its render block below.
@@ -564,12 +563,9 @@ function CreatorSettingsPanel() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Kept as separate string fields rather than folded straight into
-  // `data` — both need to be freely-typeable mid-keystroke (a number
-  // input's value like "5.", or a handle the user hasn't finished
-  // typing yet), and neither needs to round-trip through more than one
-  // parse/normalize step on submit.
-  const [priceInput, setPriceInput] = useState("");
+  // Kept as a separate string field rather than folded straight into
+  // `data` — it needs to be freely-typeable mid-keystroke (a handle the
+  // user hasn't finished typing yet).
   const [handleInput, setHandleInput] = useState("");
 
   useEffect(() => {
@@ -579,7 +575,6 @@ function CreatorSettingsPanel() {
       .then((body) => {
         if (!cancelled && body) {
           setData(body);
-          setPriceInput(body.effectiveVvipPriceUsd.toFixed(2));
           setHandleInput(body.handle ?? "");
         }
       });
@@ -591,11 +586,6 @@ function CreatorSettingsPanel() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!data) return;
-    const exclusivePriceUsd = Number(priceInput);
-    if (!Number.isFinite(exclusivePriceUsd) || exclusivePriceUsd < EXCLUSIVE_MIN_PRICE_USD) {
-      setError(`Exclusive price must be at least $${EXCLUSIVE_MIN_PRICE_USD.toFixed(2)}.`);
-      return;
-    }
     const normalizedHandle = handleInput.trim().toLowerCase();
     if (normalizedHandle && !HANDLE_PATTERN.test(normalizedHandle)) {
       setError("Handle must be 3-20 characters: lowercase letters, numbers, and underscores only.");
@@ -608,7 +598,6 @@ function CreatorSettingsPanel() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        exclusivePriceUsd,
         unlimitedOptedIn: data.unlimitedOptedIn,
         subscriberCountVisible: data.subscriberCountVisible,
         locationVisible: data.locationVisible,
@@ -624,7 +613,6 @@ function CreatorSettingsPanel() {
     }
     const body: CreatorSettingsData = await res.json();
     setData(body);
-    setPriceInput(body.effectiveVvipPriceUsd.toFixed(2));
     setHandleInput(body.handle ?? "");
     setSaved(true);
   }
@@ -649,22 +637,10 @@ function CreatorSettingsPanel() {
           </div>
         </Field>
         <Field
-          label="Exclusive subscription price (USD)"
-          hint={`Set your own price for fans who subscribe directly to you — $${EXCLUSIVE_MIN_PRICE_USD.toFixed(2)}/mo minimum.`}
+          label="Exclusive subscription price"
+          hint="One platform-wide price for every creator — fans pay this to subscribe directly to you."
         >
-          <div style={priceInputRowStyle}>
-            <span style={priceAffixStyle}>$</span>
-            <input
-              style={priceInputStyle}
-              type="number"
-              min={EXCLUSIVE_MIN_PRICE_USD}
-              step="0.01"
-              value={priceInput}
-              onChange={(e) => setPriceInput(e.target.value)}
-              required
-            />
-            <span style={priceAffixStyle}>/mo</span>
-          </div>
+          <div style={{ fontWeight: 600 }}>${data.effectiveVvipPriceUsd.toFixed(2)}/month</div>
         </Field>
         <label style={checkboxRowStyle}>
           <input

@@ -27,6 +27,7 @@ export default function FeedPage() {
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [vipPassActive, setVipPassActive] = useState<boolean | null>(null);
+  const [vipPassPriceUsd, setVipPassPriceUsd] = useState<number | null>(null);
   const [storyRefreshKey, setStoryRefreshKey] = useState(0);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const loadingRef = useRef(false);
@@ -57,7 +58,10 @@ export default function FeedPage() {
     fetch("/api/fan/subscriptions")
       .then((r) => (r.ok ? r.json() : null))
       .then((body) => {
-        if (body) setVipPassActive(body.vipPass?.status === "ACTIVE");
+        if (body) {
+          setVipPassActive(body.vipPass?.status === "ACTIVE");
+          if (typeof body.vipPassPriceUsd === "number") setVipPassPriceUsd(body.vipPassPriceUsd);
+        }
       })
       .catch(() => {
         /* not signed in as a fan, or request failed — just hide the banner */
@@ -88,7 +92,7 @@ export default function FeedPage() {
     <main style={mainStyle}>
       {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
 
-      {vipPassActive === false && <VipPassBanner />}
+      {vipPassActive === false && <VipPassBanner priceUsd={vipPassPriceUsd} />}
 
       <div style={composerRowStyle}>
         <StoryComposerButton onPosted={() => setStoryRefreshKey((k) => k + 1)} />
@@ -127,17 +131,17 @@ export default function FeedPage() {
  * we know the fan doesn't already have an active one (vipPassActive ===
  * false, not just falsy/loading).
  *
- * Defaults to the platform's recommended 3-month package — see
- * /fan-subscriptions for the full 1/3/6/12-month plan picker (Phase 7
- * of the monetisation plan). /api/checkout/vip-pass now only creates a
+ * Buys the 1-month package, so the price shown is exactly what's
+ * charged (multi-month bundles come with the plan picker, a later
+ * phase). /api/checkout/vip-pass only creates a
  * PendingOrder and hands back a hosted-checkout redirect; no
  * entitlement exists until the payment webhook independently confirms
  * it (see that route's own doc comment) — this banner redirects there
  * rather than marking itself "done" immediately.
  */
-const VIP_PASS_DEFAULT_DURATION_MONTHS = 3;
+const VIP_PASS_DEFAULT_DURATION_MONTHS = 1;
 
-function VipPassBanner() {
+function VipPassBanner({ priceUsd }: { priceUsd: number | null }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -164,7 +168,8 @@ function VipPassBanner() {
       <div>
         <div style={{ fontWeight: 600 }}>Get the platform VIP Pass</div>
         <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "0.2rem" }}>
-          One price unlocks VIP-tier content from every participating creator.
+          {priceUsd != null ? `$${priceUsd.toFixed(2)}/month` : "One price"} unlocks VIP-tier content from every
+          participating creator.
         </div>
         {error && <div style={{ fontSize: "0.8rem", color: "var(--danger)", marginTop: "0.4rem" }}>{error}</div>}
       </div>

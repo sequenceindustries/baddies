@@ -284,15 +284,14 @@ export function CreatorProfileClient({
  * creates a PendingOrder and hands back a hosted-checkout redirect; no
  * Subscription/entitlement exists until the payment webhook
  * independently confirms it (see that route's own doc comment). This
- * button defaults to the platform's recommended 3-month package —
- * see /fan-subscriptions for the full 1/3/6/12-month plan picker and
- * bundle-savings comparison (Phase 7 of the monetisation plan); this
- * is the quick, single-tap path from a creator's own profile. The
+ * button buys the 1-month package, so the price on the button is
+ * exactly what's charged (multi-month bundles come with the plan
+ * picker, a later phase). The
  * platform-wide VIP Pass has its own entry point (the banner on
  * /feed) — this button is Exclusive-only, per the profile page's own
  * scope.
  */
-const SUBSCRIBE_DEFAULT_DURATION_MONTHS = 3;
+const SUBSCRIBE_DEFAULT_DURATION_MONTHS = 1;
 
 function SubscribeButton({ creatorProfileId, vvipPriceUsd }: { creatorProfileId: string; vvipPriceUsd: number }) {
   const [redirecting, setRedirecting] = useState(false);
@@ -338,7 +337,7 @@ function SubscribeButton({ creatorProfileId, vvipPriceUsd }: { creatorProfileId:
           >
             {redirecting
               ? "···"
-              : `Subscribe from $${vvipPriceUsd.toFixed(2)}/mo`}
+              : `Subscribe — $${vvipPriceUsd.toFixed(2)}/mo`}
           </motion.span>
         </AnimatePresence>
       </motion.button>

@@ -60,8 +60,8 @@ export type BusinessConfigKey =
 
 /** Default values used only to seed `platform_settings` (see prisma/seed.ts). */
 export const DEFAULT_BUSINESS_CONFIG: Record<BusinessConfigKey, string> = {
-  [BUSINESS_CONFIG_KEYS.VVIP_DEFAULT_PRICE_USD]: "9.99",
-  [BUSINESS_CONFIG_KEYS.VIP_PASS_PRICE_USD]: "19.99",
+  [BUSINESS_CONFIG_KEYS.VVIP_DEFAULT_PRICE_USD]: "10.00",
+  [BUSINESS_CONFIG_KEYS.VIP_PASS_PRICE_USD]: "5.00",
   // Locked MVP assumption per build brief §3 — still stored as config, not
   // a literal scattered through pricing/ledger code, so it can be revisited
   // per-creator or platform-wide without a redeploy.

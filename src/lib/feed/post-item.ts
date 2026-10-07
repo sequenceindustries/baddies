@@ -65,7 +65,7 @@ export function buildLockCta(
     return { locked: true, kind, priceUsd: vvipPriceUsd, ctaLabel: `Subscribe to unlock — $${vvipPriceUsd.toFixed(2)}/mo` };
   }
   if (kind === "VIP_PASS") {
-    return { locked: true, kind, priceUsd: vipPassPriceUsd, ctaLabel: `Get VIP Pass — $${vipPassPriceUsd.toFixed(2)}` };
+    return { locked: true, kind, priceUsd: vipPassPriceUsd, ctaLabel: `Get VIP Pass — $${vipPassPriceUsd.toFixed(2)}/mo` };
   }
   return { locked: true, kind: null, priceUsd: null, ctaLabel: "Locked" };
 }

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
-import { resolveCreatorPricing, EXCLUSIVE_MIN_PRICE_USD } from "@/lib/creator/pricing";
+import { resolveCreatorPricing } from "@/lib/creator/pricing";
 import { persistPublicImage, publicImageUrlSchema } from "@/lib/media/persist-public-image";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
@@ -11,7 +11,7 @@ import { persistPublicImage, publicImageUrlSchema } from "@/lib/media/persist-pu
 export const dynamic = "force-dynamic";
 
 /**
- * The current user's own creator settings: Exclusive subscription price,
+ * The current user's own creator settings: (read-only, flat) Exclusive price,
  * privacy toggles, and VIP pass opt-in (unlimitedOptedIn — see
  * prisma/schema.prisma's ContentAccessLevel comment for the full tier
  * model). Distinct from PATCH /api/profile (display name/bio/avatar) and
@@ -49,8 +49,7 @@ export async function GET() {
 // Lowercase letters, digits, underscores — the same shape Instagram/
 // Twitter-style handles use elsewhere. Enforced here in application
 // code (Zod), not a DB CHECK constraint, matching this schema's own
-// existing convention (see e.g. EXCLUSIVE_MIN_PRICE_USD's own comment
-// on where format/business rules for this route live).
+// existing convention.
 const HANDLE_REGEX = /^[a-z0-9_]{3,20}$/;
 
 const UpdateSettingsSchema = z.object({
@@ -59,10 +58,6 @@ const UpdateSettingsSchema = z.object({
   locationVisible: z.boolean().optional(),
   acceptsMessages: z.boolean().optional(),
   coverImageUrl: publicImageUrlSchema.nullable().optional(),
-  exclusivePriceUsd: z
-    .number()
-    .min(EXCLUSIVE_MIN_PRICE_USD, `Must be at least $${EXCLUSIVE_MIN_PRICE_USD}.`)
-    .optional(),
   // null clears a previously-set handle back to unset; omitted leaves
   // it untouched. Never auto-generated from displayName — a creator
   // picks their own, same as any real social platform's handle field.
@@ -91,7 +86,7 @@ export async function PATCH(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { exclusivePriceUsd, coverImageUrl, ...rest } = parsed.data;
+  const { coverImageUrl, ...rest } = parsed.data;
 
   // FeaturedImagePanel (src/app/profile/page.tsx) sends a raw data: URL
   // via ImageUploadField — see persist-public-image.ts's own comment
@@ -105,9 +100,6 @@ export async function PATCH(req: NextRequest) {
       data: {
         ...rest,
         coverImageUrl: persistedCoverImageUrl,
-        ...(exclusivePriceUsd !== undefined
-          ? { vvipPriceOverride: new Prisma.Decimal(exclusivePriceUsd) }
-          : {}),
       },
     });
   } catch (err) {

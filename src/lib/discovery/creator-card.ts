@@ -8,7 +8,7 @@ import { selectDisplayPerPosition } from "@/lib/media/carousel";
  * Matches build brief §11's creator card spec (updated for the Free/VIP/
  * VVIP tier model — see prisma/schema.prisma's ContentAccessLevel
  * comment; VVIP is labeled "Exclusive" in user-facing copy):
- *   Creator Name / ✓ VERIFIED BADDIE / City, Country / Exclusive $9.99
+ *   Creator Name / ✓ VERIFIED BADDIE / City, Country / Exclusive $10
  * Every discovery endpoint (search, trending, categories, new-creators,
  * home) should shape its results through this function instead of
  * hand-rolling the same fields slightly differently each time.

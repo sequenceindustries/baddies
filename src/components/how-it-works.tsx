@@ -7,11 +7,11 @@ const FAN_TIERS = [
   },
   {
     name: "VIP",
-    desc: "One subscription, unlocks VIP-tier content from every participating creator on the platform.",
+    desc: "One $5/month pass unlocks VIP-tier content from every participating creator on the platform.",
   },
   {
     name: "Exclusive",
-    desc: "Subscribe directly to a creator, at the price they set: subscriber-only posts, live videos, and more.",
+    desc: "Subscribe directly to a creator for $10/month: subscriber-only posts, live videos, and more.",
   },
 ];
 
@@ -21,8 +21,8 @@ const CREATOR_STEPS = [
     desc: "Apply as a creator — open to South African creators only, no exceptions. Get verified once accepted.",
   },
   {
-    name: "Publish & set your price",
-    desc: "Post Teaser previews so fans discover you, opt into the platform-wide VIP tier, and set your own price for Exclusive subscribers.",
+    name: "Publish & earn",
+    desc: "Post Teaser previews so fans discover you, opt into the platform-wide VIP tier, and earn from fans who subscribe to your Exclusive content.",
   },
   {
     name: "Get paid",

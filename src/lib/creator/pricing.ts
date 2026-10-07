@@ -21,38 +21,23 @@ export interface DurationPackage {
   isRecommended: boolean;
 }
 
-// Exclusive (VVIP) subscription pricing — creator-settable per explicit
-// product decision (reverting an earlier "fixed $9.99 for everyone, not
-// creator-settable" rule). EXCLUSIVE_MIN_PRICE_USD is the platform-wide
-// floor, enforced both here (defensively, on read) and in the write path
-// (PATCH /api/creator/settings's own Zod validation) so a creator can
-// never end up below it either by a bad write or by stale/legacy data.
-// EXCLUSIVE_DEFAULT_PRICE_USD is what a creator's price effectively is
-// until they set their own via CreatorProfile.vvipPriceOverride.
-export const EXCLUSIVE_MIN_PRICE_USD = 5;
-export const EXCLUSIVE_DEFAULT_PRICE_USD = 9.99;
+// Exclusive (VVIP) subscription pricing — one flat monthly price for
+// every creator, by product decision (the earlier creator-settable price
+// is retired; CreatorProfile.vvipPriceOverride is kept in the schema but
+// no longer read). VIP Pass pricing is the separate, platform-wide
+// VipPassPlan / pricing.vip_pass_usd config ($5/month).
+export const EXCLUSIVE_PRICE_USD = 10;
 
 /**
- * The single place that resolves "what does this fan actually pay for
- * this creator's Exclusive subscription" — profile cards, checkout, and
- * the ledger's `postRevenueEvent` should all derive the price through
- * here rather than reading CreatorProfile.vvipPriceOverride directly.
- * `vvipPriceOverride` stays typed `unknown` at the boundary (it's really
- * `Prisma.Decimal | null`) so every call site — which each already has a
- * plain CreatorProfile row in hand, no dedicated fetch needed — can pass
- * it straight through without importing Prisma's runtime types just for
- * this.
+ * The single place that resolves "what does this fan pay per month for
+ * a creator's Exclusive subscription" — profile cards, lock CTAs and
+ * checkout all go through here. Takes the creator row so call sites
+ * don't change if per-creator pricing ever returns.
  */
-export async function resolveCreatorPricing(creator: {
-  vvipPriceOverride: unknown; // Prisma.Decimal | null
+export async function resolveCreatorPricing(_creator: {
+  vvipPriceOverride: unknown; // Prisma.Decimal | null — ignored while pricing is flat
 }): Promise<CreatorPricing> {
-  const raw = creator.vvipPriceOverride;
-  let price = EXCLUSIVE_DEFAULT_PRICE_USD;
-  if (raw != null) {
-    const n = Number(raw);
-    if (Number.isFinite(n)) price = n;
-  }
-  return { vvipPriceUsd: Math.max(price, EXCLUSIVE_MIN_PRICE_USD) };
+  return { vvipPriceUsd: EXCLUSIVE_PRICE_USD };
 }
 
 function roundCents(amount: number): number {
@@ -60,29 +45,19 @@ function roundCents(amount: number): number {
 }
 
 /**
- * Resolves what a specific durationMonths package actually costs for
- * this creator's Exclusive tier: a creator's own explicit
- * CreatorSubscriptionPlan override for that duration if they've set
- * one, else the base 1-month price (resolveCreatorPricing) synthesized
- * against the platform's bundle-discount curve. A creator never needs
- * to set every duration explicitly — only the ones they want to
- * customize.
+ * What a durationMonths Exclusive package costs: the flat monthly price
+ * against the platform's bundle-discount curve (1 month = exactly
+ * EXCLUSIVE_PRICE_USD). Per-creator CreatorSubscriptionPlan overrides
+ * are not read while pricing is flat.
  */
 export async function resolveCreatorPackagePrice(
-  creatorProfileId: string,
+  _creatorProfileId: string,
   basePriceUsd: number,
   durationMonths: number
 ): Promise<number> {
-  const override = await db.creatorSubscriptionPlan.findUnique({
-    where: { creatorProfileId_durationMonths: { creatorProfileId, durationMonths } },
-  });
-  if (override?.isActive) {
-    return Math.max(roundCents(Number(override.priceUsd)), EXCLUSIVE_MIN_PRICE_USD);
-  }
-
   const curve = await getBundleDiscountCurve();
   const discount = curve[String(durationMonths)] ?? 0;
-  return Math.max(roundCents(basePriceUsd * durationMonths * (1 - discount)), EXCLUSIVE_MIN_PRICE_USD);
+  return roundCents(basePriceUsd * durationMonths * (1 - discount));
 }
 
 /**
