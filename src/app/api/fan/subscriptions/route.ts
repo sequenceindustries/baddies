@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { db } from "@/lib/db/client";
-import { resolveVipPassPackagePrice } from "@/lib/creator/pricing";
+import { listVipPassPackages } from "@/lib/creator/pricing";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
 // and must never be statically prerendered or cached at build time.
@@ -19,7 +19,7 @@ export async function GET() {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
 
-  const [subscriptions, purchases, vipPass, vipPassPriceUsd] = await Promise.all([
+  const [subscriptions, purchases, vipPass, vipPassPackages] = await Promise.all([
     db.subscription.findMany({
       where: { fanId: user.id },
       orderBy: { startedAt: "desc" },
@@ -33,8 +33,8 @@ export async function GET() {
       where: { fanId: user.id },
       orderBy: { startedAt: "desc" },
     }),
-    // The 1-month price — what the VIP banner/checkout charge.
-    resolveVipPassPackagePrice(1),
+    // The 3/6/12-month VIP Pass packages the feed banner's picker offers.
+    listVipPassPackages(),
   ]);
 
   // Subscription has no Prisma relation to CreatorProfile (only the raw
@@ -48,7 +48,7 @@ export async function GET() {
   const nameById = new Map(creators.map((c: (typeof creators)[number]) => [c.id, c.user.profile?.displayName ?? null]));
 
   return NextResponse.json({
-    vipPassPriceUsd,
+    vipPassPackages,
     vipPass: vipPass && {
       subscriptionId: vipPass.id,
       status: vipPass.status,

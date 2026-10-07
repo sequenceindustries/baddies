@@ -8,10 +8,14 @@ import { backdropFade, fadeScale, fadeSlideUp, transitions } from "@/lib/motion/
 import { SkeletonBlock, useSession, VerifiedBadge } from "./ui";
 import { CardAvatar, HeartIcon, MediaLightbox, ReportButton, timeAgo } from "./cards";
 
-// 1-month package, matching the feed's VIP banner and the creator
+// 1-month Exclusive package, matching the creator
 // profile's Subscribe button — the price on the button is exactly what's
 // charged until the 1/3/6/12-month package picker ships.
 const CHECKOUT_DEFAULT_DURATION_MONTHS = 1;
+// The VIP Pass has no 1-month option — a one-tap VIP unlock buys the
+// shortest (3-month) package, the price its lock CTA label shows. Must
+// match VIP_PASS_ENTRY_DURATION_MONTHS in src/lib/creator/pricing.ts.
+const VIP_PASS_CHECKOUT_DURATION_MONTHS = 3;
 
 export interface PostCardItem {
   contentId: string;
@@ -278,7 +282,7 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(
         isVipPass
-          ? { durationMonths: CHECKOUT_DEFAULT_DURATION_MONTHS }
+          ? { durationMonths: VIP_PASS_CHECKOUT_DURATION_MONTHS }
           : { creatorProfileId: item.creator.creatorProfileId, durationMonths: CHECKOUT_DEFAULT_DURATION_MONTHS }
       ),
     });

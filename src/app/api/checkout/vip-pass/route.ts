@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * Buy (or renew) the platform-wide VIP Pass for a chosen prepaid
- * package duration (1/3/6/12 months). One price per duration, set
+ * package duration (3/6/12 months — no 1-month option). One price per duration, set
  * platform-wide (VipPassPlan) — never per-creator, unlocks VIP-tier
  * content from every creator who's opted in
  * (CreatorProfile.unlimitedOptedIn).
@@ -31,7 +31,7 @@ export const dynamic = "force-dynamic";
  * invented here as a platform-wallet workaround.
  */
 const VipPassSchema = z.object({
-  durationMonths: z.union([z.literal(1), z.literal(3), z.literal(6), z.literal(12)]),
+  durationMonths: z.union([z.literal(3), z.literal(6), z.literal(12)]),
 });
 
 export async function POST(req: NextRequest) {

@@ -39,6 +39,10 @@ export const BUSINESS_CONFIG_KEYS = {
   // which package is visually highlighted at checkout.
   PRICING_BUNDLE_DISCOUNT_CURVE: "pricing.bundle_discount_curve",
   PRICING_RECOMMENDED_DURATION_MONTHS: "pricing.recommended_duration_months",
+  // The VIP Pass's own discount curve, separate from Exclusive's: VIP is
+  // sold only as 3/6/12-month packages (no 1-month option), each
+  // discounted off VIP_PASS_PRICE_USD x durationMonths.
+  PRICING_VIP_PASS_DISCOUNT_CURVE: "pricing.vip_pass_discount_curve",
   // Creator dashboard "Content Mix" comparison — the recommended (never
   // enforced) Teasers/VIP/Exclusive content split. Deliberately
   // adjustable, not hard-coded, per direct product decision: these
@@ -82,6 +86,13 @@ export const DEFAULT_BUSINESS_CONFIG: Record<BusinessConfigKey, string> = {
     "12": 0.25,
   }),
   [BUSINESS_CONFIG_KEYS.PRICING_RECOMMENDED_DURATION_MONTHS]: "3",
+  // Off the $5/month base: 3mo $13.50 (save 10%), 6mo $24 (save 20%),
+  // 12mo $42 (save 30%, $3.50/month).
+  [BUSINESS_CONFIG_KEYS.PRICING_VIP_PASS_DISCOUNT_CURVE]: JSON.stringify({
+    "3": 0.1,
+    "6": 0.2,
+    "12": 0.3,
+  }),
   [BUSINESS_CONFIG_KEYS.CONTENT_MIX_TARGET_TEASERS_PCT]: "10",
   [BUSINESS_CONFIG_KEYS.CONTENT_MIX_TARGET_VIP_PCT]: "20",
   [BUSINESS_CONFIG_KEYS.CONTENT_MIX_TARGET_EXCLUSIVE_PCT]: "70",

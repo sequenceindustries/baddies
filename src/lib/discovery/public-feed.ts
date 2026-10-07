@@ -2,8 +2,11 @@ import type { User } from "@prisma/client";
 import { db } from "@/lib/db/client";
 import { buildViewerLockContext, computeLockState } from "@/lib/entitlements/list-lock";
 import { computeTrendingContent } from "@/lib/discovery/trending";
-import { resolveCreatorPricing } from "@/lib/creator/pricing";
-import { getBusinessConfig } from "@/lib/config/settings";
+import {
+  resolveCreatorPricing,
+  resolveVipPassPackagePrice,
+  VIP_PASS_ENTRY_DURATION_MONTHS,
+} from "@/lib/creator/pricing";
 import { POST_ITEM_SELECT, buildLockCta, shapeContentItem, type PostItemRow } from "@/lib/feed/post-item";
 import type { PostCardItem } from "@/components/post-card";
 
@@ -35,10 +38,10 @@ export async function getFeedPage({
   cursor?: string;
   viewer: Pick<User, "id" | "role"> | null;
 }): Promise<FeedPage> {
-  const [viewerCtx, trending, businessConfig, follows] = await Promise.all([
+  const [viewerCtx, trending, vipPassEntryPriceUsd, follows] = await Promise.all([
     buildViewerLockContext(viewer),
     computeTrendingContent(),
-    getBusinessConfig(),
+    resolveVipPassPackagePrice(VIP_PASS_ENTRY_DURATION_MONTHS),
     viewer
       ? db.follow.findMany({ where: { fanId: viewer.id }, select: { creatorProfileId: true } })
       : Promise.resolve([]),
@@ -120,7 +123,7 @@ export async function getFeedPage({
       const lock = lockState.locked
         ? buildLockCta(
             lockState.kind,
-            businessConfig.vipPassPriceUsd,
+            vipPassEntryPriceUsd,
             lockState.kind === "VVIP_SUBSCRIBE" ? await vvipPriceFor(item.creatorProfile) : 0
           )
         : { locked: false as const, kind: null, priceUsd: null, ctaLabel: null };

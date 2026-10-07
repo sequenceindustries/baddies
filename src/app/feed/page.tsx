@@ -27,7 +27,7 @@ export default function FeedPage() {
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [vipPassActive, setVipPassActive] = useState<boolean | null>(null);
-  const [vipPassPriceUsd, setVipPassPriceUsd] = useState<number | null>(null);
+  const [vipPassPackages, setVipPassPackages] = useState<VipPassPackage[]>([]);
   const [storyRefreshKey, setStoryRefreshKey] = useState(0);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const loadingRef = useRef(false);
@@ -60,7 +60,7 @@ export default function FeedPage() {
       .then((body) => {
         if (body) {
           setVipPassActive(body.vipPass?.status === "ACTIVE");
-          if (typeof body.vipPassPriceUsd === "number") setVipPassPriceUsd(body.vipPassPriceUsd);
+          if (Array.isArray(body.vipPassPackages)) setVipPassPackages(body.vipPassPackages);
         }
       })
       .catch(() => {
@@ -92,7 +92,7 @@ export default function FeedPage() {
     <main style={mainStyle}>
       {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
 
-      {vipPassActive === false && <VipPassBanner priceUsd={vipPassPriceUsd} />}
+      {vipPassActive === false && <VipPassBanner packages={vipPassPackages} />}
 
       <div style={composerRowStyle}>
         <StoryComposerButton onPosted={() => setStoryRefreshKey((k) => k + 1)} />
@@ -131,27 +131,41 @@ export default function FeedPage() {
  * we know the fan doesn't already have an active one (vipPassActive ===
  * false, not just falsy/loading).
  *
- * Buys the 1-month package, so the price shown is exactly what's
- * charged (multi-month bundles come with the plan picker, a later
- * phase). /api/checkout/vip-pass only creates a
+ * Offers the 3/6/12-month packages (the VIP Pass has no 1-month
+ * option); the fan picks one and the price shown is exactly what's
+ * charged. /api/checkout/vip-pass only creates a
  * PendingOrder and hands back a hosted-checkout redirect; no
  * entitlement exists until the payment webhook independently confirms
  * it (see that route's own doc comment) — this banner redirects there
  * rather than marking itself "done" immediately.
  */
-const VIP_PASS_DEFAULT_DURATION_MONTHS = 1;
+interface VipPassPackage {
+  durationMonths: number;
+  priceUsd: number;
+  undiscountedPriceUsd: number;
+  discountPct: number;
+  isRecommended: boolean;
+}
 
-function VipPassBanner({ priceUsd }: { priceUsd: number | null }) {
+function VipPassBanner({ packages }: { packages: VipPassPackage[] }) {
+  const [selected, setSelected] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const chosen =
+    packages.find((p) => p.durationMonths === selected) ?? packages.find((p) => p.isRecommended) ?? packages[0];
+  const lowestMonthly = packages.length
+    ? Math.min(...packages.map((p) => p.priceUsd / p.durationMonths))
+    : null;
+
   async function getVipPass() {
+    if (!chosen) return;
     setBusy(true);
     setError(null);
     const res = await fetch("/api/checkout/vip-pass", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ durationMonths: VIP_PASS_DEFAULT_DURATION_MONTHS }),
+      body: JSON.stringify({ durationMonths: chosen.durationMonths }),
     });
     if (!res.ok) {
       setBusy(false);
@@ -168,13 +182,45 @@ function VipPassBanner({ priceUsd }: { priceUsd: number | null }) {
       <div>
         <div style={{ fontWeight: 600 }}>Get the platform VIP Pass</div>
         <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "0.2rem" }}>
-          {priceUsd != null ? `$${priceUsd.toFixed(2)}/month` : "One price"} unlocks VIP-tier content from every
-          participating creator.
+          {lowestMonthly != null ? `From $${lowestMonthly.toFixed(2)}/month — unlocks` : "Unlocks"} VIP-tier content
+          from every participating creator.
         </div>
-        {error && <div style={{ fontSize: "0.8rem", color: "var(--danger)", marginTop: "0.4rem" }}>{error}</div>}
       </div>
-      <button onClick={getVipPass} disabled={busy} style={bannerButtonStyle}>
-        {busy ? "..." : "Get VIP Pass"}
+      {packages.length > 0 && (
+        <div role="radiogroup" aria-label="VIP Pass package" style={packageGridStyle}>
+          {packages.map((p) => {
+            const isChosen = chosen?.durationMonths === p.durationMonths;
+            return (
+              <button
+                key={p.durationMonths}
+                type="button"
+                role="radio"
+                aria-checked={isChosen}
+                onClick={() => setSelected(p.durationMonths)}
+                style={{
+                  ...packageOptionStyle,
+                  borderColor: isChosen ? "var(--accent)" : "var(--border)",
+                  background: isChosen ? "var(--surface-raised, var(--surface))" : "transparent",
+                }}
+              >
+                <span style={{ fontWeight: 600 }}>{p.durationMonths} months</span>
+                <span style={{ fontSize: "1rem", fontWeight: 700 }}>${p.priceUsd.toFixed(2)}</span>
+                <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                  ${(p.priceUsd / p.durationMonths).toFixed(2)}/mo
+                </span>
+                {p.discountPct > 0 && (
+                  <span style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 600 }}>
+                    Save {p.discountPct}%
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {error && <div style={{ fontSize: "0.8rem", color: "var(--danger)" }}>{error}</div>}
+      <button onClick={getVipPass} disabled={busy || !chosen} style={bannerButtonStyle}>
+        {busy ? "..." : chosen ? `Get VIP Pass — $${chosen.priceUsd.toFixed(2)}` : "Get VIP Pass"}
       </button>
     </div>
   );
@@ -426,9 +472,29 @@ const bannerStyle: React.CSSProperties = {
   padding: "1.1rem 1.4rem",
   marginBottom: "1.5rem",
   display: "flex",
+  flexDirection: "column",
+  alignItems: "stretch",
+  gap: "0.85rem",
+};
+
+const packageGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: "0.5rem",
+};
+
+const packageOptionStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
   alignItems: "center",
-  justifyContent: "space-between",
-  gap: "1rem",
+  gap: "0.15rem",
+  padding: "0.65rem 0.4rem",
+  minHeight: "40px",
+  border: "1px solid var(--border)",
+  borderRadius: "var(--radius)",
+  color: "var(--text)",
+  fontSize: "0.85rem",
+  cursor: "pointer",
 };
 
 const bannerButtonStyle: React.CSSProperties = {

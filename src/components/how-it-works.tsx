@@ -7,7 +7,7 @@ const FAN_TIERS = [
   },
   {
     name: "VIP",
-    desc: "One $5/month pass unlocks VIP-tier content from every participating creator on the platform.",
+    desc: "One VIP Pass — 3, 6 or 12 months, from $3.50/month — unlocks VIP-tier content from every participating creator on the platform.",
   },
   {
     name: "Exclusive",

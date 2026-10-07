@@ -1,5 +1,6 @@
 import type { LockKind } from "@/lib/entitlements/list-lock";
 import { resolveDisplayUrl } from "@/lib/media/persist-public-image";
+import { VIP_PASS_ENTRY_DURATION_MONTHS } from "@/lib/creator/pricing";
 
 /**
  * Shared shape/select for a single feed-style post item — extracted out
@@ -58,14 +59,21 @@ export interface PostItemRow {
 
 export function buildLockCta(
   kind: LockKind,
-  vipPassPriceUsd: number,
+  // The entry (3-month) VIP Pass package price — what a one-tap VIP
+  // unlock charges; the VIP Pass has no 1-month option.
+  vipPassEntryPriceUsd: number,
   vvipPriceUsd: number
 ): { locked: true; kind: LockKind; priceUsd: number | null; ctaLabel: string } {
   if (kind === "VVIP_SUBSCRIBE") {
     return { locked: true, kind, priceUsd: vvipPriceUsd, ctaLabel: `Subscribe to unlock — $${vvipPriceUsd.toFixed(2)}/mo` };
   }
   if (kind === "VIP_PASS") {
-    return { locked: true, kind, priceUsd: vipPassPriceUsd, ctaLabel: `Get VIP Pass — $${vipPassPriceUsd.toFixed(2)}/mo` };
+    return {
+      locked: true,
+      kind,
+      priceUsd: vipPassEntryPriceUsd,
+      ctaLabel: `Get VIP Pass — $${vipPassEntryPriceUsd.toFixed(2)} / ${VIP_PASS_ENTRY_DURATION_MONTHS} mo`,
+    };
   }
   return { locked: true, kind: null, priceUsd: null, ctaLabel: "Locked" };
 }

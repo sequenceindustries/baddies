@@ -6,7 +6,7 @@ import LandingPage from "./landing-page";
 export const metadata: Metadata = {
   title: "baddies — Africa's verified adult creator network",
   description:
-    "Verified South African creators publishing exclusive content, paid directly by the fans who support them. Free previews, VIP Pass $5/month, Exclusive subscriptions $10/month. 18+ only.",
+    "Verified South African creators publishing exclusive content, paid directly by the fans who support them. Free previews, VIP Pass from $3.50/month (3, 6 or 12 months), Exclusive subscriptions $10/month. 18+ only.",
   alternates: { canonical: "/" },
 };
 

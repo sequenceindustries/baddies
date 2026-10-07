@@ -43,15 +43,24 @@ export async function setPlatformSetting(
  * BUSINESS_CONFIG_KEYS.PRICING_BUNDLE_DISCOUNT_CURVE's own comment.
  */
 export async function getBundleDiscountCurve(): Promise<Record<string, number>> {
-  const raw = await getPlatformSetting(BUSINESS_CONFIG_KEYS.PRICING_BUNDLE_DISCOUNT_CURVE);
+  return readDiscountCurve(BUSINESS_CONFIG_KEYS.PRICING_BUNDLE_DISCOUNT_CURVE);
+}
+
+/** The VIP Pass's own 3/6/12-month discount curve — see PRICING_VIP_PASS_DISCOUNT_CURVE. */
+export async function getVipPassDiscountCurve(): Promise<Record<string, number>> {
+  return readDiscountCurve(BUSINESS_CONFIG_KEYS.PRICING_VIP_PASS_DISCOUNT_CURVE);
+}
+
+async function readDiscountCurve(key: BusinessConfigKey): Promise<Record<string, number>> {
+  const raw = await getPlatformSetting(key);
   try {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object") return parsed as Record<string, number>;
   } catch {
     // fall through to the hardcoded fallback below
   }
-  console.warn("[settings] pricing.bundle_discount_curve is not valid JSON; using zero-discount fallback.");
-  return { "1": 0, "3": 0, "6": 0, "12": 0 };
+  console.warn(`[settings] ${key} is not valid JSON; using zero-discount fallback.`);
+  return {};
 }
 
 export async function getRecommendedDurationMonths(): Promise<number> {

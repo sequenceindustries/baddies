@@ -1,5 +1,10 @@
 import { db } from "@/lib/db/client";
-import { getBundleDiscountCurve, getRecommendedDurationMonths, getBusinessConfig } from "@/lib/config/settings";
+import {
+  getBundleDiscountCurve,
+  getRecommendedDurationMonths,
+  getBusinessConfig,
+  getVipPassDiscountCurve,
+} from "@/lib/config/settings";
 
 export interface CreatorPricing {
   vvipPriceUsd: number;
@@ -10,6 +15,17 @@ export interface CreatorPricing {
 // fixed to these 4, matching the spec exactly.
 export const SUBSCRIPTION_DURATIONS_MONTHS = [1, 3, 6, 12] as const;
 export type SubscriptionDurationMonths = (typeof SUBSCRIPTION_DURATIONS_MONTHS)[number];
+
+// The VIP Pass is sold only as multi-month packages — no 1-month option.
+// VIP_PASS_ENTRY_DURATION_MONTHS is the shortest one, bought by one-tap
+// "Get VIP Pass" buttons (post lock CTAs) that don't show the full picker.
+export const VIP_PASS_DURATIONS_MONTHS = [3, 6, 12] as const;
+export type VipPassDurationMonths = (typeof VIP_PASS_DURATIONS_MONTHS)[number];
+export const VIP_PASS_ENTRY_DURATION_MONTHS: VipPassDurationMonths = 3;
+
+export function isVipPassDuration(n: number): n is VipPassDurationMonths {
+  return (VIP_PASS_DURATIONS_MONTHS as readonly number[]).includes(n);
+}
 
 export interface DurationPackage {
   durationMonths: number;
@@ -25,7 +41,8 @@ export interface DurationPackage {
 // every creator, by product decision (the earlier creator-settable price
 // is retired; CreatorProfile.vvipPriceOverride is kept in the schema but
 // no longer read). VIP Pass pricing is the separate, platform-wide
-// VipPassPlan / pricing.vip_pass_usd config ($5/month).
+// VipPassPlan / pricing.vip_pass_usd config ($5/month base, sold as
+// discounted 3/6/12-month packages only).
 export const EXCLUSIVE_PRICE_USD = 10;
 
 /**
@@ -90,35 +107,36 @@ export async function listCreatorPackages(
 }
 
 /**
- * The platform-wide VIP Pass's price for a given duration — reads the
- * seeded VipPassPlan table directly (source of truth once seeded; see
- * prisma/seed.ts#seedVipPassPlans), falling back to synthesizing from
- * the base VIP_PASS_PRICE_USD x bundle-discount curve only if a
- * durationMonths row is somehow missing (a fresh environment that
- * hasn't run the seed yet).
+ * The platform-wide VIP Pass's price for a given duration (3/6/12 only —
+ * see VIP_PASS_DURATIONS_MONTHS) — reads the seeded VipPassPlan table
+ * directly (source of truth once seeded; see
+ * prisma/seed.ts#seedVipPassPlans), falling back to synthesizing from the
+ * base VIP_PASS_PRICE_USD x the VIP Pass discount curve only if a
+ * durationMonths row is somehow missing (a fresh environment that hasn't
+ * run the seed yet).
  */
-export async function resolveVipPassPackagePrice(durationMonths: number): Promise<number> {
+export async function resolveVipPassPackagePrice(durationMonths: VipPassDurationMonths): Promise<number> {
   const plan = await db.vipPassPlan.findUnique({ where: { durationMonths } });
   if (plan?.isActive) return Number(plan.priceUsd);
 
   const config = await getBusinessConfig();
-  const curve = await getBundleDiscountCurve();
+  const curve = await getVipPassDiscountCurve();
   const discount = curve[String(durationMonths)] ?? 0;
   return roundCents(config.vipPassPriceUsd * durationMonths * (1 - discount));
 }
 
-/** The full 1/3/6/12-month VIP Pass package list, for the checkout plan-picker. */
+/** The full 3/6/12-month VIP Pass package list, for the checkout plan-picker. */
 export async function listVipPassPackages(): Promise<DurationPackage[]> {
   const recommended = await getRecommendedDurationMonths();
   const config = await getBusinessConfig();
   const basePriceUsd = config.vipPassPriceUsd;
 
   const packages = await Promise.all(
-    SUBSCRIPTION_DURATIONS_MONTHS.map(async (durationMonths) => {
+    VIP_PASS_DURATIONS_MONTHS.map(async (durationMonths) => {
       const priceUsd = await resolveVipPassPackagePrice(durationMonths);
       const undiscountedPriceUsd = roundCents(basePriceUsd * durationMonths);
       const discountPct =
-        undiscountedPriceUsd > 0 ? roundCents((1 - priceUsd / undiscountedPriceUsd) * 100) : 0;
+        undiscountedPriceUsd > 0 ? Math.round((1 - priceUsd / undiscountedPriceUsd) * 100) : 0;
       return {
         durationMonths,
         priceUsd,

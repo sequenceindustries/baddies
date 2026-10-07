@@ -153,12 +153,10 @@ async function cleanupStrayCreators() {
 }
 
 /**
- * Seeds VipPassPlan rows for the 4 supported package durations, priced
- * off BUSINESS_CONFIG_KEYS.VIP_PASS_PRICE_USD (the base 1-month price)
- * x PRICING_BUNDLE_DISCOUNT_CURVE — same synthesis logic
- * resolveCreatorPricing() uses for a creator's own Exclusive plans, so
- * the platform-wide VIP Pass and per-creator Exclusive pricing are
- * computed the same way. Never overwrites a price an admin has already
+ * Seeds VipPassPlan rows for the 3/6/12-month package durations (the
+ * VIP Pass has no 1-month option), priced off
+ * BUSINESS_CONFIG_KEYS.VIP_PASS_PRICE_USD (the base 1-month price) x
+ * PRICING_VIP_PASS_DISCOUNT_CURVE. Never overwrites a price an admin has already
  * changed via the (future) admin pricing UI — `update: {}` on an
  * existing row, matching this file's own established upsert-but-never-
  * clobber convention (see the revenue-share-rule/agreement seeding
@@ -171,13 +169,13 @@ async function seedVipPassPlans() {
   const basePrice = Number(basePriceRow?.value ?? DEFAULT_BUSINESS_CONFIG[BUSINESS_CONFIG_KEYS.VIP_PASS_PRICE_USD]);
 
   const curveRow = await db.platformSetting.findUnique({
-    where: { key: BUSINESS_CONFIG_KEYS.PRICING_BUNDLE_DISCOUNT_CURVE },
+    where: { key: BUSINESS_CONFIG_KEYS.PRICING_VIP_PASS_DISCOUNT_CURVE },
   });
   const curve: Record<string, number> = JSON.parse(
-    curveRow?.value ?? DEFAULT_BUSINESS_CONFIG[BUSINESS_CONFIG_KEYS.PRICING_BUNDLE_DISCOUNT_CURVE]
+    curveRow?.value ?? DEFAULT_BUSINESS_CONFIG[BUSINESS_CONFIG_KEYS.PRICING_VIP_PASS_DISCOUNT_CURVE]
   );
 
-  for (const durationMonths of [1, 3, 6, 12]) {
+  for (const durationMonths of [3, 6, 12]) {
     const discount = curve[String(durationMonths)] ?? 0;
     const priceUsd = Math.round(basePrice * durationMonths * (1 - discount) * 100) / 100;
     await db.vipPassPlan.upsert({

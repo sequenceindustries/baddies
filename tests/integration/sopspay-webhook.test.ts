@@ -53,7 +53,7 @@ describe.skipIf(!dbAvailable)("SOPSPAY webhook → VIP pass activation (integrat
       data: {
         customerId: fan.id,
         orderType: "VIP_PASS",
-        durationMonths: 1,
+        durationMonths: 3,
         amountUsd: 19.99,
         currency: "USD",
         status: "AWAITING_PAYMENT",

@@ -40,7 +40,8 @@ interface PurchaseItem {
 export default function SubscriptionsPage() {
   const { user, loading: sessionLoading } = useSession();
   const [vipPass, setVipPass] = useState<VipPass | null>(null);
-  const [vipPassPriceUsd, setVipPassPriceUsd] = useState<number | null>(null);
+  // Cheapest per-month rate across the 3/6/12-month VIP Pass packages.
+  const [vipPassFromMonthlyUsd, setVipPassFromMonthlyUsd] = useState<number | null>(null);
   const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>([]);
   const [purchases, setPurchases] = useState<PurchaseItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,7 +57,12 @@ export default function SubscriptionsPage() {
       .then((r) => (r.ok ? r.json() : { vipPass: null, subscriptions: [], purchases: [] }))
       .then((body) => {
         setVipPass(body.vipPass ?? null);
-        setVipPassPriceUsd(typeof body.vipPassPriceUsd === "number" ? body.vipPassPriceUsd : null);
+        const packages: { priceUsd: number; durationMonths: number }[] = Array.isArray(body.vipPassPackages)
+          ? body.vipPassPackages
+          : [];
+        setVipPassFromMonthlyUsd(
+          packages.length ? Math.min(...packages.map((p) => p.priceUsd / p.durationMonths)) : null
+        );
         setSubscriptions(body.subscriptions ?? []);
         setPurchases(body.purchases ?? []);
       })
@@ -112,7 +118,7 @@ export default function SubscriptionsPage() {
                   <Link href="/feed" style={{ color: "var(--accent)", fontWeight: 600 }}>
                     Get it on your Timeline
                   </Link>{" "}
-                  {vipPassPriceUsd != null && `for $${vipPassPriceUsd.toFixed(2)}/month `}to unlock VIP-tier content across
+                  {vipPassFromMonthlyUsd != null && `from $${vipPassFromMonthlyUsd.toFixed(2)}/month `}to unlock VIP-tier content across
                   every participating creator.
                 </p>
               )}

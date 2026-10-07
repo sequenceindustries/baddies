@@ -1,8 +1,11 @@
 import type { User } from "@prisma/client";
 import { db } from "@/lib/db/client";
 import { buildViewerLockContext, computeLockState } from "@/lib/entitlements/list-lock";
-import { resolveCreatorPricing } from "@/lib/creator/pricing";
-import { getBusinessConfig } from "@/lib/config/settings";
+import {
+  resolveCreatorPricing,
+  resolveVipPassPackagePrice,
+  VIP_PASS_ENTRY_DURATION_MONTHS,
+} from "@/lib/creator/pricing";
 import { POST_ITEM_SELECT, buildLockCta, shapeContentItem } from "@/lib/feed/post-item";
 import type { PostCardItem } from "@/components/post-card";
 
@@ -65,9 +68,9 @@ export async function getCreatorPublicContentPage({
   const hasMore = items.length > PAGE_SIZE;
   const page = hasMore ? items.slice(0, PAGE_SIZE) : items;
 
-  const [viewerCtx, businessConfig, { vvipPriceUsd }, isFollowing] = await Promise.all([
+  const [viewerCtx, vipPassEntryPriceUsd, { vvipPriceUsd }, isFollowing] = await Promise.all([
     buildViewerLockContext(viewer),
-    getBusinessConfig(),
+    resolveVipPassPackagePrice(VIP_PASS_ENTRY_DURATION_MONTHS),
     resolveCreatorPricing(creator),
     viewer
       ? db.follow
@@ -93,7 +96,7 @@ export async function getCreatorPublicContentPage({
       );
 
       const lock = lockState.locked
-        ? buildLockCta(lockState.kind, businessConfig.vipPassPriceUsd, vvipPriceUsd)
+        ? buildLockCta(lockState.kind, vipPassEntryPriceUsd, vvipPriceUsd)
         : { locked: false as const, kind: null, priceUsd: null, ctaLabel: null };
 
       return shapeContentItem(

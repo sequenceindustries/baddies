@@ -3,8 +3,11 @@ import { db } from "@/lib/db/client";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { buildViewerLockContext, computeLockState } from "@/lib/entitlements/list-lock";
 import { computeTrendingContent } from "@/lib/discovery/trending";
-import { resolveCreatorPricing } from "@/lib/creator/pricing";
-import { getBusinessConfig } from "@/lib/config/settings";
+import {
+  resolveCreatorPricing,
+  resolveVipPassPackagePrice,
+  VIP_PASS_ENTRY_DURATION_MONTHS,
+} from "@/lib/creator/pricing";
 import { POST_ITEM_SELECT, buildLockCta, shapeContentItem } from "@/lib/feed/post-item";
 
 // Always dynamic: this route reads/writes live data (DB, auth, or both)
@@ -43,10 +46,10 @@ export async function GET(req: NextRequest, { params }: { params: { contentId: s
     return NextResponse.json({ error: "Content not found." }, { status: 404 });
   }
 
-  const [viewerCtx, trending, businessConfig, isFollowing] = await Promise.all([
+  const [viewerCtx, trending, vipPassEntryPriceUsd, isFollowing] = await Promise.all([
     buildViewerLockContext(user),
     computeTrendingContent(),
-    getBusinessConfig(),
+    resolveVipPassPackagePrice(VIP_PASS_ENTRY_DURATION_MONTHS),
     user
       ? db.follow
           .findUnique({
@@ -71,7 +74,7 @@ export async function GET(req: NextRequest, { params }: { params: { contentId: s
   const { vvipPriceUsd } = await resolveCreatorPricing(item.creatorProfile);
 
   const lock = lockState.locked
-    ? buildLockCta(lockState.kind, businessConfig.vipPassPriceUsd, lockState.kind === "VVIP_SUBSCRIBE" ? vvipPriceUsd : 0)
+    ? buildLockCta(lockState.kind, vipPassEntryPriceUsd, lockState.kind === "VVIP_SUBSCRIBE" ? vvipPriceUsd : 0)
     : { locked: false as const, kind: null, priceUsd: null, ctaLabel: null };
 
   const shaped = await shapeContentItem(item, {
