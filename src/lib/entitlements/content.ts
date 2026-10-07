@@ -45,12 +45,14 @@ export async function canAccessContent(
   // publish.
   const isLive = content.status === "APPROVED" && content.publishedAt != null;
 
-  if (content.accessLevel === "FREE" && isLive) {
-    return { allowed: true, reason: "free_preview" };
-  }
-
+  // No content of any tier — teasers included — for a signed-out
+  // visitor. Teasers are free, but only to signed-in members.
   if (!user) {
     return { allowed: false, reason: "denied" };
+  }
+
+  if (content.accessLevel === "FREE" && isLive) {
+    return { allowed: true, reason: "free_preview" };
   }
 
   if (user.role === "ADMIN") {

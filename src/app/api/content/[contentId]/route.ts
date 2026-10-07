@@ -29,6 +29,10 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: NextRequest, { params }: { params: { contentId: string } }) {
   const user = await getCurrentUser();
+  // Posts (teasers included) are for signed-in members only.
+  if (!user) {
+    return NextResponse.json({ error: "Sign in to view posts." }, { status: 401 });
+  }
 
   const item = await db.content.findFirst({
     where: {

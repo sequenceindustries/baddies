@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { computeTrendingContent } from "@/lib/discovery/trending";
 import { resolveDisplayUrl } from "@/lib/media/persist-public-image";
 
@@ -8,6 +9,11 @@ import { resolveDisplayUrl } from "@/lib/media/persist-public-image";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  // Post captions/metadata are for signed-in members only.
+  if (!(await getCurrentUser())) {
+    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+  }
+
   const ranked = await computeTrendingContent();
   if (ranked.length === 0) {
     return NextResponse.json({ items: [] });

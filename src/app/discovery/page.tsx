@@ -5,6 +5,8 @@ import Link from "next/link";
 import { db } from "@/lib/db/client";
 import { resolveCreatorCanonicalPath } from "@/lib/creator/public-profile";
 import { displayHeadingStyle } from "@/components/ui";
+import { CreatorCardRow } from "@/components/cards";
+import { toCreatorCard, CREATOR_CARD_SELECT } from "@/lib/discovery/creator-card";
 import { DiscoveryClient } from "./DiscoveryClient";
 
 export const metadata: Metadata = {
@@ -26,13 +28,62 @@ export const metadata: Metadata = {
  */
 export default async function DiscoveryPage() {
   const viewer = await getCurrentUser();
+  const categoriesQuery = db.category.findMany({
+    where: { creators: { some: { creatorProfile: { status: "VERIFIED" } } } },
+    select: { slug: true, name: true },
+    orderBy: { name: "asc" },
+  });
+
+  // Signed out: profile previews only — each creator's feature image and
+  // profile picture (toCreatorCard never uses a post). No posts, teasers
+  // or captions until the visitor signs in; getFeedPage and
+  // canAccessContent enforce the same rule server-side.
+  if (!viewer) {
+    const [categories, creators] = await Promise.all([
+      categoriesQuery,
+      db.creatorProfile.findMany({
+        where: { status: "VERIFIED" },
+        select: CREATOR_CARD_SELECT,
+        orderBy: { approvedAt: "desc" },
+        take: 60,
+      }),
+    ]);
+    const cards = await Promise.all(creators.map(toCreatorCard));
+    return (
+      <main style={mainStyle}>
+        <h1 style={displayHeadingStyle}>Discover</h1>
+        <p style={introStyle}>
+          Verified South African creators on baddies. Sign in or join free to see their posts and teasers.
+        </p>
+        <div style={ctaRowStyle}>
+          <Link href="/register" style={joinButtonStyle}>
+            Join
+          </Link>
+          <Link href="/login" style={signInButtonStyle}>
+            Sign In
+          </Link>
+        </div>
+        {categories.length > 0 && (
+          <nav aria-label="Browse by category" style={chipRowStyle}>
+            {categories.map((c) => (
+              <Link key={c.slug} href={`/discovery/${c.slug}`} style={chipStyle}>
+                {c.name}
+              </Link>
+            ))}
+          </nav>
+        )}
+        {cards.length === 0 ? (
+          <p style={{ color: "var(--text-muted)" }}>No verified creators yet.</p>
+        ) : (
+          <CreatorCardRow creators={cards} />
+        )}
+      </main>
+    );
+  }
+
   const [{ items, nextCursor }, categories, creators] = await Promise.all([
     getFeedPage({ scope: "discovery", viewer }),
-    db.category.findMany({
-      where: { creators: { some: { creatorProfile: { status: "VERIFIED" } } } },
-      select: { slug: true, name: true },
-      orderBy: { name: "asc" },
-    }),
+    categoriesQuery,
     db.creatorProfile.findMany({
       where: { status: "VERIFIED" },
       select: { id: true, handle: true, user: { select: { profile: { select: { displayName: true } } } } },
@@ -119,6 +170,37 @@ const chipStyle: React.CSSProperties = {
   color: "var(--text)",
   fontSize: "0.85rem",
   textDecoration: "none",
+};
+
+const ctaRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "center",
+  gap: "0.6rem",
+  flexWrap: "wrap",
+  marginBottom: "1.5rem",
+};
+
+// Local, not spread from ui.tsx's primaryButtonStyle: this is a server
+// component and ui.tsx a client module, so its exports are client
+// references here and spreading one yields nothing.
+const joinButtonStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "0.7rem 1.6rem",
+  background: "var(--accent)",
+  color: "var(--on-accent)",
+  border: "1px solid transparent",
+  borderRadius: "999px",
+  fontWeight: 600,
+  fontSize: "0.95rem",
+  textDecoration: "none",
+};
+
+const signInButtonStyle: React.CSSProperties = {
+  ...joinButtonStyle,
+  background: "transparent",
+  color: "var(--text)",
+  border: "1px solid var(--border)",
 };
 
 const creatorsSectionStyle: React.CSSProperties = { marginTop: "2.5rem" };

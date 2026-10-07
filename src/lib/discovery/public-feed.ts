@@ -38,6 +38,13 @@ export async function getFeedPage({
   cursor?: string;
   viewer: Pick<User, "id" | "role"> | null;
 }): Promise<FeedPage> {
+  // Signed-out visitors never get posts — not even teasers, not even
+  // captions. /discovery shows them creator profile previews (feature
+  // image + profile picture) instead; content starts at sign-in.
+  if (!viewer) {
+    return { items: [], nextCursor: null };
+  }
+
   const [viewerCtx, trending, vipPassEntryPriceUsd, follows] = await Promise.all([
     buildViewerLockContext(viewer),
     computeTrendingContent(),

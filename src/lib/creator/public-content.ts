@@ -47,6 +47,12 @@ export async function getCreatorPublicContentPage({
     return null;
   }
 
+  // Signed-out visitors see the profile header only — no posts, teasers
+  // included (see getFeedPage's matching rule).
+  if (!viewer) {
+    return { items: [], nextCursor: null };
+  }
+
   const items = await db.content.findMany({
     where: { creatorProfileId, status: "APPROVED", publishedAt: { not: null } },
     orderBy: { publishedAt: "desc" },

@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 
-const STORAGE_KEY = "baddies_age_confirmed";
+// Versioned: bumping it re-shows the gate to every visitor, including
+// those who confirmed under an earlier key (v2: gate restored for all
+// visitors, 2026-10-07).
+const STORAGE_KEY = "baddies_age_confirmed_v2";
 
 /**
  * Blocks the entire site — nav included — behind an 18+ confirmation on

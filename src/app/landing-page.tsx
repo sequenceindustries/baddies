@@ -79,18 +79,17 @@ export default function LandingPage() {
             </motion.span>
             <motion.h1 style={heroHeadlineStyle} {...rise(0.06)}>
               <span className="landing-hero-line">Verified creators.</span>
-              <span className="landing-hero-line">Exclusive content.</span>
               <span className="landing-hero-line" style={{ color: "var(--accent)" }}>
-                Paid directly.
+                Exclusive content.
               </span>
             </motion.h1>
             <motion.p style={heroSubStyle} {...rise(0.14)}>
               Verified South African creators publish exclusive content and get paid directly by the fans who
-              support them. Browse free previews — no card required.
+              support them. Join free to see their teasers — no card required.
             </motion.p>
             <motion.div style={ctaRowStyle} {...rise(0.2)}>
               <Link href="/register" style={pillPrimaryStyle} className="hover-lift">
-                Join free
+                Join
               </Link>
               <Link href="/discovery" style={pillGhostStyle} className="hover-lift">
                 Browse creators
@@ -181,7 +180,7 @@ export default function LandingPage() {
             </p>
             <div style={ctaRowStyle}>
               <Link href="/register" style={pillPrimaryStyle} className="hover-lift">
-                Apply as a creator
+                Join
               </Link>
             </div>
           </div>

@@ -127,6 +127,7 @@ export default async function CreatorProfilePage({
         initialCreator={creator}
         initialItems={contentPage?.items ?? []}
         initialCursor={contentPage?.nextCursor ?? null}
+        viewerSignedIn={Boolean(viewer)}
       />
     </main>
   );

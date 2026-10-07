@@ -223,13 +223,9 @@ export function Nav() {
         {!loading && user?.creatorProfile && <NotificationBell />}
         {!loading && user && <MessageBell />}
 
+        {/* Signed out, Sign In / Join live in the centre pill instead. */}
         <div className="nav-links-desktop" style={navDesktopAccountStyle}>
-          {!loading &&
-            (user ? (
-              <AccountMenu user={user} onLogout={handleLogout} />
-            ) : (
-              <NavSignedOutLinks pathname={pathname} />
-            ))}
+          {!loading && user && <AccountMenu user={user} onLogout={handleLogout} />}
         </div>
 
         {!loading && (
@@ -261,10 +257,7 @@ export function Nav() {
               <MobileAccountBlock user={user} onLogout={handleLogout} />
             </>
           ) : (
-            <>
-              <NavPublicLinks pathname={pathname} />
-              <NavSignedOutLinks pathname={pathname} />
-            </>
+            <NavPublicLinks pathname={pathname} />
           )}
         </motion.div>
       )}
@@ -316,32 +309,21 @@ function NavPrimaryLinks({ user, pathname }: { user: SessionUser; pathname: stri
   );
 }
 
-// No "Discover" link for a signed-out visitor — Discover, creator
-// profiles, and search are all gated behind sign-in (see SignInGate's
-// comment), so linking to them would just be a dead end.
-function NavSignedOutLinks({ pathname }: { pathname: string }) {
-  return (
-    <>
-      <Link href="/login" style={navLinkStyle(pathname, "/login", linkStyle)}>
-        Sign in
-      </Link>
-      <Link href="/register" style={joinPillStyle}>
-        Join
-      </Link>
-    </>
-  );
-}
-
-// Centre-pill links for signed-out visitors — the public pages worth
-// reaching before joining (Discover is fully public since SEO Phase 4).
+// The centred rounded pill for signed-out visitors: Discover, Sign In,
+// Join — the whole signed-out nav (no separate right-hand group).
+// Discover is public, but shows creator profile previews only until
+// sign-in (see src/app/discovery/page.tsx).
 function NavPublicLinks({ pathname }: { pathname: string }) {
   return (
     <>
       <Link href="/discovery" style={navLinkStyle(pathname, "/discovery", linkStyle)}>
         Discover
       </Link>
-      <Link href="/apply" style={navLinkStyle(pathname, "/apply", linkStyle)}>
-        For creators
+      <Link href="/login" style={navLinkStyle(pathname, "/login", linkStyle)}>
+        Sign In
+      </Link>
+      <Link href="/register" style={joinPillStyle}>
+        Join
       </Link>
     </>
   );
@@ -1580,6 +1562,27 @@ const signInGateSecondaryStyle: React.CSSProperties = {
 // abstraction, not this codebase's usual small-duplication default)
 // because all 4 want the exact same dimmed-wordmark-plus-message
 // treatment, and a single change here now reaches every call site.
+/**
+ * Inline (not full-page) Join / Sign In prompt — shown in place of
+ * posts to a signed-out visitor, e.g. on a creator profile. Same CTA
+ * styling as SignInGate.
+ */
+export function SignInPrompt({ message }: { message: string }) {
+  return (
+    <div style={emptyContentStateStyle}>
+      <p style={{ color: "var(--text-muted)", margin: 0, maxWidth: "420px" }}>{message}</p>
+      <div style={signInGateCtaRowStyle}>
+        <Link href="/register" style={signInGatePrimaryStyle}>
+          Join
+        </Link>
+        <Link href="/login" style={signInGateSecondaryStyle}>
+          Sign In
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 export function EmptyContentState({ message }: { message: string }) {
   return (
     <div style={emptyContentStateStyle}>
@@ -1980,11 +1983,11 @@ const linkStyle: React.CSSProperties = {
   borderRadius: "999px",
 };
 
+// Same box as linkStyle so it sits flush inside the centre pill.
 const joinPillStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
-  minHeight: "38px",
-  padding: "0 1.15rem",
+  padding: "0.45rem 1.1rem",
   borderRadius: "999px",
   background: "var(--accent)",
   color: "var(--on-accent)",

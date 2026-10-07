@@ -1,8 +1,5 @@
 import { resolveCreatorPricing } from "@/lib/creator/pricing";
-import { db } from "@/lib/db/client";
-import { getMediaStorageProvider } from "@/lib/providers/storage";
 import { resolveDisplayUrl } from "@/lib/media/persist-public-image";
-import { selectDisplayPerPosition } from "@/lib/media/carousel";
 
 /**
  * Matches build brief §11's creator card spec (updated for the Free/VIP/
@@ -19,10 +16,9 @@ export interface CreatorCardSource {
   vvipPriceOverride: unknown;
   // The creator's own chosen "featured image" (set via /apply at
   // signup or the Dashboard's Content tab) — reuses the schema's
-  // existing coverImageUrl field. Takes priority over the latest-Free-
-  // post fallback below when set, since it's a deliberate choice about
-  // what represents this creator on discovery cards, not just whatever
-  // they happened to post most recently.
+  // existing coverImageUrl field. The only image a card shows besides the
+  // avatar — a deliberate choice about
+  // what represents this creator on discovery cards.
   coverImageUrl: string | null;
   user: {
     profile: { displayName: string | null; avatarUrl: string | null; country: string | null; city: string | null } | null;
@@ -42,11 +38,13 @@ export interface CreatorCard {
 }
 
 export async function toCreatorCard(creator: CreatorCardSource): Promise<CreatorCard> {
-  // Skip the latest-Free-post lookup entirely once a featured image is
-  // set — it'll never be used, no reason to pay for the query.
-  const [pricing, thumbnail, avatarUrl, coverImageUrl] = await Promise.all([
+  // Profile previews only: the creator's own feature image and profile
+  // picture, never a post. Cards are shown to signed-out visitors (and
+  // the list routes are publicly cached, identical for every viewer), so
+  // falling back to the latest teaser post would leak content before
+  // sign-in. No feature image → the card falls back to the avatar.
+  const [pricing, avatarUrl, coverImageUrl] = await Promise.all([
     resolveCreatorPricing(creator),
-    creator.coverImageUrl ? Promise.resolve(null) : getLatestFreeThumbnail(creator.id),
     resolveDisplayUrl(creator.user.profile?.avatarUrl),
     resolveDisplayUrl(creator.coverImageUrl),
   ]);
@@ -58,8 +56,8 @@ export async function toCreatorCard(creator: CreatorCardSource): Promise<Creator
     city: creator.locationVisible ? (creator.user.profile?.city ?? null) : null,
     verifiedBadge: true,
     vvipPriceUsd: pricing.vvipPriceUsd,
-    thumbnailUrl: coverImageUrl ?? thumbnail?.signedUrl ?? null,
-    thumbnailMimeType: creator.coverImageUrl ? guessMimeType(creator.coverImageUrl) : (thumbnail?.mimeType ?? null),
+    thumbnailUrl: coverImageUrl ?? null,
+    thumbnailMimeType: creator.coverImageUrl ? guessMimeType(creator.coverImageUrl) : null,
   };
 }
 
@@ -72,35 +70,6 @@ export async function toCreatorCard(creator: CreatorCardSource): Promise<Creator
 function guessMimeType(url: string): string {
   const match = /^data:([^;,]+)[;,]/.exec(url);
   return match?.[1] ?? "image/jpeg";
-}
-
-/**
- * The card's big thumbnail is always this creator's own latest FREE
- * post, never a locked tier — free content is public the moment it's
- * live (see src/lib/entitlements/content.ts), so handing out its signed
- * URL on a discovery card needs no per-viewer entitlement check the way
- * VIP/Exclusive content would. A creator with no Free posts yet just
- * gets no thumbnail (the card falls back to their avatar).
- */
-async function getLatestFreeThumbnail(creatorProfileId: string): Promise<{ signedUrl: string; mimeType: string } | null> {
-  const content = await db.content.findFirst({
-    where: { creatorProfileId, accessLevel: "FREE", status: "APPROVED", publishedAt: { not: null } },
-    orderBy: { publishedAt: "desc" },
-    select: { mediaAssets: { select: { storageKey: true, mimeType: true, kind: true, position: true } } },
-  });
-  // Always the FIRST carousel slide specifically (position 0), preferring
-  // its generated DISPLAY derivative over the raw ORIGINAL — same
-  // preference GET /api/content/:id/media applies per-slide, falling
-  // back to ORIGINAL for video/audio/pre-pipeline content. Explicit
-  // position-based selection rather than array-order luck: a discovery
-  // card thumbnail should always be a post's cover slide, never whichever
-  // asset happened to be created/returned first.
-  const asset = selectDisplayPerPosition(content?.mediaAssets ?? [])[0];
-  if (!asset) return null;
-
-  const storage = getMediaStorageProvider();
-  const signedUrl = await storage.getSignedReadUrl(asset.storageKey);
-  return { signedUrl, mimeType: asset.mimeType };
 }
 
 export const CREATOR_CARD_SELECT = {

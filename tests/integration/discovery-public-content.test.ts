@@ -3,6 +3,7 @@ import { db } from "@/lib/db/client";
 import { getCategoryCreators } from "@/lib/discovery/categories";
 import { getFeedPage } from "@/lib/discovery/public-feed";
 import { getCreatorPublicContentPage } from "@/lib/creator/public-content";
+import { canAccessContent } from "@/lib/entitlements/content";
 
 /**
  * SEO Phase 4 — the three extracted, viewer-null-safe functions now
@@ -61,14 +62,38 @@ describe.skipIf(!dbAvailable)("SEO Phase 4 public content (integration)", () => 
     return content;
   }
 
-  it("getCreatorPublicContentPage returns real items for an anonymous (null) viewer", async () => {
+  async function createFan(suffix: string) {
+    const fan = await db.user.create({
+      data: { email: `discovery-fan-${suffix}-${Date.now()}@example.test`, passwordHash: "x", role: "FAN" },
+    });
+    cleanupUserIds.push(fan.id);
+    return fan;
+  }
+
+  it("getCreatorPublicContentPage returns no posts (teasers included) for a signed-out viewer", async () => {
     const creator = await createCreator("content-anon");
-    await createContent(creator.id, "FREE", "A real public caption.");
+    await createContent(creator.id, "FREE", "A teaser caption.");
     const page = await getCreatorPublicContentPage({ creatorProfileId: creator.id, viewer: null });
     expect(page).not.toBeNull();
+    expect(page?.items).toHaveLength(0);
+  });
+
+  it("getCreatorPublicContentPage returns unlocked teasers for a signed-in fan", async () => {
+    const creator = await createCreator("content-fan");
+    await createContent(creator.id, "FREE", "A real teaser caption.");
+    const fan = await createFan("content");
+    const page = await getCreatorPublicContentPage({ creatorProfileId: creator.id, viewer: fan });
     expect(page?.items).toHaveLength(1);
-    expect(page?.items[0]?.caption).toBe("A real public caption.");
+    expect(page?.items[0]?.caption).toBe("A real teaser caption.");
     expect(page?.items[0]?.lock.locked).toBe(false);
+  });
+
+  it("canAccessContent denies teaser media to a signed-out viewer but allows a signed-in fan", async () => {
+    const creator = await createCreator("media-gate");
+    const teaser = await createContent(creator.id, "FREE", "Teaser media.");
+    const fan = await createFan("media");
+    expect((await canAccessContent(null, teaser)).allowed).toBe(false);
+    expect((await canAccessContent(fan, teaser)).allowed).toBe(true);
   });
 
   it("getCreatorPublicContentPage returns null for a non-VERIFIED creator", async () => {
@@ -81,12 +106,20 @@ describe.skipIf(!dbAvailable)("SEO Phase 4 public content (integration)", () => 
     expect(page).toBeNull();
   });
 
-  it("getFeedPage discovery scope filters out locked (VVIP) items for an anonymous viewer, never leaking a media URL", async () => {
+  it("getFeedPage returns no posts at all for a signed-out viewer", async () => {
+    const creator = await createCreator("feed-anon");
+    await createContent(creator.id, "FREE", "Teaser hidden from anon.");
+    const page = await getFeedPage({ scope: "discovery", viewer: null });
+    expect(page).toEqual({ items: [], nextCursor: null });
+  });
+
+  it("getFeedPage discovery scope filters out locked (VVIP) items for a signed-in fan", async () => {
     const creator = await createCreator("feed-locked");
     await createContent(creator.id, "FREE", "Unlocked free post.");
     await createContent(creator.id, "VVIP", "Locked exclusive post.");
+    const fan = await createFan("feed");
 
-    const { items } = await getFeedPage({ scope: "discovery", viewer: null });
+    const { items } = await getFeedPage({ scope: "discovery", viewer: fan });
     const captions = items.map((i) => i.caption);
     expect(captions).toContain("Unlocked free post.");
     expect(captions).not.toContain("Locked exclusive post.");

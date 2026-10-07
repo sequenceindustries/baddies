@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { backdropFade, fadeSlideUp, transitions } from "@/lib/motion/tokens";
-import { VerifiedBadge, CheckTick, useSession, EmptyContentState, SkeletonBlock } from "@/components/ui";
+import { VerifiedBadge, CheckTick, useSession, EmptyContentState, SignInPrompt, SkeletonBlock } from "@/components/ui";
 import { ReportButton } from "@/components/cards";
 import { ComposeMessageModal, PostCard, type PostCardItem } from "@/components/post-card";
 import type { PublicCreatorProfile } from "@/lib/creator/public-profile";
@@ -52,11 +52,15 @@ export function CreatorProfileClient({
   initialCreator,
   initialItems,
   initialCursor,
+  viewerSignedIn,
 }: {
   creatorProfileId: string;
   initialCreator: PublicCreatorProfile;
   initialItems: PostCardItem[];
   initialCursor: string | null;
+  // From the server's session read — no flash of the prompt for a
+  // signed-in viewer while useSession() is still loading.
+  viewerSignedIn: boolean;
 }) {
   const { user } = useSession();
 
@@ -220,54 +224,60 @@ export function CreatorProfileClient({
 
       <h2 style={sectionHeadingStyle}>Content</h2>
 
-      {/* SEO Phase 4: no more sign-in gate here — the first page arrives
-          server-rendered (initialItems), real for every visitor. */}
-      {showTabs && (
-        <div style={tabRowStyle}>
-          {tiersPresent.map((t) => (
-            <motion.button
-              key={t}
-              onClick={() => setTab((cur) => (cur === t ? undefined : t))}
-              style={tabButtonStyle(tab === t)}
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.96 }}
-              transition={transitions.micro}
-            >
-              {t === "FREE" ? "Teasers" : t === "VIP" ? "VIP" : "Exclusive"}
-            </motion.button>
-          ))}
-        </div>
-      )}
+      {/* Posts (teasers included) are for signed-in members only — the
+          server returns none to a signed-out visitor. */}
+      {!viewerSignedIn ? (
+        <SignInPrompt message={`Join free or sign in to see ${creator.displayName ?? "this creator"}'s posts and teasers.`} />
+      ) : (
+        <>
+          {showTabs && (
+            <div style={tabRowStyle}>
+              {tiersPresent.map((t) => (
+                <motion.button
+                  key={t}
+                  onClick={() => setTab((cur) => (cur === t ? undefined : t))}
+                  style={tabButtonStyle(tab === t)}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.96 }}
+                  transition={transitions.micro}
+                >
+                  {t === "FREE" ? "Teasers" : t === "VIP" ? "VIP" : "Exclusive"}
+                </motion.button>
+              ))}
+            </div>
+          )}
 
-      {gridError && <p style={{ color: "var(--danger)" }}>{gridError}</p>}
-      {/* Cross-fades on tab switch instead of the list instantly
-          swapping — same "filtering should transition smoothly" idea
-          applied here as on Discovery's own search results. */}
-      <AnimatePresence mode="wait">
-        {visibleItems.length === 0 ? (
-          <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={transitions.standard}>
-            <EmptyContentState message="No content yet." />
-          </motion.div>
-        ) : (
-          <motion.div
-            key={tab ?? "all"}
-            style={contentListStyle}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={transitions.standard}
-          >
-            {visibleItems.map((item) => (
-              <PostCard key={item.contentId} item={item} />
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <div ref={sentinelRef} style={{ height: "1px" }} aria-hidden="true" />
-      {gridLoadingMore && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "1rem" }}>
-          <SkeletonBlock height="18rem" />
-        </div>
+          {gridError && <p style={{ color: "var(--danger)" }}>{gridError}</p>}
+          {/* Cross-fades on tab switch instead of the list instantly
+              swapping — same "filtering should transition smoothly" idea
+              applied here as on Discovery's own search results. */}
+          <AnimatePresence mode="wait">
+            {visibleItems.length === 0 ? (
+              <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={transitions.standard}>
+                <EmptyContentState message="No content yet." />
+              </motion.div>
+            ) : (
+              <motion.div
+                key={tab ?? "all"}
+                style={contentListStyle}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={transitions.standard}
+              >
+                {visibleItems.map((item) => (
+                  <PostCard key={item.contentId} item={item} />
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <div ref={sentinelRef} style={{ height: "1px" }} aria-hidden="true" />
+          {gridLoadingMore && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "1rem" }}>
+              <SkeletonBlock height="18rem" />
+            </div>
+          )}
+        </>
       )}
 
       <AnimatePresence>
