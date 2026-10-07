@@ -27,6 +27,10 @@ export async function generateMetadata({ params }: { params: { slug: string } })
     description,
     alternates: { canonical: `/discovery/${category.slug}` },
     openGraph: { title, description },
+    // An empty category is a thin page ("Soft 404" to Google) — keep it
+    // out of the index until it has a verified creator (the sitemap
+    // applies the same rule), but let crawlers follow its links.
+    ...(category.creators.length === 0 ? { robots: { index: false, follow: true } } : {}),
   };
 }
 

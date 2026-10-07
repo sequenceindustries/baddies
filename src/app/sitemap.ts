@@ -59,7 +59,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // here the way curated locations will need (Phase 5): categories are
   // hand-created by an admin in the first place, so an empty one is
   // rare/temporary, not a structural risk of thin-page spam.
-  const categories = await db.category.findMany({ select: { slug: true } });
+  // Only categories with at least one verified creator — an empty one is
+  // a thin page the category route itself marks noindex.
+  const categories = await db.category.findMany({
+    where: { creators: { some: { creatorProfile: { status: "VERIFIED" } } } },
+    select: { slug: true },
+  });
   const categoryEntries: MetadataRoute.Sitemap = categories.map((category) => ({
     url: `${SITE_URL}/discovery/${category.slug}`,
     changeFrequency: "weekly",
