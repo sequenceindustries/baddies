@@ -115,8 +115,13 @@ export class SopspayPaymentProvider implements PaymentProvider {
     } catch {
       throw new Error(`SOPSPAY returned a non-JSON response (HTTP ${res.status}).`);
     }
-    if (!res.ok) {
-      throw new Error(`SOPSPAY create-payment failed (HTTP ${res.status}).`);
+    if (!res.ok || json.success === false) {
+      // e.g. { success:false, error:{ code:"NO_WALLET", message:"..." } }
+      const error = (json.error && typeof json.error === "object" ? json.error : {}) as Record<string, unknown>;
+      const detail = [error.code, error.message ?? (typeof json.error === "string" ? json.error : undefined)]
+        .filter(Boolean)
+        .join(": ");
+      throw new Error(`SOPSPAY create-payment failed (HTTP ${res.status})${detail ? ` — ${detail}` : ""}.`);
     }
 
     const data = (json.data && typeof json.data === "object" ? json.data : json) as Record<string, unknown>;

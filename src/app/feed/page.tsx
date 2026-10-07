@@ -152,7 +152,7 @@ function VipPassBanner() {
     if (!res.ok) {
       setBusy(false);
       const body = await res.json().catch(() => null);
-      setError(body?.error ?? "Couldn't start checkout.");
+      setError(typeof body?.error === "string" ? body.error : "Couldn't start checkout.");
       return;
     }
     const body = (await res.json()) as { redirectUrl: string };

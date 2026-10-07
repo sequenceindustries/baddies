@@ -8,6 +8,10 @@ import { backdropFade, fadeScale, fadeSlideUp, transitions } from "@/lib/motion/
 import { SkeletonBlock, useSession, VerifiedBadge } from "./ui";
 import { CardAvatar, HeartIcon, MediaLightbox, ReportButton, timeAgo } from "./cards";
 
+// Matches the feed's VIP banner and the creator profile's Subscribe
+// button until the 1/3/6/12-month package picker ships.
+const CHECKOUT_DEFAULT_DURATION_MONTHS = 3;
+
 export interface PostCardItem {
   contentId: string;
   mediaType: "IMAGE" | "VIDEO" | "AUDIO" | null;
@@ -260,26 +264,31 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
     setActiveIndex((i) => clamp(i + (dx < 0 ? 1 : -1), 0, mediaItems.length - 1));
   }
 
+  // Starts the same hosted checkout as the feed's VIP banner / a creator
+  // profile's Subscribe button: the server creates a PendingOrder and
+  // returns the provider's checkout URL; access is only granted later by
+  // the payment webhook, never by this response.
   async function handleUnlock() {
     setUnlocking(true);
     setError(null);
-    const res = await fetch(
-      item.lock.kind === "VIP_PASS" ? "/api/checkout/vip-pass" : "/api/checkout/subscribe",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: item.lock.kind === "VVIP_SUBSCRIBE" ? JSON.stringify({ creatorProfileId: item.creator.creatorProfileId }) : undefined,
-      }
-    );
-    setUnlocking(false);
+    const isVipPass = item.lock.kind === "VIP_PASS";
+    const res = await fetch(isVipPass ? "/api/checkout/vip-pass" : "/api/checkout/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        isVipPass
+          ? { durationMonths: CHECKOUT_DEFAULT_DURATION_MONTHS }
+          : { creatorProfileId: item.creator.creatorProfileId, durationMonths: CHECKOUT_DEFAULT_DURATION_MONTHS }
+      ),
+    });
     if (!res.ok) {
+      setUnlocking(false);
       const body = await res.json().catch(() => null);
-      setError(body?.error ?? "Couldn't unlock this content.");
+      setError(typeof body?.error === "string" ? body.error : "Couldn't start checkout.");
       return;
     }
-    fetchedRef.current = false;
-    setLoading(true);
-    await fetchMedia();
+    const body = (await res.json()) as { redirectUrl: string };
+    window.location.href = body.redirectUrl;
   }
 
   async function handleShare() {
@@ -599,10 +608,10 @@ function PostOptionsMenu({
 }
 
 /**
- * Same stub-checkout call the creator profile page's SubscribeButton
- * makes (POST /api/checkout/subscribe, { creatorProfileId }) — see that
- * component's own doc comment for why the stub path completes
- * synchronously. Hidden entirely for a creator viewing their own post
+ * Same hosted-checkout call the creator profile page's SubscribeButton
+ * makes (POST /api/checkout/subscribe) — redirects to the provider's
+ * checkout; the subscription only activates once the payment webhook
+ * confirms it. Hidden entirely for a creator viewing their own post
  * (mirrors FollowButton's own self-check just above) and once already
  * subscribed, matching this menu's "only show actions you can take"
  * convention.
@@ -619,7 +628,7 @@ function SubscribeMenuItem({
   onDone: () => void;
 }) {
   const { user } = useSession();
-  const [subscribed, setSubscribed] = useState(initialSubscribed);
+  const subscribed = initialSubscribed;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -633,22 +642,22 @@ function SubscribeMenuItem({
     const res = await fetch("/api/checkout/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ creatorProfileId }),
+      body: JSON.stringify({ creatorProfileId, durationMonths: CHECKOUT_DEFAULT_DURATION_MONTHS }),
     });
-    setBusy(false);
     if (!res.ok) {
+      setBusy(false);
       const body = await res.json().catch(() => null);
-      setError(typeof body?.error === "string" ? body.error : "Subscription failed.");
+      setError(typeof body?.error === "string" ? body.error : "Couldn't start checkout.");
       return;
     }
-    setSubscribed(true);
-    setTimeout(onDone, 600);
+    const body = (await res.json()) as { redirectUrl: string };
+    window.location.href = body.redirectUrl;
   }
 
   return (
     <div style={subscribeMenuItemWrapStyle}>
       <button onClick={subscribe} disabled={busy} style={subscribeMenuItemButtonStyle}>
-        {busy ? "Subscribing..." : `Subscribe — $${vvipPriceUsd.toFixed(2)}/mo`}
+        {busy ? "Redirecting..." : `Subscribe — $${vvipPriceUsd.toFixed(2)}/mo`}
       </button>
       {error && <span style={followErrorStyle}>{error}</span>}
     </div>

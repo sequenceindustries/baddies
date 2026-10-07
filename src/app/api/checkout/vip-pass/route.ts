@@ -66,18 +66,28 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const providerCustomer = await provider.createCustomer({ userId: user.id, email: user.email });
-  const origin = publicOrigin();
-  const checkout = await provider.createHostedCheckoutSession({
-    pendingOrderId: order.id,
-    providerCustomerId: providerCustomer.providerCustomerId,
-    customerEmail: user.email,
-    amountUsd,
-    currency: "USD",
-    successUrl: `${origin}/fan-subscriptions?checkout=success`,
-    cancelUrl: `${origin}/fan-subscriptions?checkout=cancelled`,
-    metadata: { pendingOrderId: order.id, orderType: "VIP_PASS", durationMonths: String(durationMonths) },
-  });
+  // A provider failure (bad config, provider outage) must answer the fan
+  // with a clear message, never an unhandled 500 — and must not leave the
+  // order looking payable.
+  let checkout: Awaited<ReturnType<typeof provider.createHostedCheckoutSession>>;
+  try {
+    const providerCustomer = await provider.createCustomer({ userId: user.id, email: user.email });
+    const origin = publicOrigin();
+    checkout = await provider.createHostedCheckoutSession({
+      pendingOrderId: order.id,
+      providerCustomerId: providerCustomer.providerCustomerId,
+      customerEmail: user.email,
+      amountUsd,
+      currency: "USD",
+      successUrl: `${origin}/fan-subscriptions?checkout=success`,
+      cancelUrl: `${origin}/fan-subscriptions?checkout=cancelled`,
+      metadata: { pendingOrderId: order.id, orderType: "VIP_PASS", durationMonths: String(durationMonths) },
+    });
+  } catch (err) {
+    console.error("[checkout:vip-pass] provider checkout creation failed", err);
+    await db.pendingOrder.update({ where: { id: order.id }, data: { status: "FAILED" } });
+    return NextResponse.json({ error: "Checkout is temporarily unavailable. Please try again shortly." }, { status: 502 });
+  }
 
   await db.pendingOrder.update({
     where: { id: order.id },
