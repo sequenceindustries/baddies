@@ -89,6 +89,16 @@ const nextConfig = {
   // were deleted.
   async redirects() {
     return [
+      // One canonical host: www.baddies.africa served the full site with a
+      // 200, so search engines saw every page twice. Permanently send it
+      // to the apex domain (what canonical tags, the sitemap and APP_URL
+      // already use).
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "www.baddies.africa" }],
+        destination: "https://baddies.africa/:path*",
+        permanent: true,
+      },
       { source: "/home", destination: "/feed", permanent: true },
       { source: "/search", destination: "/discovery", permanent: true },
       { source: "/dashboard", destination: "/profile", permanent: true },
