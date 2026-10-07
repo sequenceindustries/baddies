@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/components/ui";
 import {
@@ -14,17 +15,6 @@ import {
   errorBannerStyle,
   ImageUploadField,
 } from "@/components/ui";
-import { VerificationFlow } from "@/components/verification-capture";
-
-const STATUS_COPY: Record<string, string> = {
-  PENDING: "Application received.",
-  VERIFICATION_REQUIRED: "Complete your identity, age, and liveness verification below.",
-  UNDER_REVIEW: "Verification complete — awaiting admin approval.",
-  VERIFIED: "You're a Verified baddie.",
-  SUSPENDED: "Your creator account is suspended.",
-  REJECTED: "Your application was not approved.",
-  BANNED: "Your creator account has been banned.",
-};
 
 export default function ApplyPage() {
   const router = useRouter();
@@ -40,9 +30,16 @@ export default function ApplyPage() {
   const [agreesToCreatorAgreement, setAgreesToCreatorAgreement] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState<{ status: string } | null>(null);
 
-  if (loading) {
+  // Anyone who already has an application (just submitted, or returning)
+  // belongs on their creator dashboard, which shows where it stands and
+  // hosts the identity-verification steps — never back on this form.
+  const hasApplication = Boolean(user?.creatorProfile);
+  useEffect(() => {
+    if (hasApplication) router.replace("/profile");
+  }, [hasApplication, router]);
+
+  if (loading || hasApplication) {
     return <main style={pageWrapStyle} />;
   }
 
@@ -51,26 +48,16 @@ export default function ApplyPage() {
       <main style={pageWrapStyle}>
         <h1 style={displayHeadingStyle}>Sign in required</h1>
         <p style={{ color: "var(--text-muted)" }}>
-          You need an account before joining as a creator.
+          You need an account before joining as a creator.{" "}
+          <Link href="/register" style={{ color: "var(--accent)", fontWeight: 600 }}>
+            Create an account
+          </Link>{" "}
+          or{" "}
+          <Link href="/login" style={{ color: "var(--accent)", fontWeight: 600 }}>
+            sign in
+          </Link>
+          .
         </p>
-      </main>
-    );
-  }
-
-  const existingStatus = submitted?.status ?? user.creatorProfile?.status;
-  if (existingStatus) {
-    return (
-      <main style={pageWrapStyle}>
-        <h1 style={displayHeadingStyle}>Creator application</h1>
-        <div style={cardStyle}>
-          <p style={{ margin: 0, fontSize: "0.95rem" }}>
-            <strong>Status:</strong> {existingStatus}
-          </p>
-          <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", marginTop: "0.6rem" }}>
-            {STATUS_COPY[existingStatus] ?? "Application on file."}
-          </p>
-        </div>
-        {existingStatus === "VERIFICATION_REQUIRED" && <VerificationFlow />}
       </main>
     );
   }
@@ -103,9 +90,10 @@ export default function ApplyPage() {
       return;
     }
 
-    const body = await res.json();
-    setSubmitted({ status: body.status });
-    router.refresh();
+    // Straight to the creator dashboard. A full navigation (not
+    // router.push) so the session — now carrying the new creator
+    // profile — is refetched before the dashboard renders.
+    window.location.href = "/profile";
   }
 
   return (

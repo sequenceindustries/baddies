@@ -461,3 +461,21 @@ a[href]:hover {
         grid-template-columns: repeat(1, 1fr);
     }
 }
+
+/* Creator onboarding panel (components/creator-onboarding-panel.tsx) —
+   the "in review" step's gentle pulse. Opacity/scale only, and off for
+   anyone who asked for reduced motion. */
+.onboarding-pulse {
+    animation: onboarding-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes onboarding-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(0.8); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .onboarding-pulse {
+        animation: none;
+    }
+}

@@ -17,7 +17,7 @@ import {
   SkeletonBlock,
 } from "@/components/ui";
 import { SegmentedTabs } from "@/components/segmented-tabs";
-import { VerificationFlow } from "@/components/verification-capture";
+import { CreatorOnboardingPanel } from "@/components/creator-onboarding-panel";
 import { UploadForm } from "@/components/upload-form";
 import { ACCESS_LABEL, CardAvatar, timeAgo } from "@/components/cards";
 
@@ -124,9 +124,17 @@ export default function ProfilePage() {
     <main style={mainStyle}>
       <h1 style={{ ...displayHeadingStyle, textAlign: "center" }}>Profile</h1>
 
-      {user.creatorProfile && creatorStatus && <StatusPanel status={creatorStatus} />}
+      {user.creatorProfile && creatorStatus && !isPendingStatus(creatorStatus) && <StatusPanel status={creatorStatus} />}
 
       {tabs.length > 1 && <SegmentedTabs tabs={tabs} active={activeTab} onChange={setTab} />}
+
+      {/* While an application is in progress the Profile tab leads with
+          the full onboarding status panel (account → email → identity →
+          review, plus what's locked until approval); every other tab
+          keeps the compact notice below so the status never disappears. */}
+      {creatorStatus && isPendingStatus(creatorStatus) && activeTab === "profile" && (
+        <CreatorOnboardingPanel status={creatorStatus} displayName={user.displayName} emailVerified={user.emailVerified} />
+      )}
 
       {/* Repeats regardless of which tab is open — StatusPanel's own
           message above is easy to lose sight of once you've scrolled
@@ -134,7 +142,7 @@ export default function ProfilePage() {
           shows the full upload form to a not-yet-verified creator (the
           real gate is server-side, on submit) with nothing nearby
           saying they can't actually publish yet. */}
-      {creatorStatus && (creatorStatus === "PENDING" || creatorStatus === "VERIFICATION_REQUIRED" || creatorStatus === "UNDER_REVIEW") && (
+      {creatorStatus && isPendingStatus(creatorStatus) && activeTab !== "profile" && (
         <PendingVerificationNotice status={creatorStatus} />
       )}
 
@@ -522,25 +530,41 @@ function WalletStat({
   );
 }
 
+function isPendingStatus(status: CreatorStatus): status is "PENDING" | "VERIFICATION_REQUIRED" | "UNDER_REVIEW" {
+  return status === "PENDING" || status === "VERIFICATION_REQUIRED" || status === "UNDER_REVIEW";
+}
+
 function StatusPanel({ status }: { status: CreatorStatus }) {
-  const copy: Record<CreatorStatus, string> = {
-    PENDING: "Application received.",
-    VERIFICATION_REQUIRED: "Complete your identity, age, and liveness verification below.",
-    UNDER_REVIEW: "Verification complete — awaiting admin approval.",
-    VERIFIED: "You're a Verified baddie. You can publish monetised content.",
-    SUSPENDED: "Your creator account is suspended.",
-    REJECTED: "Your application was not approved.",
-    BANNED: "Your creator account has been banned.",
+  // Pending statuses use CreatorOnboardingPanel instead — this covers the
+  // settled outcomes only.
+  const copy: Record<CreatorStatus, { label: string; body: string; color: string }> = {
+    PENDING: { label: "Pending", body: "Application received.", color: "var(--accent)" },
+    VERIFICATION_REQUIRED: { label: "Verification needed", body: "Complete your identity verification.", color: "var(--accent)" },
+    UNDER_REVIEW: { label: "In review", body: "Awaiting admin approval.", color: "var(--accent)" },
+    VERIFIED: { label: "Verified", body: "You're a verified baddie — you can publish monetised content.", color: "var(--success)" },
+    SUSPENDED: { label: "Suspended", body: "Your creator account is suspended. Contact support@baddies.africa for help.", color: "var(--danger)" },
+    REJECTED: { label: "Not approved", body: "Your application was not approved. Contact support@baddies.africa if you have questions.", color: "var(--danger)" },
+    BANNED: { label: "Banned", body: "Your creator account has been banned.", color: "var(--danger)" },
   };
+  const { label, body, color } = copy[status];
 
   return (
-    <div style={{ ...cardStyle, marginBottom: "2rem" }}>
-      <p style={{ margin: 0, fontSize: "0.95rem" }}>
-        <strong>Status:</strong> {status}
-      </p>
-      <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", marginTop: "0.5rem" }}>{copy[status]}</p>
-
-      {status === "VERIFICATION_REQUIRED" && <VerificationFlow />}
+    <div style={{ ...cardStyle, marginBottom: "2rem", display: "flex", alignItems: "center", gap: "0.9rem", flexWrap: "wrap" }}>
+      <span
+        style={{
+          fontSize: "0.72rem",
+          fontWeight: 700,
+          letterSpacing: "0.04em",
+          textTransform: "uppercase",
+          color,
+          border: `1px solid ${color}`,
+          borderRadius: "999px",
+          padding: "0.2rem 0.7rem",
+        }}
+      >
+        {label}
+      </span>
+      <span style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>{body}</span>
     </div>
   );
 }
