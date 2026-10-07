@@ -7,6 +7,7 @@ import { exchangeGoogleCode, isGoogleAuthConfigured, safeReturnTo } from "@/lib/
 import { publicOrigin } from "@/lib/seo/site-url";
 import { getPlatformSetting } from "@/lib/config/settings";
 import { BUSINESS_CONFIG_KEYS } from "@/lib/config/business";
+import { GA_SIGNUP_COOKIE } from "@/lib/analytics/gtag";
 
 // Always dynamic: reads/writes live session + account data.
 export const dynamic = "force-dynamic";
@@ -66,6 +67,8 @@ export async function GET(req: NextRequest) {
   if (!profile.emailVerified) {
     return failure("google_email_unverified");
   }
+
+  let isNewAccount = false;
 
   let userId: string;
   let role: UserRole;
@@ -142,6 +145,7 @@ export async function GET(req: NextRequest) {
 
     userId = created.id;
     role = created.role;
+    isNewAccount = true;
   }
 
   const { token, expiresAt } = await createSession(userId, role, {
@@ -158,6 +162,11 @@ export async function GET(req: NextRequest) {
     expires: expiresAt,
     path: "/",
   });
+  if (isNewAccount) {
+    // Read once (then cleared) by AnalyticsEvents to send GA4's
+    // sign_up event — the browser is the only place gtag runs.
+    response.cookies.set(GA_SIGNUP_COOKIE, "google", { httpOnly: false, sameSite: "lax", maxAge: 300, path: "/" });
+  }
   response.cookies.delete(STATE_COOKIE);
   response.cookies.delete(RETURN_TO_COOKIE);
   return response;

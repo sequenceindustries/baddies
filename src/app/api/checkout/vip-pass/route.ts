@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
       customerEmail: user.email,
       amountUsd,
       currency: "USD",
-      successUrl: `${origin}/fan-subscriptions?checkout=success`,
+      successUrl: `${origin}/fan-subscriptions?checkout=success&order=${order.id}&kind=vip_pass&value=${amountUsd}`,
       cancelUrl: `${origin}/fan-subscriptions?checkout=cancelled`,
       metadata: { pendingOrderId: order.id, orderType: "VIP_PASS", durationMonths: String(durationMonths) },
     });

@@ -10,6 +10,7 @@ import { StructuredData } from "@/components/structured-data";
 import { isKnownCrawlerUserAgent } from "@/lib/seo/crawler";
 import { SITE_URL } from "@/lib/seo/site-url";
 import Script from "next/script";
+import { AnalyticsEvents } from "@/components/analytics-events";
 
 // Type system (dayos-inspired redesign): a condensed bold grotesque for
 // big all-caps display headings + a clean neo-grotesque for everything
@@ -70,20 +71,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${inter.variable} ${barlowCondensed.variable}`}>
       <body>
-        <Script
-    src="https://www.googletagmanager.com/gtag/js?id=G-TZ7LP4HMWG"
-    strategy="afterInteractive"
-  />
-  <Script id="google-analytics" strategy="afterInteractive">
-    {`
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-
-      gtag('config', 'G-TZ7LP4HMWG');
-    `}
-  </Script>
+        {/* Production only — dev servers would otherwise send local
+            test traffic into the real GA4 property. */}
+        {process.env.NODE_ENV === "production" && (
+          <>
+            <Script src="https://www.googletagmanager.com/gtag/js?id=G-TZ7LP4HMWG" strategy="afterInteractive" />
+            <Script id="google-analytics" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', 'G-TZ7LP4HMWG');
+              `}
+            </Script>
+          </>
+        )}
         <StructuredData />
+        <AnalyticsEvents />
         <AgeGate isCrawler={isCrawler}>
           {/* Performance audit: one shared session fetch for the whole
               tree instead of every useSession() caller (Nav, every

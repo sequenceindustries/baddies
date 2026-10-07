@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
       customerEmail: user.email,
       amountUsd,
       currency: "USD",
-      successUrl: `${origin}/creators/${creatorProfileId}?checkout=success`,
+      successUrl: `${origin}/creators/${creatorProfileId}?checkout=success&order=${order.id}&kind=exclusive&value=${amountUsd}`,
       cancelUrl: `${origin}/creators/${creatorProfileId}?checkout=cancelled`,
       metadata: {
         pendingOrderId: order.id,

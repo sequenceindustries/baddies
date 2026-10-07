@@ -7,6 +7,7 @@ import { AnimatePresence, motion, type PanInfo } from "motion/react";
 import { backdropFade, fadeScale, fadeSlideUp, transitions } from "@/lib/motion/tokens";
 import { SkeletonBlock, useSession, VerifiedBadge } from "./ui";
 import { CardAvatar, HeartIcon, MediaLightbox, ReportButton, timeAgo } from "./cards";
+import { trackBeginCheckout } from "@/lib/analytics/gtag";
 
 // 1-month Exclusive package, matching the creator
 // profile's Subscribe button — the price on the button is exactly what's
@@ -293,6 +294,7 @@ export function PostCard({ item, onLockChange }: { item: PostCardItem; onLockCha
       return;
     }
     const body = (await res.json()) as { redirectUrl: string };
+    trackBeginCheckout(isVipPass ? "vip_pass" : "exclusive");
     window.location.href = body.redirectUrl;
   }
 
@@ -659,6 +661,7 @@ function SubscribeMenuItem({
       return;
     }
     const body = (await res.json()) as { redirectUrl: string };
+    trackBeginCheckout("exclusive");
     window.location.href = body.redirectUrl;
   }
 

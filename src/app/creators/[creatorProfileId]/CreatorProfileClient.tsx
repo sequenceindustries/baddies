@@ -7,6 +7,7 @@ import { VerifiedBadge, CheckTick, useSession, EmptyContentState, SkeletonBlock 
 import { ReportButton } from "@/components/cards";
 import { ComposeMessageModal, PostCard, type PostCardItem } from "@/components/post-card";
 import type { PublicCreatorProfile } from "@/lib/creator/public-profile";
+import { trackBeginCheckout } from "@/lib/analytics/gtag";
 
 const TIER_ORDER = ["FREE", "VIP", "VVIP"] as const;
 type Tier = (typeof TIER_ORDER)[number];
@@ -312,6 +313,7 @@ function SubscribeButton({ creatorProfileId, vvipPriceUsd }: { creatorProfileId:
       return;
     }
     const body = (await res.json()) as { redirectUrl: string };
+    trackBeginCheckout("exclusive", { value: vvipPriceUsd });
     window.location.href = body.redirectUrl;
   }
 

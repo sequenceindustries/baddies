@@ -16,6 +16,7 @@ import {
   GoogleSignInButton,
   PasswordInput,
 } from "@/components/ui";
+import { trackEvent } from "@/lib/analytics/gtag";
 
 type Intent = "FAN" | "CREATOR";
 
@@ -49,6 +50,8 @@ export default function RegisterPage() {
       setError(formatError(body));
       return;
     }
+
+    trackEvent("sign_up", { method: "email", intent: intent === "CREATOR" ? "creator" : "fan" });
 
     // Every account starts as a fan (see RegisterSchema) — a creator
     // account additionally needs a legal name and a signed Creator

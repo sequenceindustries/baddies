@@ -7,7 +7,7 @@ import type { Metadata } from "next";
 // suspenders with robots.ts NOT disallowing this path (see that file's
 // own comment on why disallow and noindex solve different problems for
 // a page that's legitimately reachable pre-account).
-export const metadata: Metadata = { robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Join | baddies", robots: { index: false, follow: false } };
 
 export default function RegisterLayout({ children }: { children: React.ReactNode }) {
   return children;

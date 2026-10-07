@@ -9,6 +9,7 @@ import { StoryAvatarRow } from "@/components/story-avatar-row";
 import { StoryComposerButton, feedIconButtonStyle } from "@/components/story-composer-button";
 import { UploadForm } from "@/components/upload-form";
 import { EmptyContentState, SkeletonBlock, useSession } from "@/components/ui";
+import { trackBeginCheckout } from "@/lib/analytics/gtag";
 
 /**
  * The feed — Twitter/X-style single-column, infinite-scroll vertical
@@ -174,6 +175,7 @@ function VipPassBanner({ packages }: { packages: VipPassPackage[] }) {
       return;
     }
     const body = (await res.json()) as { redirectUrl: string };
+    trackBeginCheckout("vip_pass", { value: chosen.priceUsd });
     window.location.href = body.redirectUrl;
   }
 
