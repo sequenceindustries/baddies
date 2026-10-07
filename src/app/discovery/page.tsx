@@ -12,7 +12,7 @@ import { DiscoveryClient } from "./DiscoveryClient";
 export const metadata: Metadata = {
   title: "Discover creators | baddies",
   description:
-    "Browse public previews from every verified creator on baddies — Africa's adult content network. No cost, no card required.",
+    "Browse verified creators on baddies — Africa's adult content network. Join free to see their teasers; no card required.",
   alternates: { canonical: "/discovery" },
 };
 
@@ -101,7 +101,7 @@ export default async function DiscoveryPage() {
     <main style={mainStyle}>
       <h1 style={displayHeadingStyle}>Discover</h1>
       <p style={introStyle}>
-        Free previews from verified South African creators on baddies. Tap any post to view it, or open a creator&apos;s
+        Free teasers from verified South African creators on baddies. Tap any post to view it, or open a creator&apos;s
         profile to see more — subscribe for VIP and Exclusive content.
       </p>
       {categories.length > 0 && (

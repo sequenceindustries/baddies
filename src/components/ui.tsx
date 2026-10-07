@@ -1475,11 +1475,11 @@ export const pageWrapStyle: React.CSSProperties = {
 
 export const displayHeadingStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)",
-  fontSize: "clamp(2.2rem, 5vw, 3.2rem)",
+  fontSize: "clamp(1.8rem, 4vw, 2.6rem)",
   fontWeight: 700,
   textTransform: "uppercase",
   letterSpacing: "-0.01em",
-  lineHeight: 0.98,
+  lineHeight: 1.08,
   margin: "0 0 0.6rem",
 };
 

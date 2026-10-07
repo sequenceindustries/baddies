@@ -3,7 +3,7 @@
    blocks, #56c2ff sky-blue primary accent (buttons, links, active
    states), #663af3 violet secondary accent (verified ticks, highlights),
    #3f4959 slate for lines and quiet surfaces. Type: condensed bold
-   all-caps display (Barlow Condensed) + Gotham body (Montserrat
+   all-caps display (Montserrat Bold) + Gotham body (Montserrat
    fallback) — see layout.tsx.
    Every component reads these variables, so this block re-skins the
    whole app. */
@@ -33,7 +33,7 @@
     --success: #4fd8a0;
     --radius: 16px;
     --radius-lg: 28px;
-    --font-display: var(--font-barlow-condensed), "Arial Narrow", system-ui, sans-serif;
+    --font-display: var(--font-montserrat), system-ui, sans-serif;
     --font-body: "Gotham", var(--font-montserrat), system-ui, sans-serif;
 
     --glow: 0 0 0 1px rgba(255, 255, 255, 0.03), 0 18px 48px -20px rgba(0, 0, 0, 0.7);
@@ -74,7 +74,7 @@ main {
     text-align: center;
 }
 
-/* dayos-style display headings: condensed, bold, all-caps, tight. Inline
+/* Display headings: Montserrat Bold, all-caps. Inline
    styles across the app already point headings at --font-display; this
    adds the case/weight/tracking in one place. */
 h1,
@@ -83,7 +83,7 @@ h2 {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: -0.01em;
-    line-height: 0.98;
+    line-height: 1.08;
 }
 
 input,

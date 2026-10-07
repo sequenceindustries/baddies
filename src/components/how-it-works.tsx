@@ -3,7 +3,7 @@
 const FAN_TIERS = [
   {
     name: "Teasers",
-    desc: "Browse public previews from every verified creator. No cost, no card required.",
+    desc: "Free with an account — see teasers from every verified creator. No card required.",
   },
   {
     name: "VIP",

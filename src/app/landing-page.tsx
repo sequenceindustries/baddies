@@ -219,7 +219,7 @@ export default function LandingPage() {
 }
 
 const PRICING: { name: string; price: string; unit: string; desc: string; featured?: boolean }[] = [
-  { name: "Teasers", price: "Free", unit: "always", desc: "Public previews from every verified creator. No card required." },
+  { name: "Teasers", price: "Free", unit: "always", desc: "Teasers from every verified creator, free with an account. No card required." },
   {
     name: "VIP Pass",
     price: "$3.50",
@@ -271,9 +271,9 @@ const eyebrowStyle: React.CSSProperties = {
 
 const heroHeadlineStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)",
-  fontSize: "clamp(3.2rem, 6.4vw, 7rem)",
+  fontSize: "clamp(2.3rem, 4.6vw, 4.6rem)",
   fontWeight: 800,
-  lineHeight: 0.9,
+  lineHeight: 1.02,
   letterSpacing: "-0.02em",
   textTransform: "uppercase",
   margin: "0 0 1.75rem",
@@ -359,9 +359,9 @@ const sectionHeaderRowStyle: React.CSSProperties = {
 
 const sectionTitleStyle: React.CSSProperties = {
   fontFamily: "var(--font-display)",
-  fontSize: "clamp(2.6rem, 6vw, 4.8rem)",
+  fontSize: "clamp(2rem, 4.4vw, 3.6rem)",
   fontWeight: 800,
-  lineHeight: 0.92,
+  lineHeight: 1.02,
   letterSpacing: "-0.02em",
   textTransform: "uppercase",
   margin: "0 0 0.75rem",
@@ -428,8 +428,8 @@ const pricingDescStyle: React.CSSProperties = {
 
 const ctaHeadlineStyle: React.CSSProperties = {
   ...sectionTitleStyle,
-  fontSize: "clamp(3.4rem, 10vw, 8rem)",
-  lineHeight: 0.88,
+  fontSize: "clamp(2.4rem, 7vw, 5.6rem)",
+  lineHeight: 1,
   margin: "0 0 1.5rem",
 };
 
